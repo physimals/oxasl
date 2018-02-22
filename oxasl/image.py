@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Basic classes for ASL data processing
 """
@@ -14,6 +13,9 @@ import nibabel as nib
 from . import fslwrap as fsl
 
 class AslOptionGroup(OptionGroup):
+    """
+    OptionGroup with support for ignoring certain options
+    """
     def __init__(self, *args, **kwargs):
         self._ignore = kwargs.pop("ignore", [])
         OptionGroup.__init__(self, *args, **kwargs)
@@ -38,6 +40,22 @@ def add_data_options(parser, fname_opt="-i", output_type="directory", ignore=[])
 class AslImage(fsl.Image):
     """
     Subclass of fslwrap.Image which adds ASL structure information
+
+    An AslImage contains information about the structure of the data enabling it to perform
+    operations such as reordering and tag/control differencing.
+
+    As a minimum you must provide the number of TIs in the data. This assumes an ordering of 'prt'
+    (see below)
+
+    Ordering is defined by a sequence of characters:
+      - ``p`` - Tag/Control pairs
+      - ``P`` - Control/Tag pairs
+      - ``t`` - TIs/PLDs
+      - ``r`` - Repeats
+
+    The sequence is in order from fastest varying (innermost grouping) to slowest varying (outermost
+    grouping). If ``p/P`` is not included this describes data which is already differenced.
+
     """
   
     def __init__(self, name, order="prt", ntis=None, tis=None, plds=None, nrpts=None, rpts=None, **kwargs):
@@ -266,7 +284,10 @@ class AslImage(fsl.Image):
                             order=self.order, ntis=self.ntis, tis=self.tis, rpts=self.rpts, **kwargs)
 
 class AslWorkspace(fsl.Workspace):
-        
+    """
+    Adds some functionality to an fslwrap.Workspace which is useful to ASL images
+    """
+
     def smooth(self, img, fwhm, output_name=None):
         if output_name is None:
             output_name = img.iname + "_smooth"

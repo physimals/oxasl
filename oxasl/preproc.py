@@ -2,6 +2,7 @@
 import sys
 
 from optparse import OptionParser
+
 from . import fslwrap as fsl
 from .image import AslImage, add_data_options, AslOptionGroup, AslWorkspace
 
