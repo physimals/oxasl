@@ -55,19 +55,29 @@ class AslImage(fsl.Image):
 
     The sequence is in order from fastest varying (innermost grouping) to slowest varying (outermost
     grouping). If ``p/P`` is not included this describes data which is already differenced.
-
     """
   
-    def __init__(self, name, order="prt", ntis=None, tis=None, plds=None, nrpts=None, rpts=None, **kwargs):
+    def __init__(self, name, order="prt", ntis=None, tis=None, plds=None, nrpts=None, rpts=None, 
+                 phases=None, nph=None, **kwargs):
         fsl.Image.__init__(self, name, **kwargs)
         if self.ndim != 4:
             raise RuntimeError("4D data expected")
-        self.nv = self.shape[3]
 
+        self.nv = self.shape[3]
         self.order = order
+
         if "p" in order or "P" in order:
             self.ntc = 2
             self.tagfirst = "p" in self.order
+        elif "m" in order:
+            if phases is None and nph is None:
+                raise RuntimeError("Multiphase data specified but number of phases not given")
+            elif phases is not None:
+                if nph is not None and nph != len(phases):
+                    raise RuntimeError("Number of phases is not consistent with length of phases list")
+                nph = len(phases)
+            self.phases = phases
+            self.ntc = int(nph)
         else:
             self.ntc = 1
             self.tagfirst = False
@@ -83,7 +93,7 @@ class AslImage(fsl.Image):
         if ntis is None and tis is None:
             raise RuntimeError("Number of TIs not specified")
         elif tis is not None:
-            if isinstance(tis, basestring): tis = [float(ti) for ti in tis.split(",")]
+            if isinstance(tis, str): tis = [float(ti) for ti in tis.split(",")]
             ntis = len(tis)
             if ntis is not None and len(tis) != ntis:
                 raise RuntimeError("Number of TIs: %i, but list of %i TIs given" % (ntis, len(tis)))
@@ -96,14 +106,14 @@ class AslImage(fsl.Image):
             # Calculate fixed number of repeats 
             if self.nv % (self.ntc * self.ntis) != 0:
                 raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs and TC pairs" % (self.nv, self.ntis))        
-            rpts = [self.nv / (self.ntc * self.ntis)] * self.ntis
+            rpts = [int(self.nv / (self.ntc * self.ntis))] * self.ntis
         elif nrpts is not None:
             nrpts = int(nrpts)
             if nrpts * self.ntis * self.ntc != self.nv:
                 raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs and %i repeats" % (self.nv, self.ntis, nrpts))
             rpts = [nrpts] * self.ntis
         else:
-            if isinstance(rpts, basestring): rpts = [int(rpt) for rpt in rpts.split(",")]
+            if isinstance(rpts, str): rpts = [int(rpt) for rpt in rpts.split(",")]
             if len(rpts) != self.ntis:
                 raise RuntimeError("%i TIs, but only %i variable repeats" % (self.ntis, len(rpts)))        
             elif sum(rpts) * self.ntc != self.nv:
@@ -125,14 +135,14 @@ class AslImage(fsl.Image):
         return idx
 
     def _get_comp(self, comp_id, tag, ti, rpt):
-        ret = {"t": ti, "r" : rpt, "p" : tag, "P" : 1-tag}
+        ret = {"t": ti, "r" : rpt, "p" : tag, "P" : 1-tag, "m" : tag}
         if comp_id in ret: 
             return ret[comp_id]
         else:
             raise RuntimeError("Unknown ordering character: %s" % comp_id)
 
     def _get_ncomp(self, comp_id, ti):
-        ret = {"t": self.ntis, "r" : self.rpts[ti], "p" : 2, "P" : 2}
+        ret = {"t": self.ntis, "r" : self.rpts[ti], "p" : 2, "P" : 2, "m" : self.ntc}
         if comp_id in ret: 
             return ret[comp_id]
         else:
@@ -151,8 +161,12 @@ class AslImage(fsl.Image):
         """
         if self.ntc == 1 and ("p" in out_order or "P" in out_order):
             raise RuntimeError("Data contains TC pairs but output order does not")
-        elif self.ntc == 2 and ("p" not in out_order and "P" not in out_order):
+        elif ("p" in self.order or "P" in self.order) and ("p" not in out_order and "P" not in out_order):
             raise RuntimeError("Output order contains TC pairs but input data  does not")
+        elif "m" in self.order and "m" not in out_order:
+            raise RuntimeError("Data is multiphase but output order is not")
+        elif "m" in out_order and "m" not in self.order:
+            raise RuntimeError("Output order contains multiphases but data does not")
 
         #print("reordering from %s to %s" % (self.order, out_order))
         output_data = np.zeros(self.shape)
@@ -175,7 +189,8 @@ class AslImage(fsl.Image):
     def single_ti(self, ti_idx, order=None):
             
         if order is None:
-            if self.ntc == 2: order = "pr"
+            if "p" in self.order or "P" in self.order: order = "pr"
+            elif "m" in self.order: order="mr"
             else: order = "r"
         elif "t" in order:
             order = order.remove("t")
@@ -203,17 +218,21 @@ class AslImage(fsl.Image):
         Perform tag-control differencing. Data is assumed to be ordered so that
         tag-control pairs are together
         """
-        if "p" not in self.order and "P" not in self.order:
+        if "m" in self.order:
+            raise RuntimeError("Cannot difference multiphase data")
+        elif "p" not in self.order and "P" not in self.order:
             # Already differenced
             output_data = self.data()
+        elif self.nv % 2 != 0:
+            raise RuntimeError("Invalid number of volumes for TC data: %i" % self.nv)
         else:
-            output_data = np.zeros(list(self.shape[:3]) + [self.nv/2])
+            output_data = np.zeros(list(self.shape[:3]) + [int(self.nv/2)])
 
             # Re-order so that TC pairs are together with the tag first
             out_order = self.order.replace("p", "").replace("P", "")
             reordered = self.reorder("p" + out_order).data()
             
-            for t in range(self.nv / 2):
+            for t in range(int(self.nv / 2)):
                 tag = 2*t
                 ctrl = tag+1
                 output_data[:,:,:,t] = reordered[:,:,:,ctrl] - reordered[:,:,:,tag]
@@ -223,14 +242,17 @@ class AslImage(fsl.Image):
                         order=out_order, tis=self.tis, ntis=self.ntis, rpts=self.rpts, base=self)
 
     def mean_across_repeats(self):
-        if self.ntc == 2:
+        if self.ntc > 1:
             # Have tag-control pairs - need to diff
             diff = self.diff()
         else:
             diff = self
         
-        # Reorder so repeats are together
-        diff = diff.reorder("tr")
+        # Reorder so repeats are together saving original order. Note that
+        # rt and tr are equivalent in the output but we want to preserve
+        # whatever it was beforehand
+        orig_order = diff.order
+        diff = diff.reorder("rt")
         input_data = diff.data()
 
         # Create output data - one volume per ti
@@ -242,8 +264,46 @@ class AslImage(fsl.Image):
             start += nrp
         
         return AslImage(self.ipath + "_mean", data=output_data, 
-                       order=diff.order, tis=self.tis, ntis=self.ntis, nrpts=1,
+                       order=orig_order, tis=self.tis, ntis=self.ntis, nrpts=1,
                        base=self)
+
+    def split_epochs(self, epoch_size, overlap=0, time_order=None):
+        asldata = self.diff()
+        if time_order is not None:
+            asldata = asldata.reorder(time_order)
+        
+        num_epochs = int((self.nv - overlap) / (epoch_size - overlap))
+        if (self.nv - overlap) % num_epochs != 0:
+            # Error or warning?
+            raise RuntimeError("Not an exact number of epochs!")
+        epochs = [{"start" : e*(epoch_size-overlap), "end" : e*(epoch_size-overlap)+epoch_size, 
+                   "tis" : [], "rpts" : []}
+                  for e in range(num_epochs)]
+                      
+        for ti in range(asldata.ntis):
+            for rpt in range(asldata.rpts[ti]):
+                vol_idx = asldata._get_order_idx(asldata.order, 0, ti, rpt)
+                for epoch in epochs:
+                    if vol_idx >= epoch["start"] and vol_idx < epoch["end"]:
+                        ti_val = self.tis[ti]
+                        if ti_val not in epoch["tis"]:
+                            epoch["tis"].append(ti_val)
+                            epoch["rpts"].append(1)
+                        else:
+                            idx = epoch["tis"].index(ti_val)
+                            epoch["rpts"][idx] += 1
+
+        input_data = asldata.data()
+        ret = []
+        for idx, epoch in enumerate(epochs):
+            output_data = input_data[:,:,:,epoch["start"]:epoch["end"]]
+            asldata = AslImage(self.ipath + "_epoch%i" % idx, 
+                               data=output_data,
+                               order = asldata.order,
+                               tis = epoch["tis"], rpts = epoch["rpts"],
+                               base=asldata)
+            ret.append(asldata)
+        return ret
 
     def summary(self, log=sys.stdout):
         ti_str = "TIs "
