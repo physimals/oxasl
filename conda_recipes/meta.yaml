@@ -1,9 +1,8 @@
 {% set data = load_setup_py_data() %}
 package:
   name: oxasl
-#  version: {{ data['version']}}
-  version: {{ GIT_DESCRIBE_TAG }}
-  
+  version: {{ data['version']}}
+
 build:
    noarch: python
    script: python setup.py install --single-version-externally-managed --record=record.txt

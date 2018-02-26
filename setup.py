@@ -14,7 +14,7 @@ def git_version():
     p = re.compile("v?(\d+\.\d+\.\d+(-\d+)?).*")
     m = p.match(full_version)
     if m is not None:
-        std_version = m.group(1)
+        std_version = m.group(1).replace("-", ".dev")
     else:
         raise RuntimeError("Failed to parse version string %s" % full_version)
 
