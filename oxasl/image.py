@@ -20,15 +20,15 @@ class AslOptionGroup(OptionGroup):
         self._ignore = kwargs.pop("ignore", [])
         OptionGroup.__init__(self, *args, **kwargs)
 
-    def add_option(self, name, *args, **kwargs):
+    def add_option(self, name=None, *args, **kwargs):
         if name not in self._ignore:
             OptionGroup.add_option(self, name, *args, **kwargs)
 
-def add_data_options(parser, fname_opt="-i", output_type="directory", ignore=[]):
+def add_data_options(parser, fname_opt="-i", output_type="directory", **kwargs):
     parser.add_option("-o", dest="output", help="Output %s" % output_type, default=None)
     parser.add_option("--debug", dest="debug", help="Debug mode", action="store_true", default=False)
 
-    g = AslOptionGroup(parser, "Input data", ignore=ignore)
+    g = AslOptionGroup(parser, "Input data", **kwargs)
     g.add_option(fname_opt, dest="asldata", help="ASL data file")
     g.add_option("--order", dest="order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, p/P=TC/CT pairs. First character is fastest varying", default="prt")
     g.add_option("--tis", dest="tis", help="TIs as comma-separated list")
@@ -272,37 +272,40 @@ class AslImage(fsl.Image):
         if time_order is not None:
             asldata = asldata.reorder(time_order)
         
-        num_epochs = int((self.nv - overlap) / (epoch_size - overlap))
-        if (self.nv - overlap) % num_epochs != 0:
-            # Error or warning?
-            raise RuntimeError("Not an exact number of epochs!")
-        epochs = [{"start" : e*(epoch_size-overlap), "end" : e*(epoch_size-overlap)+epoch_size, 
-                   "tis" : [], "rpts" : []}
-                  for e in range(num_epochs)]
-                      
-        for ti in range(asldata.ntis):
-            for rpt in range(asldata.rpts[ti]):
-                vol_idx = asldata._get_order_idx(asldata.order, 0, ti, rpt)
-                for epoch in epochs:
-                    if vol_idx >= epoch["start"] and vol_idx < epoch["end"]:
-                        ti_val = self.tis[ti]
-                        if ti_val not in epoch["tis"]:
-                            epoch["tis"].append(ti_val)
-                            epoch["rpts"].append(1)
-                        else:
-                            idx = epoch["tis"].index(ti_val)
-                            epoch["rpts"][idx] += 1
-
+        epoch = 0
+        epoch_start = 0
         input_data = asldata.data()
         ret = []
-        for idx, epoch in enumerate(epochs):
-            output_data = input_data[:,:,:,epoch["start"]:epoch["end"]]
-            asldata = AslImage(self.ipath + "_epoch%i" % idx, 
-                               data=output_data,
-                               order = asldata.order,
-                               tis = epoch["tis"], rpts = epoch["rpts"],
-                               base=asldata)
-            ret.append(asldata)
+        while 1:
+            epoch_end = min(epoch_start + epoch_size, asldata.nv)
+            tis = []
+            rpts = []
+            for ti in range(asldata.ntis):
+                for rpt in range(asldata.rpts[ti]):
+                    vol_idx = asldata._get_order_idx(asldata.order, 0, ti, rpt)
+                    if vol_idx >= epoch_start and vol_idx < epoch_end:
+                        ti_val = self.tis[ti]
+                        if ti_val not in tis:
+                            tis.append(ti_val)
+                            rpts.append(1)
+                        else:
+                            idx = tis.index(ti_val)
+                            rpts[idx] += 1
+            epoch_data = input_data[:,:,:,epoch_start:epoch_end]
+            epoch_img = AslImage(self.ipath + "_epoch%i" % epoch, 
+                                 data=epoch_data,
+                                 order=asldata.order,
+                                 tis=tis, rpts=rpts,
+                                 base=asldata).mean_across_repeats()
+
+            ret.append(epoch_img)
+            epoch += 1
+            epoch_start += epoch_size - overlap
+            # Finish if start of next epoch is out of range or if current epoch 
+            # ended at the last volume
+            if epoch_start >= asldata.nv or epoch_end == asldata.nv:
+                break
+
         return ret
 
     def summary(self, log=sys.stdout):

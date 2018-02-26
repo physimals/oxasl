@@ -235,13 +235,16 @@ def test_split_epochs():
     for idx, img in enumerate(imgs):
         assert img.ntis == 2
         assert img.tis == [1, 2]
-        assert not img.plds == [2, 2]
+        assert not img.plds
+        assert img.rpts == [1, 1]
         assert img.ntc == 1
         assert img.order == "tr"
         data = img.data()
+        # Epoch 1 is TIs 1212, data 0123, mean across repeats 12
+        # Epoch 2 is TIs 1212, data 4567, mean across repeats 56
         start = idx*4
         for z in range(data.shape[3]):
-            assert np.all(data[:,:,:,z] == start+z)
+            assert np.all(data[:,:,:,z] == start+z+1)
 
 def test_split_epochs_overlap():
     d = np.zeros([5, 5, 5, 8])
@@ -253,13 +256,16 @@ def test_split_epochs_overlap():
         assert img.ntis == 2
         assert img.tis == [1, 2]
         assert not img.plds
-        assert img.rpts == [2, 2]
+        assert img.rpts == [1, 1]
         assert img.ntc == 1
         assert img.order == "tr"
         data = img.data()
+        # Epoch 1 is TIs 1212, data 0123, mean across repeats 12
+        # Epoch 2 is TIs 1212, data 2345, mean across repeats 34
+        # Epoch 3 is TIs 1212, data 4567, mean across repeats 56
         start = idx*2
         for z in range(data.shape[3]):
-            assert np.all(data[:,:,:,z] == start+z)
+            assert np.all(data[:,:,:,z] == start+z+1)
 
 def test_split_epochs_rt():
     d = np.zeros([5, 5, 5, 8])
@@ -271,13 +277,15 @@ def test_split_epochs_rt():
         assert img.ntis == 1
         assert img.tis == [1+idx]
         assert not img.plds
-        assert img.rpts == [4]
+        assert img.rpts == [1]
         assert img.ntc == 1
         assert img.order == "rt"
         data = img.data()
+        # Epoch 1 is TIs 1111, data 0123, mean across repeats 1.5
+        # Epoch 2 is TIs 2222, data 4567, mean across repeats 5.5
         start = idx*4
         for z in range(data.shape[3]):
-            assert np.all(data[:,:,:,z] == start+z)
+            assert np.all(data[:,:,:,z] == start+z+1.5)
 
 def test_split_epochs_rt_overlap():
     d = np.zeros([5, 5, 5, 8])
@@ -290,24 +298,26 @@ def test_split_epochs_rt_overlap():
             assert img.ntis == 1
             assert img.tis == [1+idx/2]
             assert not img.plds
-            assert img.rpts == [4]
+            assert img.rpts == [1]
             assert img.ntc == 1
             assert img.order == "rt"
             data = img.data()
+            # Epoch 1 is TIs 1111, data 0123, mean across repeats 1.5
+            # Epoch 3 is TIs 2222, data 4567, mean across repeats 5.5
             start = idx*2
             for z in range(data.shape[3]):
-                assert np.all(data[:,:,:,z] == start+z)
+                assert np.all(data[:,:,:,z] == start+z+1.5)
         else:
             assert img.ntis == 2
             assert img.tis == [1, 2]
             assert not img.plds
-            assert img.rpts == [2, 2]
+            assert img.rpts == [1, 1]
             assert img.ntc == 1
             assert img.order == "rt"
             data = img.data()
-            start = 2
+            # Epoch 2 is TIs 1122, data 2345, mean across repeats 2.5, 4.5
             for z in range(data.shape[3]):
-                assert np.all(data[:,:,:,z] == start+z)
+                assert np.all(data[:,:,:,z] == 2*z+2.5)
             
 def test_split_epochs_reorder():
     d = np.zeros([5, 5, 5, 8])
@@ -315,18 +325,19 @@ def test_split_epochs_reorder():
     img = AslImage("asldata", data=d, tis=[1, 2], order='rt')
     imgs = img.split_epochs(4, time_order="tr")
     assert len(imgs) == 2
-    reordered = [0, 4, 1, 5, 2, 6, 3, 7]
     for idx, img in enumerate(imgs):
         assert img.ntis == 2
         assert img.tis == [1, 2]
         assert not img.plds
-        assert img.rpts == [2, 2]
+        assert img.rpts == [1, 1]
         assert img.ntc == 1
         assert img.order == "tr"
         data = img.data()
-        start = idx*4
+        # reordered = [0, 4, 1, 5, 2, 6, 3, 7]
+        # Epoch 1 is TIs 1212, data 0415, mean across repeats 0.5, 4.5
+        # Epoch 2 is TIs 1212, data 2637, mean across repeats 2.5, 6.5
         for z in range(data.shape[3]):
-            assert np.all(data[:,:,:,z] == reordered[start+z])
+            assert np.all(data[:,:,:,z] == idx*2+0.5+z*4)
             
 def test_split_epochs_reorder_overlap():
     d = np.zeros([5, 5, 5, 8])
@@ -334,15 +345,17 @@ def test_split_epochs_reorder_overlap():
     img = AslImage("asldata", data=d, tis=[1, 2], order='rt')
     imgs = img.split_epochs(4, overlap=2, time_order="tr")
     assert len(imgs) == 3
-    reordered = [0, 4, 1, 5, 2, 6, 3, 7]
     for idx, img in enumerate(imgs):
         assert img.ntis == 2
         assert img.tis == [1, 2]
         assert not img.plds
-        assert img.rpts == [2, 2]
+        assert img.rpts == [1, 1]
         assert img.ntc == 1
         assert img.order == "tr"
         data = img.data()
-        start = idx*2
+        # reordered = [0, 4, 1, 5, 2, 6, 3, 7]
+        # Epoch 1 is TIs 1212, data 0415, mean across repeats 0.5, 4.5
+        # Epoch 2 is TIs 1212, data 1526, mean across repeats 1.5, 5.5
+        # Epoch 3 is TIs 1212, data 2637, mean across repeats 2.5, 6.5
         for z in range(data.shape[3]):
-            assert np.all(data[:,:,:,z] == reordered[start+z])
+            assert np.all(data[:,:,:,z] == idx+0.5+4*z)
