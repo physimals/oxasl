@@ -1,12 +1,13 @@
-
+"""
+ASL data preprocessing command line tool
+"""
 import sys
 
 from optparse import OptionParser
 
-from . import fslwrap as fsl
 from .image import AslImage, add_data_options, AslOptionGroup, AslWorkspace
 
-def add_preproc_options(parser, ignore=[]):
+def add_preproc_options(parser, ignore=()):
     g = AslOptionGroup(parser, "Preprocessing", ignore=ignore)
     g.add_option("--diff", dest="diff", help="Perform tag-control subtraction", action="store_true", default=False)
     g.add_option("--smooth", dest="smooth", help="Spatially smooth data", action="store_true", default=False)
@@ -16,11 +17,14 @@ def add_preproc_options(parser, ignore=[]):
     parser.add_option_group(g)
 
 def main():
+    """
+    Entry point for command line tool
+    """
     try:
         p = OptionParser(usage="asl_preproc", version="@VERSION@")
         add_data_options(p, output_type="file")
         add_preproc_options(p)
-        options, args = p.parse_args(sys.argv)
+        options, _ = p.parse_args(sys.argv)
 
         options.asldata = AslImage(options.asldata, role="Input data", **vars(options))
         if options.output is None:
@@ -37,4 +41,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
