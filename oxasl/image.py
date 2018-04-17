@@ -2,13 +2,11 @@
 Basic classes for ASL data processing
 """
 
-import os
 import sys
-import shutil
-from optparse import OptionParser, OptionGroup
+import math
+from optparse import OptionGroup
 
 import numpy as np
-import nibabel as nib
 
 from . import fslwrap as fsl
 
@@ -30,7 +28,7 @@ def add_data_options(parser, fname_opt="-i", output_type="directory", **kwargs):
 
     g = AslOptionGroup(parser, "Input data", **kwargs)
     g.add_option(fname_opt, dest="asldata", help="ASL data file")
-    g.add_option("--order", dest="order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, p/P=TC/CT pairs. First character is fastest varying", default="prt")
+    g.add_option("--order", dest="order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, p/P=TC/CT pairs. First character is fastest varying")
     g.add_option("--tis", dest="tis", help="TIs as comma-separated list")
     g.add_option("--plds", dest="plds", help="PLDs as comma-separated list")
     g.add_option("--nrpts", dest="nrpts", help="Fixed number of repeats per TI", default=None)
@@ -38,87 +36,136 @@ def add_data_options(parser, fname_opt="-i", output_type="directory", **kwargs):
     parser.add_option_group(g)
 
 class AslImage(fsl.Image):
+
+    DIFFERENCED = 0
+    TC_PAIRS = 1
+    MULTIPHASE = 2
+
     """
     Subclass of fslwrap.Image which adds ASL structure information
 
     An AslImage contains information about the structure of the data enabling it to perform
     operations such as reordering and tag/control differencing.
 
-    As a minimum you must provide the number of TIs in the data. This assumes an ordering of 'prt'
-    (see below)
+    As a minimum you must provide a data order and a means of determining the number of TIs/PLDs 
+    in the data. 
 
     Ordering is defined by a sequence of characters:
       - ``p`` - Tag/Control pairs
       - ``P`` - Control/Tag pairs
       - ``t`` - TIs/PLDs
       - ``r`` - Repeats
+      - ``m`` - Multiple phases
 
     The sequence is in order from fastest varying (innermost grouping) to slowest varying (outermost
     grouping). If ``p/P`` is not included this describes data which is already differenced.
+
+    Attributes:
+
+      ``nvols`` - Number of volumes in data
+      ``order`` - Data ordering string
+      ``ntc`` - Number of tag/control images in data
+      ``tagfirst`` - True if tag/control pairs have tag first
+      ``multiphase`` - True if tag/control images are multiphase
+      ``phases`` - List of phases for multiphase data
+      ``ntis`` - Number of TIs/PLDs
+      ``tis`` - Optional list of TIs
+      ``have_plds`` - True if TIs are actually PLDs
+      ``rpts`` - Repeats, one value per TI (may be constant but always stored as list)
     """
   
-    def __init__(self, name, order="prt", ntis=None, tis=None, plds=None, nrpts=None, rpts=None, 
+    def __init__(self, name, order, 
+                 ntis=None, nplds=None, tis=None, plds=None, 
+                 nrpts=None, rpts=None, 
                  phases=None, nph=None, **kwargs):
         fsl.Image.__init__(self, name, **kwargs)
         if self.ndim != 4:
             raise RuntimeError("4D data expected")
 
-        self.nv = self.shape[3]
+        self.nvols = self.shape[3]
+        if order is None:
+            raise ValueError("Data order must be specified")
         self.order = order
 
+        # Determine the number and type of tag/control images present. This may be tag/control
+        # pairs (in either order), a set of multiple phases, or already differenced data
+        #
+        # Sets the attributes: ntc (int), tagfirst (bool), multiphase (bool), phases (list)
         if "p" in order or "P" in order:
             self.ntc = 2
             self.tagfirst = "p" in self.order
+            self.multiphase = False
+            self.phases = []
         elif "m" in order:
             if phases is None and nph is None:
                 raise RuntimeError("Multiphase data specified but number of phases not given")
             elif phases is not None:
                 if nph is not None and nph != len(phases):
                     raise RuntimeError("Number of phases is not consistent with length of phases list")
-                nph = len(phases)
+            else:
+                phases = [pidx * math.pi / 180 for pidx in range(nph)]
+
             self.phases = phases
-            self.ntc = int(nph)
+            self.ntc = len(phases)
+            self.tagfirst = False
+            self.multiphase = True
         else:
             self.ntc = 1
             self.tagfirst = False
+            self.multiphase = False
+            self.phases = []
 
-        if tis is not None and plds is not None:
+        # Determine the number and type of delay images present. These may be given as TIs or PLDs.
+        # Internally we always refer to these as TIs with the plds attribute telling us if 
+        # they are really PLDs.
+        #
+        # Sets the attributes tis (list), ntis (int), have_plds (bool)
+        if (tis is not None and plds is not None) or (ntis is not None and nplds is not None) or \
+           (tis is not None and nplds is not None) or (plds is not None and ntis is not None):
             raise RuntimeError("Cannot specify PLDs and TIs at the same time")
-        elif plds is not None:
-            tis = plds
-            self.plds = True
-        else:
-            self.plds = False
 
+        self.have_plds = False
+
+        # ntis/nplds and tis/plds are synonyms internally but we flag which we have
+        if nplds is not None:
+            self.have_plds = True
+            ntis = nplds
+        
+        if plds is not None:
+            tis = plds
+            self.have_plds = True
+        
         if ntis is None and tis is None:
-            raise RuntimeError("Number of TIs not specified")
+            raise RuntimeError("Number of TIs/PLDs not specified")
         elif tis is not None:
             if isinstance(tis, str): tis = [float(ti) for ti in tis.split(",")]
             ntis = len(tis)
             if ntis is not None and len(tis) != ntis:
-                raise RuntimeError("Number of TIs: %i, but list of %i TIs given" % (ntis, len(tis)))
+                raise RuntimeError("Number of TIs/PLDs specified as: %i, but a list of %i TIs/PLDs was given" % (ntis, len(tis)))
         self.tis = tis
         self.ntis = int(ntis)
         
+        # Determine the number of repeats (fixed or variable)
+        #
+        # Sets the attribute rpts (list, one per TI/PLD)
         if nrpts is not None and rpts is not None:
             raise RuntimeError("Cannot specify both fixed and variable numbers of repeats")        
         elif nrpts is None and rpts is None:
             # Calculate fixed number of repeats 
-            if self.nv % (self.ntc * self.ntis) != 0:
-                raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs and TC pairs" % (self.nv, self.ntis))        
-            rpts = [int(self.nv / (self.ntc * self.ntis))] * self.ntis
+            if self.nvols % (self.ntc * self.ntis) != 0:
+                raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs and %i tag/control images" % (self.nvols, self.ntis, self.ntc))        
+            rpts = [int(self.nvols / (self.ntc * self.ntis))] * self.ntis
         elif nrpts is not None:
             nrpts = int(nrpts)
-            if nrpts * self.ntis * self.ntc != self.nv:
-                raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs and %i repeats" % (self.nv, self.ntis, nrpts))
+            if nrpts * self.ntis * self.ntc != self.nvols:
+                raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs, %i tag/control images and %i repeats" % (self.nvols, self.ntis, self.ntc, nrpts))
             rpts = [nrpts] * self.ntis
         else:
             if isinstance(rpts, str): rpts = [int(rpt) for rpt in rpts.split(",")]
             if len(rpts) != self.ntis:
-                raise RuntimeError("%i TIs, but only %i variable repeats" % (self.ntis, len(rpts)))        
-            elif sum(rpts) * self.ntc != self.nv:
-                raise RuntimeError("Data contains %i volumes, inconsistent with total number of variable repeats" % self.nv)        
-
+                raise RuntimeError("%i TIs specified, inconsistent with %i variable repeats" % (self.ntis, len(rpts)))        
+            elif sum(rpts) * self.ntc != self.nvols:
+                raise RuntimeError("Data contains %i volumes, inconsistent with %i tag/control images and total of %i variable repeats" % (self.nvols, self.ntc, sum(rpts)))        
         self.rpts = rpts
         
     def _get_order_idx(self, order, tag, ti, rpt):
@@ -180,17 +227,23 @@ class AslImage(fsl.Image):
                     #print("Input (%s) index %i" % (self.order, in_idx))
                     out_idx = self._get_order_idx(out_order, tag, ti, rpt)
                     #print("Output (%s) index %i" % (out_order, out_idx))
-                    output_data[:,:,:,out_idx] = input_data[:,:,:,in_idx]
+                    output_data[:, :, :, out_idx] = input_data[:, :, :, in_idx]
                     #print("")
         return AslImage(self.ipath + "_reorder", data=output_data,
                         order=out_order, tis=self.tis, ntis=self.ntis, rpts=self.rpts,
                         base=self)
 
     def single_ti(self, ti_idx, order=None):
-            
+        """
+        Extract the subset of data for a single TI/PLD
+
+        FIXME will not correctly set have_plds flag in output if input has PLDs
+        """
         if order is None:
-            if "p" in self.order or "P" in self.order: order = "pr"
-            elif "m" in self.order: order="mr"
+            if "p" in self.order or "P" in self.order: 
+                order = "pr"
+            elif "m" in self.order: 
+                order = "mr"
             else: order = "r"
         elif "t" in order:
             order = order.remove("t")
@@ -205,7 +258,7 @@ class AslImage(fsl.Image):
             start += self.rpts[idx]*self.ntc
         nrpts = self.rpts[ti_idx]
         nvols = nrpts * self.ntc
-        output_data = reordered.data()[:,:,:,start:start+nvols]
+        output_data = reordered.data()[:, :, :, start:start+nvols]
         if self.tis is not None:
             tis = [self.tis[ti_idx],]
         else:
@@ -215,33 +268,37 @@ class AslImage(fsl.Image):
 
     def diff(self):
         """
-        Perform tag-control differencing. Data is assumed to be ordered so that
-        tag-control pairs are together
+        Perform tag-control differencing. 
+        
+        Data will be reordered so the tag/control pairs are together
         """
         if "m" in self.order:
             raise RuntimeError("Cannot difference multiphase data")
         elif "p" not in self.order and "P" not in self.order:
             # Already differenced
             output_data = self.data()
-        elif self.nv % 2 != 0:
-            raise RuntimeError("Invalid number of volumes for TC data: %i" % self.nv)
+        elif self.nvols % 2 != 0:
+            raise RuntimeError("Invalid number of volumes for TC data: %i" % self.nvols)
         else:
-            output_data = np.zeros(list(self.shape[:3]) + [int(self.nv/2)])
+            output_data = np.zeros(list(self.shape[:3]) + [int(self.nvols/2)])
 
             # Re-order so that TC pairs are together with the tag first
             out_order = self.order.replace("p", "").replace("P", "")
             reordered = self.reorder("p" + out_order).data()
             
-            for t in range(int(self.nv / 2)):
+            for t in range(int(self.nvols / 2)):
                 tag = 2*t
                 ctrl = tag+1
-                output_data[:,:,:,t] = reordered[:,:,:,ctrl] - reordered[:,:,:,tag]
+                output_data[..., t] = reordered[..., ctrl] - reordered[..., tag]
         
         out_order = self.order.replace("p", "").replace("P", "")
         return AslImage(self.ipath + "_diff", data=output_data, 
                         order=out_order, tis=self.tis, ntis=self.ntis, rpts=self.rpts, base=self)
 
     def mean_across_repeats(self):
+        """
+        Calculate the mean signal across all repeats
+        """
         if self.ntc > 1:
             # Have tag-control pairs - need to diff
             diff = self.diff()
@@ -259,13 +316,13 @@ class AslImage(fsl.Image):
         output_data = np.zeros(list(self.shape[:3]) + [self.ntis])
         start = 0
         for ti, nrp in enumerate(self.rpts):
-            repeat_data = input_data[:,:,:,start:start+nrp]
-            output_data[:,:,:,ti] = np.mean(repeat_data, 3)
+            repeat_data = input_data[..., start:start+nrp]
+            output_data[..., ti] = np.mean(repeat_data, 3)
             start += nrp
         
         return AslImage(self.ipath + "_mean", data=output_data, 
-                       order=orig_order, tis=self.tis, ntis=self.ntis, nrpts=1,
-                       base=self)
+                        order=orig_order, tis=self.tis, ntis=self.ntis, nrpts=1,
+                        base=self)
 
     def split_epochs(self, epoch_size, overlap=0, time_order=None):
         asldata = self.diff()
@@ -277,7 +334,7 @@ class AslImage(fsl.Image):
         input_data = asldata.data()
         ret = []
         while 1:
-            epoch_end = min(epoch_start + epoch_size, asldata.nv)
+            epoch_end = min(epoch_start + epoch_size, asldata.nvols)
             tis = []
             rpts = []
             for ti in range(asldata.ntis):
@@ -291,7 +348,7 @@ class AslImage(fsl.Image):
                         else:
                             idx = tis.index(ti_val)
                             rpts[idx] += 1
-            epoch_data = input_data[:,:,:,epoch_start:epoch_end]
+            epoch_data = input_data[..., epoch_start:epoch_end]
             epoch_img = AslImage(self.ipath + "_epoch%i" % epoch, 
                                  data=epoch_data,
                                  order=asldata.order,
@@ -303,22 +360,27 @@ class AslImage(fsl.Image):
             epoch_start += epoch_size - overlap
             # Finish if start of next epoch is out of range or if current epoch 
             # ended at the last volume
-            if epoch_start >= asldata.nv or epoch_end == asldata.nv:
+            if epoch_start >= asldata.nvols or epoch_end == asldata.nvols:
                 break
 
         return ret
 
     def summary(self, log=sys.stdout):
+        """
+        Write a summary of the data to a file stream
+        """
         ti_str = "TIs "
-        if self.plds: ti_str = "PLDs"
+        if self.have_plds: ti_str = "PLDs"
         fsl.Image.summary(self, log)
         log.write("Data shape                    : %s\n" % str(self.shape))
-        log.write("Number of %s                : %i\n" % (ti_str, self.ntis))
+        log.write("%s                          : %s\n" % (ti_str, str(self.tis)))
         log.write("Number of repeats at each TI  : %s\n" % str(self.rpts))
         log.write("Label-Control                 : ")
         if self.ntc == 2:
             if self.tagfirst: log.write("Label-control pairs\n")
             else: log.write("Control-Label pairs\n")
+        elif self.multiphase:
+            log.write("Multiple phases (%s)" % str(self.phases))
         else:
             log.write("Already differenced\n")
 
@@ -357,7 +419,7 @@ class AslWorkspace(fsl.Workspace):
         sigma = round(fwhm/2.355, 2)
         self.log.write("Spatial smoothing with FWHM: %f (sigma=%f)\n" % (fwhm, sigma))
         args = "%s -kernel gauss %f -fmean %s" % (img.iname, sigma, output_name)
-        imgs, files, stdout = self.run("fslmaths", args=args, expected=[output_name])
+        imgs, _, _ = self.run("fslmaths", args=args, expected=[output_name])
         return imgs[0]
 
     def preprocess(self, asldata, diff=False, mc=False, smooth=False, fwhm=None, ref=None, **kwargs):
@@ -380,8 +442,10 @@ class AslWorkspace(fsl.Workspace):
         
         return orig.derived(data=asldata.data(), name=asldata.ipath)
 
-    def reg(wsp, ref, reg_targets, options, ref_str="asl"):
-        """ FIXME not functional yet"""
+    def reg(self, wsp, ref, reg_targets, options, ref_str="asl"):
+        """ 
+        FIXME not functional yet
+        """
         self.log.write("Segmentation and co-registration...\n")
 
         # Brain-extract ref image
@@ -389,8 +453,8 @@ class AslWorkspace(fsl.Workspace):
 
         # This is done to avoid the contrast enhanced rim resulting from low intensity ref image
         d = ref_bet.data()
-        thr_ref = np.percentile(d[d!=0], 10.0)
-        d[d<thr_ref] = 0
+        thr_ref = np.percentile(d[d != 0], 10.0)
+        d[d < thr_ref] = 0
         raw_bet = ref_bet.derived(d, save=True)
 
         for imgs in reg_targets:
