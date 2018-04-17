@@ -3,6 +3,7 @@
 FSL wrapper functions - named fslwrap so as not to clash with any potential
 'official' FSL python modules which would probably be named 'fsl'
 """
+
 import os
 import sys
 import shutil
@@ -11,6 +12,7 @@ import subprocess
 import errno
 import tempfile
 import collections
+import re
 
 import nibabel as nib
 import numpy as np
@@ -20,12 +22,15 @@ class Image(object):
     Named image data
 
     An image is identified by a *name* which should be unique within the context.
-    It will be used as the basis for a file name with an added Nifti extension.
+    
+    If data is not provided, ``name`` will be interpreted as specifying a file. 
+    If a unique Nifti file matching the name can be found, using the same extension
+    inference rules as FSL, it will be loaded and the image name will be set from
+    the file name minus the directory path and Nifti extension. 
 
-    If an image is loaded from a file it's name will be taken from the filename, 
-    minus the directory path and Nifti extension. 
-
-    If an image is created from existing Numpy data, a name must be provided
+    If an image is created from existing Numpy data, a name must be provided. It will
+    be used as the basis for the file name with an added Nifti extension if the data
+    is saved.
 
     Attributes:
       ``iname`` - Image name. Interpreted as file name minus extension
@@ -38,7 +43,7 @@ class Image(object):
     """
     def __init__(self, name, data=None, role="Image", **kwargs):
         if name is None:
-            raise RuntimeError("%s image - no name given" % role)
+            raise ValueError("%s image - no name given" % role)
         self.role = role
         self._data = None
         self.ext_matches = []
@@ -80,13 +85,10 @@ class Image(object):
             self.set_name(name)
 
         if len(self.ext_matches) > 1:
-            raise RuntimeError("%s: file %s is ambiguous" % (self.role, self.fname))
+            raise ValueError("%s: file %s is ambiguous" % (self.role, self.fname))
     
-        # Load the file
-        try:
-            self.nii = nib.load(self.fpath)
-        except:
-            raise RuntimeError("%s: file %s not found" % (self.role, self.fname))
+        # Load the file. Will raise exception if not found
+        self.nii = nib.load(self.fpath)
         self.shape = self.nii.shape
         self.ndim = len(self.shape)
         return self
@@ -187,9 +189,9 @@ class Image(object):
         :param shape: Shape to check against
         """
         if len(self.shape) != len(shape):
-            raise RuntimeError("%s: expected %i dims, got %i" % (self.file_type, len(shape), len(self.shape)))
+            raise ValueError("%s: expected %i dims, got %i" % (self.file_type, len(shape), len(self.shape)))
         if self.shape != shape:
-            raise RuntimeError("%s: shape (%s) does not match (%s)" % (self.file_type, str(self.shape), str(shape)))
+            raise ValueError("%s: shape (%s) does not match (%s)" % (self.file_type, str(self.shape), str(shape)))
 
     def derived(self, data, name=None, suffix=None, **kwargs):
         """
@@ -221,7 +223,7 @@ class Workspace(object):
     IMAGE = 2
     NUMPY = 3
 
-    def __init__(self, workdir=None, log=sys.stdout, imgs=[], path=None, debug=False, echo=False, use_local_dir=True):
+    def __init__(self, workdir=None, log=sys.stdout, imgs=(), path=None, debug=False, echo=False, use_local_dir=True):
         """
         Create workspace
 
@@ -298,10 +300,12 @@ class Workspace(object):
             name = img.fname
         img.save(os.path.join(self.workdir, name))
 
-    def add_file(self, fpath, name):
+    def add_file(self, fpath, name=None):
         """
         Add a random named file to the workspace
         """
+        if name is None:
+            name = os.path.basename(fpath)
         shutil.copyfile(fpath, os.path.join(self.workdir, name))
 
     def add_text(self, text, name):
@@ -319,12 +323,12 @@ class Workspace(object):
         Delete an image from the workspace
         """
         try:
-            image, itype = self._input_img(img)
+            image, _ = self._input_img(img)
             os.remove(image.fpath)
-        except:
+        except IOError:
             self.log.write("WARNING: failed to delete %s\n" % img)
 
-    def sub(self, name, imgs=[]):
+    def sub(self, name, imgs=()):
         """
         Create a sub-workspace, (i.e. a subdir of this workspace)
 
@@ -336,7 +340,7 @@ class Workspace(object):
         return Workspace(os.path.join(self.workdir, name), imgs=imgs, log=self.log, echo=self.echo_enabled,
                          debug=self.debug_enabled)
 
-    def run(self, prog, args="", expected=[]):
+    def run(self, prog, args="", expected=()):
         """
         Run an FSL program
 
@@ -366,25 +370,21 @@ class Workspace(object):
 
             # Find out what files were in the workspace before this command
             pre_run_files = self._get_files()
-            self.debug("Pre run: %s" % str(pre_run_files))
+            #self.debug("Pre run: %s" % str(pre_run_files))
 
             # Run the command
-            cmd_stdout = ""
-            p = subprocess.Popen(shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            while 1:
-                retcode = p.poll() # returns None while subprocess is running
-                stdout_line = p.stdout.readline()
-                cmd_stdout += stdout_line
-                self.echo(stdout_line)
-                if retcode is not None: break
+            p = subprocess.Popen(shlex.split(cmd), stdout=self.log, stderr=subprocess.STDOUT, bufsize=1)
+            retcode = p.wait()
             if retcode != 0:
-                raise RuntimeError(cmd_stdout)
+                raise RuntimeError("Command '%s': Non-zero output status: %i" % (cmd, retcode))
                 
             # Find out what files were in the workspace after this command
             # and turn them into images or text files are required
-            imgs, text = self._get_return_files(pre_run_files, self._get_files(), expected)
+            post_run_files = self._get_files()
+            #self.debug("Post run: %s" % str(post_run_files))
+            imgs, text = self._get_return_files(pre_run_files, post_run_files, expected)
 
-            return imgs, text, cmd_stdout
+            return imgs, text
         finally:
             os.chdir(cwd)
 
@@ -402,11 +402,41 @@ class Workspace(object):
         args = "%s %s %s" % (img.ipath, output_name, args)
         if mask: args += " -m"
         if not brain: args += " -n"
-        imgs, _, _ = self.run("bet", args=args, expected=[output_name, output_name + "_mask"])
+        imgs, _ = self.run("bet", args=args, expected=[output_name, output_name + "_mask"])
         ret = [self._output_img(i, itype) for i in imgs]
         if len(ret) == 1:
             return ret[0]
         return tuple(ret)
+
+    def fabber(self, model_group, img, mask, options, overwrite=True, **kwargs):
+        """
+        Fabber model fitting
+
+        :param img: Input image
+        :param mask: Mask image
+        :return: MVN output image
+        """
+        img, itype = self._input_img(img)
+        mask, _ = self._input_img(mask)
+        output_name, extra_args = self._get_std(img, "_fabber", kwargs)
+
+        options = dict(options)
+        options["data"] = img.ipath
+        options["mask"] = mask.ipath
+        options["output"] = output_name
+        options["save-mvn"] = ""
+        if overwrite:
+            options["overwrite"] = ""
+        option_args = ""
+        for k, v in options.items():
+            if v == "" or v == True:
+                option_args += " --%s" % k
+            elif v:
+                option_args += " --%s=%s" % (k, str(v))
+
+        args = "%s %s" % (option_args, extra_args)
+        imgs, _ = self.run("fabber_%s" % model_group.lower(), args=args, expected=[output_name + "/finalMVN"])
+        return self._output_img(imgs[0], itype)
 
     def fast(self, img, **kwargs):
         """
@@ -419,7 +449,7 @@ class Workspace(object):
         output_name, args = self._get_std(img, "_fast", kwargs)
         args = "-o %s %s %s" % (output_name, args, img.ipath)
 
-        imgs, _, _ = self.run("fast", args=args, expected=[output_name + "_seg"])
+        imgs, _ = self.run("fast", args=args, expected=[output_name + "_seg"])
         return self._output_img(imgs[0], itype)
 
     def flirt(self, img, ref, **kwargs):
@@ -443,7 +473,7 @@ class Workspace(object):
             args += " -omat %s" % output_mat
             expected.append(output_mat)
 
-        imgs, files, _ = self.run("flirt", args=args, expected=expected)
+        imgs, files = self.run("flirt", args=args, expected=expected)
 
         ret = [self._output_img(imgs[0], itype),]
         if output_mat is not None:
@@ -469,7 +499,7 @@ class Workspace(object):
         xfm, _ = self._input_matrix(xfm)
         output_name, args = self._get_std(img, "_reg", kwargs)
         args = "-in %s -ref %s -applyxfm -init %s -out %s %s" % (img.iname, ref.iname, xfm, output_name, args)
-        imgs, _, _ = self.run("flirt", args=args, expected=[output_name], **kwargs)
+        imgs, _ = self.run("flirt", args=args, expected=[output_name], **kwargs)
         return self._output_img(imgs[0], itype)
 
     def mcflirt(self, img, cost=None, ref=None, **kwargs):
@@ -489,7 +519,7 @@ class Workspace(object):
         if ref is not None:
             ref, _ = self._input_img(ref)
             args += " -r %s" % ref.ipath
-        imgs, _, _ = self.run("mcflirt", args=args, expected=[output_name])
+        imgs, _ = self.run("mcflirt", args=args, expected=[output_name])
         return self._output_img(imgs[0], itype)
 
     def maths(self, img, *args, **kwargs):
@@ -504,7 +534,7 @@ class Workspace(object):
         self.echo_enabled = True
         output_name, args = self._get_std(img, "_maths", kwargs)
         args = "%s %s %s" % (img.ipath, args, output_name)
-        imgs, _, _ = self.run("fslmaths", args=args, expected=[output_name])
+        imgs, _ = self.run("fslmaths", args=args, expected=[output_name])
         return self._output_img(imgs[0], itype)
 
     def imcp(self, src, dest):
@@ -536,7 +566,7 @@ class Workspace(object):
             tempf.close()
             return Image(tempname, data=img, save=True), self.NUMPY
         else:
-            raise RuntimeError("Image data not recognized - must be filename, Image instance or Numpy array")
+            raise TypeError("Image data not recognized - must be filename, Image instance or Numpy array")
 
     def _input_matrix(self, mat):
         """
@@ -556,7 +586,7 @@ class Workspace(object):
             self.add_text(matrix_to_text(mat), os.path.basename(fname))
             return fname, self.NUMPY
         else:
-            raise RuntimeError("Matrix data not recognized - must be filename or Numpy array")
+            raise TypeError("Matrix data not recognized - must be filename or Numpy array")
 
     def _output_img(self, img, itype):
         """
@@ -572,7 +602,7 @@ class Workspace(object):
         elif itype == self.NUMPY:
             return img.data()
         else:
-            raise RuntimeError("Image type not recognized - must be filename, Image instance or Numpy array")
+            raise TypeError("Image type not recognized - must be filename, Image instance or Numpy array")
 
     def _get_std(self, img, suffix, kwargs):
         """
@@ -592,15 +622,20 @@ class Workspace(object):
         
         return cmd
 
-    def _get_files(self):
+    def _get_files(self, workdir=None):
         """
         Get a dict of filename : modification time for the files in working directory
         """
+        if workdir is None:
+            workdir = self.workdir
         dir_files = {}
-        for _, _, files in os.walk(self.workdir):
+        for _, dirnames, files in os.walk(workdir):
             for fname in files:
+                fname = os.path.relpath(os.path.join(workdir, fname), self.workdir)
                 if os.path.isfile(fname):
                     dir_files[fname] = os.path.getmtime(fname)
+            for dirname in dirnames:
+                dir_files.update(self._get_files(os.path.join(workdir, dirname)))
         return dir_files
    
     def _changed_files(self, pre, post):
@@ -626,14 +661,13 @@ class Workspace(object):
 
         If expected is empty, return all changed files
         """
-        self.debug("Expected: %s" % str(expected))
-
+        #self.debug("Expected: %s" % str(expected))
         return_files = []
         if expected:
-           for fname in post:
-                base = os.path.basename(fname).split(".", 1)[0]
-                if base in expected:
-                    return_files.append(fname)
+            for fname in post:
+                for exp in expected:
+                    if re.match(exp, fname):
+                        return_files.append(fname)
         else:
             return_files = self._changed_files(pre, post)
 
@@ -679,13 +713,13 @@ def text_to_matrix(text):
         # Check correct number of columns
         if ncols < 0: ncols = len(vals)
         elif len(vals) != ncols:
-            raise RuntimeError("File must contain a matrix of numbers with fixed size (rows/columns)")
+            raise ValueError("File must contain a matrix of numbers with fixed size (rows/columns)")
         # Check all data is numeric
         for val in vals:
             try:
                 float(val)
             except:
-                raise RuntimeError("Non-numeric value '%s' found in matrix text" % val)
+                raise ValueError("Non-numeric value '%s' found in matrix text" % val)
         fvals.append([float(v) for v in vals])     
     return np.array(fvals)
 
