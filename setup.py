@@ -10,8 +10,8 @@ def git_version():
     # Full version includes the Git commit hash
     full_version = subprocess.check_output('git describe --dirty', shell=True).decode("utf-8").strip(" \n")
 
-    # Standardized version in form major.minor.patch-build
-    p = re.compile("v?(\d+\.\d+\.\d+(-\d+)?).*")
+    # Python standardized version in form major.minor.patch.dev<build>
+    p = re.compile(r"v?(\d+\.\d+\.\d+(-\d+)?).*")
     m = p.match(full_version)
     if m is not None:
         std_version = m.group(1).replace("-", ".dev")
@@ -21,8 +21,8 @@ def git_version():
     return full_version, std_version
 
 def set_python_version(rootdir, version):
-    vfile = open(os.path.join(rootdir, "oxasl", "__init__.py"), "w")
-    vfile.write("__version__='%s'" % version)
+    vfile = open(os.path.join(rootdir, "oxasl", "_version.py"), "w")
+    vfile.write("__version__ = '%s'" % version)
     vfile.close()
 
 # Read in requirements from the requirements.txt file.
@@ -47,7 +47,10 @@ setup(
     version=stdv,
     install_requires=requirements,
     entry_points = {
-        'console_scripts' : ["asl_preproc=oxasl.preproc:main",],
+        'console_scripts' : [
+            "asl_preproc=oxasl.preproc:main", 
+            "asl_basil=oxasl.basil:main",
+        ],
     },
     classifiers=[
         'Development Status :: 3 - Alpha',
