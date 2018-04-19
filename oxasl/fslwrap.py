@@ -33,26 +33,27 @@ class Image(object):
     is saved.
 
     Attributes:
+      ``role``  - Role this image plays in the context (e.g. 'calibration', 't1')
       ``iname`` - Image name. Interpreted as file name minus extension
       ``fname`` - File name with Nifti extension but no directory
       ``fpath`` - Full file path with Nifti extension and directory
       ``ipath`` - Image path with directory but no extension
-      ``ext``   - Extension
       ``dpath`` - Full path to directory
-      ``role``  - Role this image plays in the context (e.g. 'calibration', 't1')
+      ``ext``   - Extension
     """
-    def __init__(self, name, data=None, role="Image", **kwargs):
+    def __init__(self, name, role="Image", **kwargs):
         if name is None:
             raise ValueError("%s image - no name given" % role)
         self.role = role
         self._data = None
-        self.ext_matches = []
-        self.default_ext = kwargs.pop("default_ext", ".nii.gz")
+        self._ext_matches = []
+        self._default_ext = kwargs.pop("default_ext", ".nii.gz")
         self.set_name(name)
 
-        if data is not None:
+        if "data" in kwargs:
             # We have been given the data - create a Nifti image from it
             # Can be based on a previous Image to inherit affine, header etc.
+            data = kwargs.pop("data")
             if "base" in kwargs:
                 self.nii = nib.Nifti1Image(data, None, kwargs.pop("base").nii.header)
                 self.nii.update_header()
@@ -64,7 +65,6 @@ class Image(object):
             # Might want to set the file immediately
             if kwargs.pop("save", False):
                 self.save()
-            
         else:
             self.load()
             # Might want to get the data immediately if it is from a temp file
@@ -84,7 +84,7 @@ class Image(object):
         if name is not None:
             self.set_name(name)
 
-        if len(self.ext_matches) > 1:
+        if len(self._ext_matches) > 1:
             raise ValueError("%s: file %s is ambiguous" % (self.role, self.fname))
     
         # Load the file. Will raise exception if not found
@@ -136,29 +136,12 @@ class Image(object):
         else:
             self.iname = self.fname
             self.ipath = os.path.join(self.dpath, self.iname)
-            self.ext = self.default_ext
+            self.ext = self._default_ext
             self._guess_extension()
             self.fname = self.fname + self.ext
 
         self.fpath = os.path.join(self.dpath, self.fname)
         return self
-
-    def _guess_extension(self):
-        """
-        Guess the extension of the file, if the name was given without extension
-        
-        Looks for already existing files with the same ipath and a Nifti extension.
-        The attribute ``ext_matches`` stores the matching extensions. If no matches
-        are found, the default Nifti extension is set (``.nii.gz``)
-        """
-        exts = ["", ".nii", ".nii.gz"]
-        self.ext_matches = []
-        for ext in exts:
-            if os.path.exists("%s%s" % (self.ipath, ext)):
-                self.ext_matches.append(ext)
-
-        if self.ext_matches:
-            self.ext = self.ext_matches[0]
 
     def data(self):
         """
@@ -211,6 +194,23 @@ class Image(object):
         elif name is None:
             name = self.ipath + suffix
         return Image(name, data=data, base=self, **kwargs)
+
+    def _guess_extension(self):
+        """
+        Guess the extension of the file, if the name was given without extension
+        
+        Looks for already existing files with the same ipath and a Nifti extension.
+        The attribute ``_ext_matches`` stores the matching extensions. If no matches
+        are found, the default Nifti extension is set (``.nii.gz``)
+        """
+        exts = ["", ".nii", ".nii.gz"]
+        self._ext_matches = []
+        for ext in exts:
+            if os.path.exists("%s%s" % (self.ipath, ext)):
+                self._ext_matches.append(ext)
+
+        if self._ext_matches:
+            self.ext = self._ext_matches[0]
 
 class Workspace(object):
     """
