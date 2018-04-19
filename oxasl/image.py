@@ -74,11 +74,20 @@ class AslImage(fsl.Image):
       ``rpts`` - Repeats, one value per TI (may be constant but always stored as list)
     """
   
-    def __init__(self, name, order, 
-                 ntis=None, nplds=None, tis=None, plds=None, 
-                 nrpts=None, rpts=None, 
-                 phases=None, nph=None, **kwargs):
+    def __init__(self, name, **kwargs):
         fsl.Image.__init__(self, name, **kwargs)
+        
+        # We do it this way because we want to be able to 'consume' options provided as a dict
+        order = kwargs.pop("order", None)
+        ntis = kwargs.pop("ntis", None)
+        nplds = kwargs.pop("nplds", None)
+        tis = kwargs.pop("tis", None)
+        plds = kwargs.pop("plds", None)
+        nrpts = kwargs.pop("nrpts", None)
+        rpts = kwargs.pop("rpts", None)
+        phases = kwargs.pop("phases", None)
+        nphases = kwargs.pop("nphases", None)
+        
         if self.ndim != 4:
             raise RuntimeError("4D data expected")
 
@@ -97,13 +106,13 @@ class AslImage(fsl.Image):
             self.multiphase = False
             self.phases = []
         elif "m" in order:
-            if phases is None and nph is None:
+            if phases is None and nphases is None:
                 raise RuntimeError("Multiphase data specified but number of phases not given")
             elif phases is not None:
-                if nph is not None and nph != len(phases):
+                if nphases is not None and nphases != len(phases):
                     raise RuntimeError("Number of phases is not consistent with length of phases list")
             else:
-                phases = [pidx * math.pi / 180 for pidx in range(nph)]
+                phases = [pidx * 360 / nphases for pidx in range(nphases)]
 
             self.phases = phases
             self.ntc = len(phases)
@@ -230,7 +239,7 @@ class AslImage(fsl.Image):
                     output_data[:, :, :, out_idx] = input_data[:, :, :, in_idx]
                     #print("")
         return AslImage(self.ipath + "_reorder", data=output_data,
-                        order=out_order, tis=self.tis, ntis=self.ntis, rpts=self.rpts,
+                        order=out_order, tis=self.tis, ntis=self.ntis, rpts=self.rpts, phases=self.phases,
                         base=self)
 
     def single_ti(self, ti_idx, order=None):
@@ -264,7 +273,7 @@ class AslImage(fsl.Image):
         else:
             tis = None
         return AslImage(self.ipath + "_ti%i" % ti_idx, data=output_data,
-                        order=order, tis=tis, ntis=1, nrpts=nrpts, base=self)
+                        order=order, tis=tis, ntis=1, nrpts=nrpts, phases=self.phases, base=self)
 
     def diff(self):
         """
@@ -406,7 +415,7 @@ class AslImage(fsl.Image):
             elif name is None:
                 name = self.ipath + suffix
             return AslImage(name, data=data, base=self,
-                            order=self.order, ntis=self.ntis, tis=self.tis, rpts=self.rpts, **kwargs)
+                            order=self.order, ntis=self.ntis, tis=self.tis, rpts=self.rpts, phases=self.phases, **kwargs)
 
 class AslWorkspace(fsl.Workspace):
     """
