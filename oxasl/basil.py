@@ -19,7 +19,11 @@ def _add_prior(options, prior_idx, param, **kwargs):
         options["PSP_byname%i_%s" % (prior_idx, key)] = value
     return prior_idx + 1
 
-def do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sys.stdout):
+def _add_step(steps, step, step_desc, infile, mask, options, prev_step=None):
+    steps.append((step, step_desc, infile, mask, dict(options), prev_step))
+    return len(steps)+1, len(steps)
+
+def _do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sys.stdout):
     """
     Perform a single model fitting step
 
@@ -38,14 +42,19 @@ def do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sys
 
     log.write("\n%s\n" % step_desc)
     wsp.fabber("asl", infile, mask, options, output_name="step%i" % step)
-    return step+1, step
+    #return step+1, step
 
-def basil(wsp, asldata, mask, 
-          infertau=False, inferart=False, infert1=False, inferpc=False,
-          artonly=False, fixbat=False, spatial=False, onestep=False,
-          t1im=None, pgm=None, pwm=None,
-          initmvn=None,
-          log=sys.stdout, **kwargs):
+def run_steps(wsp, steps, log=sys.stdout):
+    for step in steps:
+        _do_step(wsp, *step, log=sys.stdout)
+    log.write("End\n")
+
+def get_steps(asldata, mask, 
+              infertau=False, inferart=False, infert1=False, inferpc=False,
+              artonly=False, fixbat=False, spatial=False, onestep=False,
+              t1im=None, pgm=None, pwm=None,
+              initmvn=None,
+              log=sys.stdout, **kwargs):
     """
     Run Bayesian ASL model fitting
 
@@ -73,13 +82,8 @@ def basil(wsp, asldata, mask,
         raise ValueError("basil: input mask is None")
 
     log.write("BASIL v%s\n" % __version__)
-    log.write("Working directory: %s\n" % wsp.workdir)
+    #log.write("Working directory: %s\n" % wsp.workdir)
     asldata.summary(log=log)
-
-    # Save input image and mask into output dir - not strictly necessary
-    # but may be useful to the user since output is then more self-contained
-    wsp.add_img(asldata)
-    wsp.add_img(mask)
 
     # Spatial prior types
     prior_type_spatial = kwargs.pop("spatial_prior", "M")
@@ -94,6 +98,8 @@ def basil(wsp, asldata, mask,
         "max-iterations" : 20,
         "convergence" : "trialmode",
         "max-trials" : 10,
+        "disp" : "none",
+        "exch" : "mix",
     }
     for idx, ti in enumerate(asldata.tis):
         options["ti%i" % (idx+1)] = ti
@@ -163,6 +169,7 @@ def basil(wsp, asldata, mask,
         spriors = _add_prior(options, spriors, "T_1", type="I", image=t1.ipath)
 
     step = 1
+    steps = []
     prev_step = None
     step_params = ""
 
@@ -172,7 +179,7 @@ def basil(wsp, asldata, mask,
         options["infertiss"] = ""
         step_desc = "STEP %i: VB - %s" % (step, step_params)
         if not onestep:
-            step, prev_step = do_step(wsp, step, step_desc, asldata, mask, options, prev_step, log)
+            step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
 
         # setup spatial priors ready
         spriors = _add_prior(options_svb, spriors, "ftiss", type=prior_type_spatial)
@@ -183,7 +190,7 @@ def basil(wsp, asldata, mask,
         options["inferart"] = ""
         step_desc = "STEP %i: VB - %s" % (step, step_params)
         if not onestep:
-            step, prev_step = do_step(wsp, step, step_desc, asldata, mask, options, prev_step, log)
+            step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
 
         # setup spatial priors ready
         spriors = _add_prior(options_svb, spriors, "fblood", type=prior_type_mvs)
@@ -194,7 +201,7 @@ def basil(wsp, asldata, mask,
         options["infertau"] = ""
         step_desc = "STEP %i: VB - %s" % (step, step_params)
         if not onestep:
-            step, prev_step = do_step(wsp, step, step_desc, asldata, mask, options, prev_step, log)
+            step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
 
     ### --- MODEL EXTENSIONS MODULE ---
     # Add variable dispersion and/or exchange parameters and/or pre-capiliary
@@ -211,7 +218,7 @@ def basil(wsp, asldata, mask,
 
         step_desc = "STEP %i: VB - %s" % (step, step_params)	
         if not onestep:
-            step, prev_step = do_step(wsp, step, step_desc, asldata, mask, options, prev_step, log)
+            step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
 
     ### --- T1 MODULE ---
     if infert1:
@@ -219,7 +226,7 @@ def basil(wsp, asldata, mask,
         options["infert1"] = ""
         step_desc = "STEP %i: VB - %s" % (step, step_params)
         if not onestep:
-            step, prev_step = do_step(wsp, step, step_desc, asldata, mask, options, prev_step, log)
+            step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
 
     ### --- PV CORRECTION MODULE ---
     if pvcorr:
@@ -257,13 +264,13 @@ def basil(wsp, asldata, mask,
         del options["max-trials"]
 
         if not onestep:
-            step, prev_step = do_step(wsp, step, step_desc, asldata, mask, options, prev_step, log)
+            step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
 
     ### --- SINGLE-STEP OPTION ---
     if onestep:
-        step, prev_step = do_step(wsp, step, step_desc, asldata, mask, options, prev_step, log)
+        step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
         
-    log.write("End\n")
+    return steps
 
 def main():
     """
@@ -322,7 +329,12 @@ def main():
                 options[opt] = fsl.Image(options[opt], role=role)
 
         # Create workspace which is the equivalent of the output directory
-        wsp = fsl.Workspace(options["output"], echo=True, debug=options["debug"])
+        wsp = fsl.Workspace(options["output"], echo=True, debug=options.pop("debug", False))
+
+        # Save input image and mask into output dir - not strictly necessary
+        # but may be useful to the user since output is then more self-contained
+        wsp.add_img(options["asldata"])
+        wsp.add_img(options["mask"])
 
         # Adjust number of iterations based on fast option
         fast = options.pop("fast", 0)
@@ -347,8 +359,9 @@ def main():
                         options[key] = keyval[1].strip()
 
         # Run BASIL processing, passing options as keyword arguments using **
-        basil(wsp, num_iter=num_iter, num_trials=num_trials, onestep=onestep, **options)
-            
+        steps = get_steps(num_iter=num_iter, num_trials=num_trials, onestep=onestep, **options)
+        run_steps(wsp, steps)
+        
     except ValueError as e:
         sys.stderr.write("\nERROR: " + str(e) + "\n")
         sys.stderr.write("Use --help for usage information\n")
