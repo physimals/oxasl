@@ -4,8 +4,8 @@ ASL Python tools
 
 from ._version import __version__
 
-from .image import AslImage, AslWorkspace
+from .image import AslImage, AslOptionGroup, AslWorkspace
 from . import basil
 from . import fslwrap as fsl
 
-__all__ = ["AslImage", "AslWorkspace", "basil"]
+__all__ = ["AslImage", "AslWorkspace", "AslOptionGroup", "basil", "fsl"]
