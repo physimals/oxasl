@@ -50,6 +50,7 @@ setup(
         'console_scripts' : [
             "asl_preproc=oxasl.preproc:main", 
             "asl_basil=oxasl.basil:main",
+            "asl_pycalib=oxasl.calib:main",
         ],
     },
     classifiers=[
