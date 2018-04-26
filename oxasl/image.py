@@ -77,7 +77,6 @@ class AslImage(fsl.Image):
     def __init__(self, name, **kwargs):
         fsl.Image.__init__(self, name, **kwargs)
         
-        # We do it this way because we want to be able to 'consume' options provided as a dict
         order = kwargs.pop("order", None)
         ntis = kwargs.pop("ntis", None)
         nplds = kwargs.pop("nplds", None)
