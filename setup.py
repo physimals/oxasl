@@ -44,6 +44,7 @@ setup(
     author_email='martin.craig@eng.ox.ac.uk',
     license='',
     packages=packages,
+    package_data={'oxasl.gui': ['banner.png']},
     version=stdv,
     install_requires=requirements,
     entry_points = {
@@ -51,6 +52,7 @@ setup(
             "asl_preproc=oxasl.preproc:main", 
             "asl_basil=oxasl.basil:main",
             "asl_pycalib=oxasl.calib:main",
+            "asl_pygui=oxasl.gui:main",
         ],
     },
     classifiers=[
