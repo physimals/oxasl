@@ -1,3 +1,4 @@
 oxasl/_version.py
 build
 *.pyc
+.pytest_cache
