@@ -428,8 +428,9 @@ class Workspace(object):
         if overwrite:
             options["overwrite"] = ""
         option_args = ""
-        for k, v in options.items():
-            if v == "" or v == True:
+        for k in sorted(options.keys()):
+            v = options[k]
+            if v == "" or (v and type(v) == bool):
                 option_args += " --%s" % k
             elif v:
                 option_args += " --%s=%s" % (k, str(v))
