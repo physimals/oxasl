@@ -109,7 +109,7 @@ def get_steps(asldata, mask,
     options_svb = {
         "method" : "spatialvb",
         "param-spatial-priors" : "N+",
-        "max-iterations": 20,
+        "max-iterations": kwargs.pop("svb-max-iterations", 20),
     }
 
     # Options can be overridden using keyword arguments
@@ -328,6 +328,10 @@ def main():
             if options[opt]:
                 options[opt] = fsl.Image(options[opt], role=role)
 
+        # Remove options consumed by AslImage
+        for opt in ["order", "ntis", "tis", "nplds", "plds", "nrpts", "rpts", "nphases", "phases"]:
+            options.pop(opt, None)
+            
         # Create workspace which is the equivalent of the output directory
         wsp = fsl.Workspace(options["output"], echo=True, debug=options.pop("debug", False))
 
@@ -346,7 +350,11 @@ def main():
             num_iter, num_trials, onestep = 10, 5, True
         else:
             raise ValueError("Not a valid option for fast: %s" % str(fast))
+        options["max-iterations"] = num_iter
+        options["max-trials"] = num_trials
+        options["onestep"] = onestep
 
+        # Read in additional model options from a file
         optfile = options.pop("optfile", None)
         if optfile:
             for line in open(optfile):
@@ -359,7 +367,7 @@ def main():
                         options[key] = keyval[1].strip()
 
         # Run BASIL processing, passing options as keyword arguments using **
-        steps = get_steps(num_iter=num_iter, num_trials=num_trials, onestep=onestep, **options)
+        steps = get_steps(**options)
         run_steps(wsp, steps)
         
     except ValueError as e:
