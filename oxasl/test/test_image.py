@@ -67,9 +67,9 @@ def test_create_data_multiphase():
     assert img.ntc == 8
     assert img.order == "mrt"
 
-def test_create_data_multiphase_nph():
+def test_create_data_multiphase_nphases():
     d = np.random.rand(5, 5, 5, 8)
-    img = AslImage("asldata", data=d, tis=[1.5], order='mrt', nph=8)
+    img = AslImage("asldata", data=d, tis=[1.5], order='mrt', nphases=8)
     assert img.ntis == 1
     assert img.tis == [1.5]
     assert not img.have_plds
