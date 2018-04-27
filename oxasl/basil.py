@@ -31,7 +31,7 @@ def _do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sy
     :param step: Step number
     :param step_desc: Description of step
     :param infile: Input data as fsl.Image
-    :param mask: Mask as fsl.Image
+    :param mask: Optional mask as fsl.Image (or None)
     :param options: Dictionary of Fabber options, not including the ``--`` command line prefix
     :param prev_step: Optional number of previous step to initialize from
     :param log: File stream for log output
@@ -49,7 +49,7 @@ def run_steps(wsp, steps, log=sys.stdout):
         _do_step(wsp, *step, log=sys.stdout)
     log.write("End\n")
 
-def get_steps(asldata, mask, 
+def get_steps(asldata, mask=None, 
               infertau=False, inferart=False, infert1=False, inferpc=False,
               artonly=False, fixbat=False, spatial=False, onestep=False,
               t1im=None, pgm=None, pwm=None,
@@ -78,8 +78,6 @@ def get_steps(asldata, mask,
     """
     if not asldata:
         raise ValueError("basil: input ASL data is None")
-    if not mask:
-        raise ValueError("basil: input mask is None")
 
     log.write("BASIL v%s\n" % __version__)
     #log.write("Working directory: %s\n" % wsp.workdir)
@@ -94,7 +92,7 @@ def get_steps(asldata, mask,
         "model" : "aslrest",
         "method" : "vb",
         "noise" : "white",
-        "allow-bad-voxels" : "",
+        "allow-bad-voxels" : True,
         "max-iterations" : 20,
         "convergence" : "trialmode",
         "max-trials" : 10,
@@ -139,20 +137,20 @@ def get_steps(asldata, mask,
 
     # Set general parameter inference and inclusion
     if infertiss:
-        options["inctiss"] = ""
+        options["inctiss"] = True
     if not fixbat:
-        options["incbat"] = ""
-        options["inferbat"] = ""
+        options["incbat"] = True
+        options["inferbat"] = True
     if inferart:
-        options["incart"] = ""
+        options["incart"] = True
     if inferpc:
-        options["incpc"] = ""
+        options["incpc"] = True
     if infertau:
-        options["inctau"] = ""
+        options["inctau"] = True
     if infert1:
-        options["inct1"] = ""
+        options["inct1"] = True
     if pvcorr:
-        options["incpve"] = ""
+        options["incpve"] = True
 
     # Keep track of the number of spatial priors specified by name
     spriors = 1 
@@ -176,7 +174,7 @@ def get_steps(asldata, mask,
     ### --- TISSUE MODULE ---
     if infertiss:
         step_params += " Tissue "
-        options["infertiss"] = ""
+        options["infertiss"] = True
         step_desc = "STEP %i: VB - %s" % (step, step_params)
         if not onestep:
             step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
@@ -187,7 +185,7 @@ def get_steps(asldata, mask,
     ### --- ARTERIAL MODULE ---
     if inferart:
         step_params += " Arterial "
-        options["inferart"] = ""
+        options["inferart"] = True
         step_desc = "STEP %i: VB - %s" % (step, step_params)
         if not onestep:
             step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
@@ -198,7 +196,7 @@ def get_steps(asldata, mask,
     ### --- BOLUS DURATION MODULE ---
     if infertau:
         step_params += " Bolus duration "
-        options["infertau"] = ""
+        options["infertau"] = True
         step_desc = "STEP %i: VB - %s" % (step, step_params)
         if not onestep:
             step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
@@ -208,13 +206,13 @@ def get_steps(asldata, mask,
     if inferdisp or inferexch or inferpc:
         if inferdisp:
             step_params += " dispersion"
-            options["inferdisp"] = ""
+            options["inferdisp"] = True
         if inferexch:
             step_params += " exchange"
-            options["inferexch"] = ""
+            options["inferexch"] = True
         if inferpc:
             step_params += " pre-capiliary"
-            options["inferpc"] = ""
+            options["inferpc"] = True
 
         step_desc = "STEP %i: VB - %s" % (step, step_params)	
         if not onestep:
@@ -223,7 +221,7 @@ def get_steps(asldata, mask,
     ### --- T1 MODULE ---
     if infert1:
         step_params += " T1 "
-        options["infert1"] = ""
+        options["infert1"] = True
         step_desc = "STEP %i: VB - %s" % (step, step_params)
         if not onestep:
             step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
@@ -232,7 +230,7 @@ def get_steps(asldata, mask,
     if pvcorr:
         # setup ready for PV correction, which has to be done with spatial priors
         step_params += " PVE"
-        options["pvcorr"] = ""
+        options["pvcorr"] = True
 
         # set the image priors for the PV maps
         spriors = _add_prior(options, spriors, "pvgm", type="I", image=pgm.fname)

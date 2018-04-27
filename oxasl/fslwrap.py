@@ -416,13 +416,16 @@ class Workspace(object):
         :param mask: Mask image
         :return: MVN output image
         """
-        img, itype = self._input_img(img)
-        mask, _ = self._input_img(mask)
-        output_name, extra_args = self._get_std(img, "_fabber", kwargs)
-
         options = dict(options)
+
+        img, itype = self._input_img(img)
+        output_name, extra_args = self._get_std(img, "_fabber", kwargs)
         options["data"] = img.ipath
-        options["mask"] = mask.ipath
+
+        if mask:
+            mask, _ = self._input_img(mask)
+            options["mask"] = mask.ipath
+            
         options["output"] = output_name
         options["save-mvn"] = ""
         if overwrite:
