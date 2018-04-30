@@ -171,23 +171,27 @@ def test_reorder_prt_ptr():
     for znew, zold in enumerate([0, 1, 4, 5, 2, 3, 6, 7]):
         assert np.all(data[..., znew] == zold)
 
-@pytest.mark.xfail
 def test_reorder_prt_ptr_var_rpts():
-    """ This reordering with variable repeates is not supported yet"""
+    """ 
+    This reordering with variable repeats is not supported. In priciple
+    it is possible (TI1_R1, TI2_R1, TI2_R2, TI2_R3) but this seems unlikely
+    and is probably more likely an error
+    """
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
     img = AslImage("asldata", data=d, tis=[1, 2], rpts = [1, 3], order='prt')
-    img = img.reorder("ptr")
-    assert img.ntis == 2
-    assert img.tis == [1, 2]
-    assert not img.have_plds
-    assert img.rpts == [1, 3]
-    assert img.ntc == 2
-    assert img.order == "ptr"
-    data = img.data()
-    assert list(data.shape) == [5, 5, 5, 8] 
-    for znew, zold in enumerate([0, 1, 2, 3, 4, 5, 6, 7]):
-        assert np.all(data[..., znew] == zold)
+    with pytest.raises(Exception):
+         img.reorder("ptr")
+    #assert img.ntis == 2
+    #assert img.tis == [1, 2]
+    #assert not img.have_plds
+    #assert img.rpts == [1, 3]
+    #assert img.ntc == 2
+    #assert img.order == "ptr"
+    #data = img.data()
+    #assert list(data.shape) == [5, 5, 5, 8] 
+    #for znew, zold in enumerate([0, 1, 2, 3, 4, 5, 6, 7]):
+    #    assert np.all(data[..., znew] == zold)
 
 def test_reorder_prt_rpt():
     d = np.zeros([5, 5, 5, 8])
