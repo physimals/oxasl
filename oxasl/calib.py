@@ -131,7 +131,7 @@ def add_calib_options(parser, ignore=()):
     # echo "               {default: calibration image - only in longtr mode}"
     # echo ""
 
-def calib(perf_data, calib_data, output_name, method, multiplier=1.0, var=False, log=sys.stdout, **kwargs):
+def calib(perf_data, calib_data, method, output_name=None, multiplier=1.0, var=False, log=sys.stdout, **kwargs):
     """
     Do calibration
 
@@ -143,10 +143,15 @@ def calib(perf_data, calib_data, output_name, method, multiplier=1.0, var=False,
 
     Additional parameters are required for each method.
     """
+    if not perf_data:
+        raise ValueError("Perfusion data cannot be None")
+    if not calib_data:
+        raise ValueError("Calibration data cannot be None")
+
     if method == "voxelwise":
         m0 = get_m0_voxelwise(calib_data, log=log, **kwargs)
     elif method == "refregion":
-        m0 = ge_m0_refregion(calib_data, log=log, **kwargs)
+        m0 = get_m0_refregion(calib_data, log=log, **kwargs)
     else:
         raise ValueError("Unknown calibration method: %s" % method)
 
@@ -159,6 +164,9 @@ def calib(perf_data, calib_data, output_name, method, multiplier=1.0, var=False,
     calibrated = perf_data.data() / m0 
     calibrated *= multiplier
     log.write("Mean value after calibration: %f\n" % np.mean(calibrated))
+
+    if output_name is None:
+        output_name = perf_data.iname + "_calib"
     return perf_data.derived(calibrated, name=output_name)
 
 def get_m0_voxelwise(calib_data, gain=1.0, alpha=1.0, tr=None, t1t=None, part_coeff=0.9, mask=None, edgecorr=False, log=sys.stdout):
