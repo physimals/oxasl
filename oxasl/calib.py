@@ -13,8 +13,9 @@ import traceback
 from optparse import OptionParser
 
 import numpy as np
+import scipy.ndimage
 
-from . import __version__, AslOptionGroup, fsl
+from . import __version__, AslOptionGroup, fslwrap as fsl
 
 def main():
     usage = """ASL_CALIB
@@ -45,7 +46,6 @@ def main():
         output_name = options.pop("output", None)
         if output_name is None:
             output_name = "%s_calib" % perf_img.iname
-        print(output_name)
 
         calibrated_img = calib(perf_img, calib_img, output_name, **options)
         calibrated_img.summary()
@@ -64,6 +64,17 @@ def add_calib_options(parser, ignore=()):
     g.add_option("-o", dest="output", help="Output filename for calibrated image (defaut=<input_filename>_calib")
     g.add_option("--method", dest="method", help="Calibration method: voxelwise or refregion")
     g.add_option("--debug", dest="debug", action="store_true", default=False, help="Debug mode")
+    parser.add_option_group(g)
+
+    g = AslOptionGroup(parser, "Voxelwise calibration", ignore=ignore)
+    g.add_option("--pc", dest="part_coeff", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
+    g.add_option("--alpha", help="Inversion efficiency", type=float, default=1.0)
+    g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
+    g.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
+    g.add_option("--t1t", help="T1 of tissue (s)", type=float, default=1.3)
+    parser.add_option_group(g)
+
+    g = AslOptionGroup(parser, "Reference region calibration", ignore=ignore)
     #g.add_option("-s", dest="struc", help="Structural image")
     #g.add_option("-t", dest="trans", help="ASL->Structural transformation matrix")
     #g.add_option("--mode", dest="mode", help="Calibration mode (longtr or satrevoc)", default="longtr")
@@ -71,9 +82,7 @@ def add_calib_options(parser, ignore=()):
     #g.add_option("--te", dest="te", help="Sequence TE", type=float, default=0.0)
     #g.add_option("--Mo", dest="mo", help="Save calculated M0 value to specified file")
     #g.add_option("--om", dest="om", help="Save CSF mask to specified file")
-
-    parser.add_option_group(g)
-
+    
     # echo ""
     # echo " Extended options (all optional):"
     # echo " -m         : Specify reference mask in calibration image space"
@@ -124,14 +133,15 @@ def add_calib_options(parser, ignore=()):
 
 def calib(perf_data, calib_data, output_name, method, multiplier=1.0, var=False, log=sys.stdout, **kwargs):
     """
-    Do voxelwise calibration
-
-    FIXME edge correction not applied
+    Do calibration
 
     :param data: fsl.Image containing data to calibrate
-    :param m0: fsl.Image containing voxelwise m0 map
-    :param alpha: Inversion efficiency
+    :param calib_data: fsl.Image containing voxelwise m0 map
+    :param method: ``voxelwise`` or ``refregion``
+    :param multiplier: Multiplication factor to turn result into desired units
     :param var: If True, assume data represents variance rather than value
+
+    Additional parameters are required for each method.
     """
     if method == "voxelwise":
         m0 = get_m0_voxelwise(calib_data, log=log, **kwargs)
@@ -145,12 +155,13 @@ def calib(perf_data, calib_data, output_name, method, multiplier=1.0, var=False,
         multiplier = multiplier**2
 
     m0[m0 == 0] = 1
-
+    log.write("Mean value before calibration: %f\n" % np.mean(perf_data.data()))
     calibrated = perf_data.data() / m0 
     calibrated *= multiplier
+    log.write("Mean value after calibration: %f\n" % np.mean(calibrated))
     return perf_data.derived(calibrated, name=output_name)
 
-def get_m0_voxelwise(calib_data, gain=1.0, alpha=1.0, tr=None, t1=None, log=sys.stdout):
+def get_m0_voxelwise(calib_data, gain=1.0, alpha=1.0, tr=None, t1t=None, part_coeff=0.9, mask=None, edgecorr=False, log=sys.stdout):
     """
     Calculate M0 value using voxelwise calibration
 
@@ -167,27 +178,71 @@ def get_m0_voxelwise(calib_data, gain=1.0, alpha=1.0, tr=None, t1=None, log=sys.
     m0 = calib_data.data() * alpha * gain
 
     if tr is not None and tr < 5:
-        if t1 is not None:
+        if t1t is not None:
     	    # correct the M0 image for short TR using the equation from the white paper
-            log.write("Correcting the calibration (M0) image for short TR (using T1 of tissue %f)\n" % t1)
-            ccorr = 1 / (1 - math.exp(-tr / t1))
+            log.write("Correcting the calibration (M0) image for short TR (using T1 of tissue %f)\n" % t1t)
+            ccorr = 1 / (1 - math.exp(-tr / t1t))
             m0 *= ccorr
         else:
             log.write("WARNING: tr < 5 (%f) but reference tissue T1 not provided so cannot apply correction\n" % tr)
 
 	# Include partiition co-effcient in M0 image to convert from M0 tissue to M0 arterial
-    m0 /= 0.9
+    m0 /= part_coeff
 
-	#if edgecorr:
-	    # Correct for (partial volume) edge effects
-	    # median smoothing and erosion
-	    #fslmaths $Mo -fmedian -mas $tempdir/mask -ero $tempdir/calib_ero
-	    # extrapolation to match mask
-	    #asl_file --data=$tempdir/calib_ero --ntis=1 --mask=$tempdir/mask --extrapolate --neighbour=5 --out=$Mo
-
+    if edgecorr:
+        m0 = edge_correct(m0, mask, log=log)
+        
     return m0
 
-def ge_m0_refregion(calib_data, ref_mask, log=sys.stdout, **kwargs):
+def edge_correct(m0, mask, log=sys.stdout):
+    """
+    Correct for (partial volume) edge effects
+    """
+    log.write("Doing edge correction")
+
+    if mask is None:
+        mask = np.ones(m0.shape)
+    else:
+        mask = mask.data()
+
+    # Median smoothing
+    #fslmaths $Mo -fmedian -mas $tempdir/mask -ero $tempdir/calib_ero
+    m0 = scipy.ndimage.median_filter(m0, size=3)
+
+    # Erode mask using 3x3x3 structuring element
+    mask_ero = scipy.ndimage.morphology.binary_erosion(mask, structure=np.ones([3, 3, 3]), border_value=1)
+    m0[mask_ero == 0] = 0
+
+    # Extrapolate remaining data to fit original mask
+    # ASL_FILE works slicewise using a mean 5x5 filter on nonzero values, so we will do the same
+    for z in range(m0.shape[2]):
+        zslice = m0[..., z]
+        zslice_extrap = scipy.ndimage.filters.generic_filter(zslice, _masked_mean, footprint=np.ones([5, 5]))
+        m0[..., z] = zslice_extrap
+    m0[mask == 0] = 0
+    
+    return m0
+
+def _masked_mean(vals):
+    """
+    Called by scipy.ndimage.filters.generic_filter
+
+    :param vals: Values in the kernel (a 5x5 square patch centered on the voxel in this case)
+
+    For nonzero voxels, returns the voxel value (i.e. the middle element of vals).
+    For zero voxels, returns the mean of non zero voxels in the kernel
+    """
+    voxel_val = vals[int((len(vals)-1) / 2)]
+    if voxel_val == 0:
+        nonzero = vals[vals != 0]
+        if len(nonzero) > 0:
+            return np.mean(nonzero)
+        else:
+            return 0
+    else:
+        return voxel_val
+
+def get_m0_refregion(calib_data, ref_mask, log=sys.stdout, **kwargs):
     """
     Do reference region calibration
 
@@ -195,7 +250,9 @@ def ge_m0_refregion(calib_data, ref_mask, log=sys.stdout, **kwargs):
 
     :param calib_data: Calibration image
     :param ref_mask: Reference region mask image
-    """
+    """        
+    raise NotImplementedError("Reference region calibration is not yet implemented")
+
     log.write("Doing reference region calibration\n")
     
     mode = kwargs.get("mode", "longtr")
