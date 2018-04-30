@@ -29,20 +29,48 @@ def _do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sy
 
     :param wsp: FSL workspace
     :param step: Step number
-    :param step_desc: Description of step
+    :param step_desc: Description of step. The special value "PVC" indicates partial volume
+                      correction preprocessing step
     :param infile: Input data as fsl.Image
     :param mask: Optional mask as fsl.Image (or None)
     :param options: Dictionary of Fabber options, not including the ``--`` command line prefix
     :param prev_step: Optional number of previous step to initialize from
     :param log: File stream for log output
     """
-    if prev_step is not None:
-        step_desc += " - init with STEP %i" % prev_step
-        options["continue-from-mvn"] = "step%i/finalMVN" % prev_step
+    if prev_step == "PVC":
+        _do_pvc_init(wsp, mask, prev_step, options)
+    else:
+        if prev_step is not None:
+            step_desc += " - init with STEP %i" % prev_step
+            options["continue-from-mvn"] = "step%i/finalMVN" % prev_step
 
-    log.write("\n%s\n" % step_desc)
-    wsp.fabber("asl", infile, mask, options, output_name="step%i" % step)
-    #return step+1, step
+        log.write("\n%s\n" % step_desc)
+        wsp.fabber("asl", infile, mask, options, output_name="step%i" % step)
+
+def _do_pvc_init(wsp, mask, prev_step, options):
+    # set the inital GM amd WM values using a simple PV correction
+    wm_cbf_ratio = 0.4
+
+    # Modified pvgm map
+    #fsl.maths(pgm, " -sub 0.2 -thr 0 -add 0.2 temp_pgm")
+    temp_pgm = options["pgm"].data()
+    temp_pgm[temp_pgm < 0.2] = 0.2
+
+    # First part of correction psuedo WM CBF term
+    #fsl.run("mvntool", "--input=temp --output=temp_ftiss --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --val" % (mask.iname, prev_step))
+    #fsl.maths("temp_ftiss", "-mul %f -mul %s wmcbfterm" % (wm_cbf_ratio, pwm.iname))
+    prev_ftiss = fsl.Image("step%i/mean_ftiss" % prev_step).data()
+    wm_cbf_term = (prev_ftiss * wm_cbf_ratio) * options["pwm"].data()
+
+    #fsl.maths("temp_ftiss", "-sub wmcbfterm -div temp_pgm gmcbf_init")
+    #fsl.maths("gmcbf_init -mul %f wmcbf_init" % wm_cbf_ratio)
+    gmcbf_init = (prev_ftiss - wm_cbf_term) / temp_pgm
+    wmcbf_init = gmcbf_init * wm_cbf_ratio
+
+    # load these into the MVN, GM cbf is always param 1
+    mvnfile = "step%i/finalMVN" % prev_step
+    fsl.run("mvntool", "--input=%s --output=%s --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --write --valim=gmcbf_init --var=0.1" % (mask.iname, mvnfile, mvnfile, prev_step))
+    fsl.run("mvntool", "--input=%s --output=%s --mask=%s --param=fwm --param-list=step%i/paramnames.txt --write --valim=wmcbf_init --var=0.1" % (mask.iname, mvnfile, mvnfile, prev_step))
 
 def run_steps(wsp, steps, log=sys.stdout):
     for step in steps:
@@ -50,8 +78,9 @@ def run_steps(wsp, steps, log=sys.stdout):
     log.write("End\n")
 
 def get_steps(asldata, mask=None, 
+              infertiss=True, inferbat=True, 
               infertau=False, inferart=False, infert1=False, inferpc=False,
-              artonly=False, fixbat=False, spatial=False, onestep=False,
+              spatial=False, onestep=False,
               t1im=None, pgm=None, pwm=None,
               initmvn=None,
               log=sys.stdout, **kwargs):
@@ -61,12 +90,12 @@ def get_steps(asldata, mask=None,
     :param wsp: FSL workspace for output files
     :param asldata: ASL data (can be AslImage or fslwrap.Image)
     :param mask: Brain mask (fslwrap.Image)
+    :param infertiss: If True, infer tissue component
+    :param inferbat: If True, infer bolus arrival time
     :param infertau: If True, infer bolus duration
     :param inferart: If True, infer arterial component
     :param infert1: If True, infer T1 
     :param inferpc: If True, infer PC 
-    :param artonly: If True, use only arterial component
-    :param fixbat: If True, do not infer bolus arrival time
     :param spatial: If True, include final spatial VB step
     :param onestep: If True, do all inference in a single step
     :param t1im: T1 map as fsl.Image
@@ -122,25 +151,21 @@ def get_steps(asldata, mask=None,
     # Partial volume correction
     pvcorr = pgm or pwm
     if pvcorr:
+        if pgm is None or pwm is None:
+            raise ValueError("Only one partial volume map (GM / WM) was supplied for PV correctioN")
         # Need a spatial step with more iterations for the PV correction
         spatial = True
         options_svb["max-iterations"] = 200
-        pgm = fsl.Image(pgm, role="Grey matter PV map")
-        pwm = fsl.Image(pwm, role="White matter PV map")
         
-    if not artonly:
-        infertiss = True 
-    else:
-        inferart = True 
-        if pvcorr:
-            raise ValueError("ERROR: PV correction is not compatible with --artonly option (there is no tissue component)")
+    if pvcorr and not infertiss:
+        raise ValueError("ERROR: PV correction is not compatible with --artonly option (there is no tissue component)")
 
     # Set general parameter inference and inclusion
     if infertiss:
         options["inctiss"] = True
-    if not fixbat:
+    if inferbat:
         options["incbat"] = True
-        options["inferbat"] = True
+        options["inferbat"] = True # Infer in first step
     if inferart:
         options["incart"] = True
     if inferpc:
@@ -157,14 +182,12 @@ def get_steps(asldata, mask=None,
 
     if initmvn:
         # we are being supplied with an initial MVN
-        mvn = fsl.Image(initmvn, role="Initial MVN")
-        log.write("Initial MVN being loaded %s" % mvn.ipath)
-        options["continue-from-mvn"] = mvn.ipath
+        log.write("Initial MVN being loaded %s" % initmvn.iname)
+        options["continue-from-mvn"] = initmvn.iname
     
     # T1 image prior
     if t1im:
-        t1 = fsl.Image(t1im, role="T1 image")
-        spriors = _add_prior(options, spriors, "T_1", type="I", image=t1.ipath)
+        spriors = _add_prior(options, spriors, "T_1", type="I", image=t1im.iname)
 
     step = 1
     steps = []
@@ -233,27 +256,14 @@ def get_steps(asldata, mask=None,
         options["pvcorr"] = True
 
         # set the image priors for the PV maps
-        spriors = _add_prior(options, spriors, "pvgm", type="I", image=pgm.fname)
-        spriors = _add_prior(options, spriors, "pvwm", type="I", image=pwm.fname)
+        spriors = _add_prior(options, spriors, "pvgm", type="I", image=pgm.iname)
+        spriors = _add_prior(options, spriors, "pvwm", type="I", image=pwm.iname)
         spriors = _add_prior(options, spriors, "fwm", type="M")
 
         if prev_step:
-            # initialisaiton for PV correction - ONLY if we have something to init from (either step greater than 1 or initmvn set)
-            # This could mostly be replaced by Numpy operations + mvntool
-            # set the inital GM amd WM values using a simple PV correctio
-            wmcbfratio = 0.4
-            # modified pvgm map
-            fsl.maths(pgm, " -sub 0.2 -thr 0 -add 0.2 temp_pgm")
-            # first part of correction psuedo WM CBF term
-            # extract the initial ftiss image
-            fsl.run("mvntool", "--input=temp --output=temp_ftiss --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --val" % (mask.iname, prev_step))
-            fsl.maths("temp_ftiss", "-mul %f -mul %s wmcbfterm" % (wmcbfratio, pwm.iname))
-            # the rest
-            fsl.maths("temp_ftiss", "-sub wmcbfterm -div temp_pgm gmcbf_init")
-            fsl.maths("gmcbf_init -mul %f wmcbf_init" % wmcbfratio)
-            # load these into the MVN, GM cbf is always param 1
-            fsl.run("mvntool", "--input=temp --output=temp --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --write --valim=gmcbf_init --var=0.1" % (mask.iname, prev_step))
-            fsl.run("mvntool", "--input=temp --output=temp --mask=%s --param=fwm --param-list=step%i/paramnames.txt --write --valim=wmcbf_init --var=0.1" % (mask.iname, prev_step))
+            # Add initialisaiton step for PV correction - ONLY if we have something to init from 
+            # (either step greater than 1 or initmvn set)
+            step, prev_step = _add_step(steps, step, "PVC", asldata, mask, {"pgm" : pgm.iname, "pwm" : pwm.iname}, prev_step)
 
     ### --- SPATIAL MODULE ---
     if spatial:
@@ -267,6 +277,9 @@ def get_steps(asldata, mask=None,
     ### --- SINGLE-STEP OPTION ---
     if onestep:
         step, prev_step = _add_step(steps, step, step_desc, asldata, mask, options, prev_step)
+        
+    if not steps:
+        raise ValueError("No steps were generated - no parameters were set to be inferred")
         
     return steps
 
@@ -291,6 +304,8 @@ def main():
         g.add_option("--inferart", dest="inferart", help="Infer macro vascular (arterial) signal component", action="store_true", default=False)
         g.add_option("--inferpc", dest="inferpc", help="Infer pre-capillary signal component", action="store_true", default=False)
         g.add_option("--infert1", dest="infert1", help="Include uncertainty in T1 values", action="store_true", default=False)
+        g.add_option("--artonly", dest="artonly", help="Remove tissue component and infer only arterial component", action="store_true", default=False)
+        g.add_option("--fixbat", dest="fixbat", help="Fix bolus duration", action="store_true", default=False)
         g.add_option("--spatial", dest="spatial", help="Add step that implements adaptive spatial smoothing on CBF", action="store_true", default=False)
         g.add_option("--fast", dest="fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
         p.add_option_group(g)
@@ -311,6 +326,9 @@ def main():
         # and turn into keyword arguments to the basil function
         options = vars(options)
 
+        # Create workspace which is the equivalent of the output directory
+        wsp = fsl.Workspace(options["output"], echo=True, debug=options.pop("debug", False))
+
         # Names and descriptions of options which are images
         images = {
             "mask" : "Brain mask", 
@@ -319,19 +337,26 @@ def main():
             "pgm" : "Grey matter PV map",
         }
 
-        # Convert image options into fsl.Image objects - this 
-        # checks they exist and can be loaded
+        # Convert image options into fsl.Image objects and copy into workspace - this 
+        # also checks they exist and can be loaded
         options["asldata"] = AslImage(options["asldata"], role="Input", **options).diff().reorder("rt")
         for opt, role in images.items():
             if options[opt]:
                 options[opt] = fsl.Image(options[opt], role=role)
+                wsp.add_img(options[opt])
 
         # Remove options consumed by AslImage
         for opt in ["order", "ntis", "tis", "nplds", "plds", "nrpts", "rpts", "nphases", "phases"]:
             options.pop(opt, None)
             
-        # Create workspace which is the equivalent of the output directory
-        wsp = fsl.Workspace(options["output"], echo=True, debug=options.pop("debug", False))
+        # Deal with --artonly
+        artonly = options.pop("artonly")
+        if artonly:
+            options["infertiss"] = False
+            options["inferart"] = True
+
+        # Deal with --fixbat
+        options["inferbat"] = not options.pop("fixbat", False)
 
         # Save input image and mask into output dir - not strictly necessary
         # but may be useful to the user since output is then more self-contained
