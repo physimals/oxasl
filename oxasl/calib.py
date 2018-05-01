@@ -21,7 +21,8 @@ def main():
     usage = """ASL_CALIB
     Calibration for ASL data
 
-    asl_pycalib -i <perfusion image> -c <calibration image> --method <voxelwise|refregion> -o <output filename> [options]"""
+    asl_pycalib -i <perfusion image> -c <calibration image> --method <voxelwise|refregion> -o <output filename> [options]
+    """
 
     debug = False
     try:
@@ -37,17 +38,17 @@ def main():
         perf_img.summary()
         calib_img = fsl.Image(options.pop("calib", None), "Calibration")
         calib_img.summary()
-        mask = options.pop("mask", None)
-        if mask is not None:
-            mask_img = fsl.Image(mask, "Mask")
+        brain_mask = options.pop("brain_mask", None)
+        if brain_mask is not None:
+            brain_mask_img = fsl.Image(brain_mask, "Mask")
         else:
-            mask_img = fsl.Image("mask", role="Mask", data=np.ones(perf_img.shape))
+            brain_mask_img = fsl.Image("brain_mask", role="Mask", data=np.ones(perf_img.shape))
             
         output_name = options.pop("output", None)
         if output_name is None:
             output_name = "%s_calib" % perf_img.iname
 
-        calibrated_img = calib(perf_img, calib_img, output_name, **options)
+        calibrated_img = calib(perf_img, calib_img, output_name, brain_mask=brain_mask_img, **options)
         calibrated_img.summary()
         calibrated_img.save()
     except Exception as e:
@@ -59,99 +60,89 @@ def main():
 def add_calib_options(parser, ignore=()):
     g = AslOptionGroup(parser, "Calibration", ignore=ignore)
     g.add_option("-c", dest="calib", help="Calibration image")
-    g.add_option("-i", dest="perf", help="Perfusion image for calibration")
-    g.add_option("-m", dest="mask", help="Mask in perfusion/calibration image space")
+    g.add_option("-i", dest="perf", help="Perfusion image for calibration, in same image space as calibration image")
+    g.add_option("-m", "--brain-mask", dest="brain_mask", help="brain mask in perfusion/calibration image space")
     g.add_option("-o", dest="output", help="Output filename for calibrated image (defaut=<input_filename>_calib")
     g.add_option("--method", dest="method", help="Calibration method: voxelwise or refregion")
+    g.add_option("--alpha", help="Inversion efficiency", type=float, default=1.0)
     g.add_option("--debug", dest="debug", action="store_true", default=False, help="Debug mode")
     parser.add_option_group(g)
 
     g = AslOptionGroup(parser, "Voxelwise calibration", ignore=ignore)
     g.add_option("--pc", dest="part_coeff", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
-    g.add_option("--alpha", help="Inversion efficiency", type=float, default=1.0)
-    g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
     g.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
+    g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
     g.add_option("--t1t", help="T1 of tissue (s)", type=float, default=1.3)
     parser.add_option_group(g)
 
     g = AslOptionGroup(parser, "Reference region calibration", ignore=ignore)
-    #g.add_option("-s", dest="struc", help="Structural image")
-    #g.add_option("-t", dest="trans", help="ASL->Structural transformation matrix")
-    #g.add_option("--mode", dest="mode", help="Calibration mode (longtr or satrevoc)", default="longtr")
-    #g.add_option("--tissref", dest="tissref", help="Tissue reference type (csf, wm, gm or none)", default="csf")
-    #g.add_option("--te", dest="te", help="Sequence TE", type=float, default=0.0)
+    g.add_option("--mode", help="Calibration mode (longtr or satrevoc)", default="longtr")
+    g.add_option("--tissref", help="Tissue reference type (csf, wm, gm or none)", default="csf")
+    g.add_option("--te", help="Sequence TE", type=float, default=0.0)
+    g.add_option("--t1r", help="T1 of reference tissue (defaults: csf 4.3, gm 1.3, wm 1.0 s)", type=float, default=None)
+    g.add_option("--t2r", help="T2 of reference tissue (defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50  ms)", type=float, default=None)
+    g.add_option("--t2b", help="T2(*) of blood (default T2/T2*: 150/50 ms)", type=float, default=None)
+    g.add_option("--refmask", dest="ref_mask", help="Reference tissue mask in perfusion/calibration image space")
+    g.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
+    g.add_option("--pc", dest="part_coeff", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
     #g.add_option("--Mo", dest="mo", help="Save calculated M0 value to specified file")
     #g.add_option("--om", dest="om", help="Save CSF mask to specified file")
+    parser.add_option_group(g)
     
-    # echo ""
-    # echo " Extended options (all optional):"
-    # echo " -m         : Specify reference mask in calibration image space"
-    # echo "              - strucutral image & transformation matrix are not required"
-    # echo " --bmask    : Brain mask (in ASL data space) for sensitivity or tissue T1 estimation"
-    # echo " --t2star   : Correct with T2* rather than T2"
-    # echo "               (this alters the default values specified below to the T2* values)"
-    # echo " --t1r      : T1 of reference tissue (defaults: csf 4.3, gm 1.3, wm 1.0 s) "
-    # echo " --t2r      : T2(*) of reference tissue (defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50  ms)"
-    # echo " --t2b      : T2(*) of blood (default T2/T2*: 150/50 ms)"
-    # echo " --pc       : Partition co-efficient (defaults csf 1.15, gm 0.98,  wm 0.82)"
-    # echo " --alpha    : Specify inversion efficiency - only applied to final CBF image calculation"
-    # echo ""
+    g = AslOptionGroup(parser, "longtr mode (calibration image is a control image with a long TR)", ignore=ignore)
+    g.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
+    g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
+    parser.add_option_group(g)
+
+    g = AslOptionGroup(parser, "satrecov mode (calibration image is a sequnce of control images at various TIs)", ignore=ignore)
+    g.add_option("--tis", help="Comma separated list of inversion times, e.g. --tis 0.2,0.4,0.6")
+    g.add_option("--fa", help="Flip angle (in degrees) for Look-Locker readouts", type=float)
+    g.add_option("--lfa", help="Lower flip angle (in degrees) for dual FA calibration", type=float)
+    g.add_option("--nphases", help="Number of phases (repetitions) of higher FA", type=int)
+    g.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
+    parser.add_option_group(g)
+
+    g = AslOptionGroup(parser, "Coil sensitivity correction, either using existing sensitivity image or reference images collected using same parameters", ignore=ignore)
+    g.add_option("--isen", help="Input coil sensitivity image")
+    g.add_option("--cref", help="Reference image from coil with minimal variation e.g. body.")
+    g.add_option("--cact", help="Image from coil used for actual ASL acquisition (default: calibration image - only in longtr mode)")
+    parser.add_option_group(g)
+
     # echo " CSF masking options (only for --tissref csf)"
     # echo "  By default asl_calib extracts CSF from the structural image by segmentation and"
     # echo "  this is then masked using the ventricles in MNI152 space."
+    #g.add_option("-s", dest="struc", help="Structural image")
+    #g.add_option("-t", dest="trans", help="ASL->Structural transformation matrix")
     # echo " --csfmaskingoff : turns off the ventricle masking, reference is based on segmentation only."
     # echo "  Registration between structural image and MNI152 is done automatically unless:"
     # echo "  --str2std  : Structural to MNI152 linear registration (.mat)"
     # echo "  --warp     : Structural to MNI152 non-linear registration (warp)"
     # echo ""
-    # echo "MODES:"
-    # echo "> longtr  Calibration image is a control image with a long TR."
-    # echo "  {--tr}     : TR used in calibration sequence - {default: 3.2s}"
-    # echo "  {--cgain}  : Relative gain between calibration and ASL data - {default: 1}"
-    # echo ""
-    # echo "> satrecov  Calibration image is a sequnce of control images at various TIs"
     # echo "            M0 is to be determined from a saturation recovery"
     # echo "            T1 of tissue (and FA correction) images are also calcualted"
-    # echo " --tis       : comma separated list of inversion times, e.g. --tis 0.2,0.4,0.6"
-    # echo " {--fa}      : Flip angle (in degrees) for Look-Locker readouts"
     # echo "   >> Look-Locker flip angle correction - to perform this provide:"
-    # echo " {--lfa}     : Lower flip angle (in degrees) for dual FA calibration"
-    # echo " {--nphases} : Number of phases (repetitions) of higher FA"
-    # echo " {--fixa}    : Fix the saturation efficiency to 100% (useful if you have a low number of samples)"
-    # echo ""
-    # echo "Coil sensitivity correction:"
-    # echo " Calculate and apply a voxel-wise correction for coil sensitivity"
-    # echo " > using bias field from structural image (default)"
-    # echo " {--osen}    : save sensitivity image to specified file."
-    # echo " > using existing sensitivity image:"
-    # echo "  --isen     : input coil sensitivity image"
-    # echo " > using reference images (collected using same parameters):"
-    # echo "  --cref     : Reference image from coil with minimal variation e.g. body."
-    # echo "  {--cact}   : Image from coil used for actual ASL acquisition"
-    # echo "               {default: calibration image - only in longtr mode}"
-    # echo ""
 
-def calib(perf_data, calib_data, method, output_name=None, multiplier=1.0, var=False, log=sys.stdout, **kwargs):
+def calib(perf_img, calib_img, method, output_name=None, multiplier=1.0, var=False, log=sys.stdout, **kwargs):
     """
     Do calibration
 
     :param data: fsl.Image containing data to calibrate
-    :param calib_data: fsl.Image containing voxelwise m0 map
+    :param calib_img: fsl.Image containing voxelwise m0 map
     :param method: ``voxelwise`` or ``refregion``
     :param multiplier: Multiplication factor to turn result into desired units
     :param var: If True, assume data represents variance rather than value
 
     Additional parameters are required for each method.
     """
-    if not perf_data:
+    if not perf_img:
         raise ValueError("Perfusion data cannot be None")
-    if not calib_data:
+    if not calib_img:
         raise ValueError("Calibration data cannot be None")
 
     if method == "voxelwise":
-        m0 = get_m0_voxelwise(calib_data, log=log, **kwargs)
+        m0 = get_m0_voxelwise(calib_img, log=log, **kwargs)
     elif method == "refregion":
-        m0 = get_m0_refregion(calib_data, log=log, **kwargs)
+        m0 = get_m0_refregion(calib_img, log=log, **kwargs)
     else:
         raise ValueError("Unknown calibration method: %s" % method)
 
@@ -159,66 +150,65 @@ def calib(perf_data, calib_data, method, output_name=None, multiplier=1.0, var=F
         m0 = m0**2
         multiplier = multiplier**2
 
-    m0[m0 == 0] = 1
-    log.write("Mean value before calibration: %f\n" % np.mean(perf_data.data()))
-    calibrated = perf_data.data() / m0 
+    log.write("Mean value before calibration: %f\n" % np.mean(perf_img.data()))
+    calibrated = perf_img.data() / m0 
     calibrated *= multiplier
     log.write("Mean value after calibration: %f\n" % np.mean(calibrated))
 
     if output_name is None:
-        output_name = perf_data.iname + "_calib"
-    return perf_data.derived(calibrated, name=output_name)
+        output_name = perf_img.iname + "_calib"
+    return perf_img.derived(calibrated, name=output_name)
 
-def get_m0_voxelwise(calib_data, gain=1.0, alpha=1.0, tr=None, t1t=None, part_coeff=0.9, mask=None, edgecorr=False, log=sys.stdout):
+def get_m0_voxelwise(calib_img, gain=1.0, alpha=1.0, tr=None, t1t=None, part_coeff=0.9, brain_mask=None, edgecorr=False, log=sys.stdout):
     """
     Calculate M0 value using voxelwise calibration
 
-    FIXME edge correction not applied
-
-    :param calib_data: fsl.Image containing voxelwise m0 map
+    :param calib_img: fsl.Image containing voxelwise m0 map
     :param gain: Calibration gain
     :param alpha: Inversion efficiency
-    :param tr: Sequence TR (s)
+    :param tr: Sequence TR (s) (optional for short TR correction)
+    :param t1t: Tissue T1 (optional for short TR correction)
     """
     log.write("Doing voxelwise calibration\n")
     
     # Calculate M0 value
-    m0 = calib_data.data() * alpha * gain
+    m0 = calib_img.data() * alpha * gain
 
     if tr is not None and tr < 5:
         if t1t is not None:
     	    # correct the M0 image for short TR using the equation from the white paper
             log.write("Correcting the calibration (M0) image for short TR (using T1 of tissue %f)\n" % t1t)
-            ccorr = 1 / (1 - math.exp(-tr / t1t))
-            m0 *= ccorr
+            m0 /= (1 - math.exp(-tr / t1t))
         else:
-            log.write("WARNING: tr < 5 (%f) but reference tissue T1 not provided so cannot apply correction\n" % tr)
+            log.write("WARNING: tr < 5 (%f) but reference tissue T1 not provided so cannot apply short TR correction\n" % tr)
 
 	# Include partiition co-effcient in M0 image to convert from M0 tissue to M0 arterial
+    log.write("Using partition coefficient: %f\n" % part_coeff)
     m0 /= part_coeff
 
     if edgecorr:
-        m0 = edge_correct(m0, mask, log=log)
+        log.write("Doing edge correction")
+        m0 = edge_correct(m0, brain_mask, log=log)
         
+    # Prevent divide by zero
+    m0[m0 == 0] = 1
     return m0
 
-def edge_correct(m0, mask, log=sys.stdout):
+def edge_correct(m0, brain_mask):
     """
     Correct for (partial volume) edge effects
     """
-    log.write("Doing edge correction")
-
-    if mask is None:
-        mask = np.ones(m0.shape)
+    if brain_mask is None:
+        brain_mask = np.ones(m0.shape)
     else:
-        mask = mask.data()
+        brain_mask = brain_mask.data()
 
     # Median smoothing
     #fslmaths $Mo -fmedian -mas $tempdir/mask -ero $tempdir/calib_ero
     m0 = scipy.ndimage.median_filter(m0, size=3)
 
     # Erode mask using 3x3x3 structuring element
-    mask_ero = scipy.ndimage.morphology.binary_erosion(mask, structure=np.ones([3, 3, 3]), border_value=1)
+    mask_ero = scipy.ndimage.morphology.binary_erosion(brain_mask, structure=np.ones([3, 3, 3]), border_value=1)
     m0[mask_ero == 0] = 0
 
     # Extrapolate remaining data to fit original mask
@@ -227,7 +217,7 @@ def edge_correct(m0, mask, log=sys.stdout):
         zslice = m0[..., z]
         zslice_extrap = scipy.ndimage.filters.generic_filter(zslice, _masked_mean, footprint=np.ones([5, 5]))
         m0[..., z] = zslice_extrap
-    m0[mask == 0] = 0
+    m0[brain_mask == 0] = 0
     
     return m0
 
@@ -250,84 +240,76 @@ def _masked_mean(vals):
     else:
         return voxel_val
 
-def get_m0_refregion(calib_data, ref_mask, log=sys.stdout, **kwargs):
+def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", gain=1.0, alpha=1.0, log=sys.stdout, **kwargs):
     """
     Do reference region calibration
 
     FIXME this is not yet complete
 
-    :param calib_data: Calibration image
+    :param calib_img: Calibration image as fsl.Image
     :param ref_mask: Reference region mask image
-    """        
-    raise NotImplementedError("Reference region calibration is not yet implemented")
-
+    :param mode: Calibration mode, ``longtr`` or ``satrecov``
+    :param gain: Calibration gain
+    :param alpha: Inversion efficiency
+    """
     log.write("Doing reference region calibration\n")
-    
-    mode = kwargs.get("mode", "longtr")
+
     tr = kwargs.get("tr", 3.2)
     te = kwargs.get("te", 0)
     taq = kwargs.get("taq", 0)
-    log.write("Using TE=%f" % te)
-        
-    # Check if we have a sensitivity map
-    sens = kwargs.get("sens", None)
-    if sens is not None:
-        log.write("Using sensitivity image: %s\n" % sens.iname)
+    log.write("Using TE=%f\n" % te)
 
-    # Constants
-    T2b = 150 # lu et a. 2012 MRM 67:42-49 have 154ms at 3T during normoxia
+    t2star = kwargs.get("t2star", False)
+    if t2star:
+        # From Petersen 2006 MRM 55(2):219-232 see discussion
+        t2b = 50
+    else:
+        # From Lu et al. 2012 MRM 67:42-49 have 154ms at 3T during normoxia
+        t2b = 150
 
-    # Parameters for reference tissue type: T1, T2, partition coeffs, FAST seg ID
+    # Parameters for reference tissue type: T1, T2, T2*, partition coeffs, FAST seg ID
     # Partition coeffs based on Herscovitch and Raichle 1985 with a blood water density of 0.87
+    # GM/WM T2* from Foucher 2011 JMRI 34:785-790
     params = {
-        "csf" : [4.5, 750, 1.15, 0],
-        "wm" : [1.0, 50, 0.82, 2],
-        "gm" : [1.3, 100, 0.98, 1],
+        "csf" : [4.3, 750, 400, 1.15],
+        "gm" : [1.3, 100, 50, 0.98],
+        "wm" : [1.0, 50, 60, 0.82],
     }
-    if kwargs.get("t2star", False):
-        # We need to correct for T2* not T2 so change the defaults
-        # NB these will still be overridden by user-specified values 
-        params["csf"][1] = 400
-        params["gm"][1] = 60 # from Foucher 2011 JMRI 34:785-790
-        params["wm"][1] = 50 # ditto
-        T2b = 50 #from Petersen 2006 MRM 55(2):219-232 see discussion
-
     tissref = kwargs.get("tissref", "csf")
     log.write("Using tissue reference type: %s\n" % tissref)
          
     t1r_img, t2r_img = False, False
     if tissref in params:
-        t1r, t2r, pc, fast_id = params[tissref]
+        t1r, t2r, t2rstar, pc = params[tissref]
+        if t2star:
+            t2r = t2rstar
     else:
-        try:
-            t1r, t2r, pc, fast_id = None, None, None, int(tissref)
-        except:
-            raise ValueError("Invalid tissue reference type: %s" % tissref)
+        raise ValueError("Invalid tissue reference type: %s" % tissref)
 
-    # Command line override of default T1 and T2
+    # Command line override of default T1, T2, PC
     if "t1r" in kwargs:
         t1r = kwargs.get("t1r", None)
         if isinstance(t1r, fsl.Image):
-            log.write("Using T1 image for reference region: %s" % t1r.iname)
+            log.write("Using T1 image for reference region: %s\n" % t1r.iname)
             t1r_img = True
         elif t1r is not None:
-            log.write("Using user-specified T1r value: %f" % t1r)
+            log.write("Using user-specified T1r value: %f\n" % t1r)
 
     if "t2r" in kwargs:
         t2r = kwargs.get("t2r", None)
         if isinstance(t2r, fsl.Image):
-            log.write("Using T2 image for reference region: %s" % t2r.iname)
+            log.write("Using T2 image for reference region: %s\n" % t2r.iname)
             t2r_img = True
         elif t2r is not None:
-            log.write("Using user-specified T2r value: %f" % t2r)
+            log.write("Using user-specified T2r value: %f\n" % t2r)
 
     if "t2b" in kwargs:
         t2b = kwargs["t2b"]
-        log.write("Using user-specified T2b value: %f" % t2b)
+        log.write("Using user-specified T2b value: %f\n" % t2b)
         
     if "pc" in kwargs:
         pc = kwargs["pc"]
-        log.write("Using user-specified partition coefficient: %f" % pc)
+        log.write("Using user-specified partition coefficient: %f\n" % pc)
 
     if t1r is None:
         raise ValueError("T1 for reference tissue has not been set")
@@ -337,48 +319,188 @@ def get_m0_refregion(calib_data, ref_mask, log=sys.stdout, **kwargs):
         else:
             t2r = 1.0
     if pc is None:
-        raise ValueError("Partition coefficient  for reference tissue has not been set")
+        raise ValueError("Partition coefficient for reference tissue has not been set")
 
     log.write("T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pc))
+
+    # Check the data and masks
+    calib_data = calib_img.data()
+    if calib_data.ndim == 4:
+        log.write("Taking mean across calibration images\n")
+        calib_data = np.mean(calib_data, -1)
+
+    if brain_mask is not None:
+        brain_mask = brain_mask.data()
+    else:
+        brain_mask = np.ones(calib_img.shape[:3])
+
+    if ref_mask is not None:
+        log.write("Using supplied reference tissue mask: %s\n" % ref_mask.iname)
+        ref_mask = ref_mask.data()
+    else:
+        # In this case use the brain mask
+        log.write("Brain mask is being used as the reference tissue (beware!)\n")
+        ref_mask = brain_mask
         
-    # # sort out the M0 calib brain_mask
-    # if [ -z $bmask ]; then
-    #     echo "Creating brain mask from calibration image" >> $log
-    #     #make a brain mask
-    #     # take the mean
-    #     fslmaths $calib -Tmean $temp_calib/calib_mean
-    #     # bet
-    #     bet $temp_calib/calib_mean $temp_calib/calib_mean -m #calib_mean_mask is the brain mask for the calib image
-    #     bmask=$temp_calib/calib_mean_mask
-    # fi
+    nonzero = np.count_nonzero(ref_mask)
+    if nonzero < 1:
+        raise ValueError("Reference mask does not contain any unmasked voxels")
+    else:
+        log.write("Number of voxels in tissue reference mask: %i\n" % nonzero)
 
-    # ### Sensitivity image calculation (if reqd)
-    # if [ ! -z $crefim ]; then
-    #     echo "Calculate sensitivity image" >> $log
-    #     senson=1
-    #     # take the mean (and mask with the mask from the main calib image)
-    #     fslmaths $crefim -Tmean -mas $bmask $temp_calib/crefim
+    ### Sensitivity image calculation (if we have a sensitivity image)
+    sens_img = kwargs.get("sens_img", None)
+    cref_img = kwargs.get("cref_img", None)
+    cact_img = kwargs.get("cact_img", None)
+
+    sens_corr = False
+    if sens_img:
+        log.write("Using sensitivity image: %s\n" % sens_img.iname)
+        sens_corr = True
+        sens_data = sens_img.data()
+    elif cref_img:
+        log.write("Calculate sensitivity image from reference image\n")
+        sens_corr = True
+
+        # Take the mean (and mask with the mask from the main calib image)
+        cref_data = cref_img.data()
+        if cref_data.ndim == 4:
+            cref_data = np.mean(cref_data, -1)
+        cref_data[brain_mask == 0] = 0
         
-    #     # take the ratio to give the sensitivity image
-    #     if [ -z $cactim ]; then
-    #         # if the cact image has not been supplied then use the mean of the calib image
-    #     if [ ! $mode = longtr ]; then
-    #         echo "ERROR: You must supply an image from the actual coil used for ASL acquisition using --cact (unless you use longtr mode)"
-    #         exit 1
-    #     fi
-    #     fslmaths $calib -Tmean $temp_calib/cactim
-    #     fi 
-    #     fslmaths $temp_calib/cactim -div $temp_calib/crefim -mas $bmask $temp_calib/sens
-    # fi
+        if cact_img:
+            cact_data = cact_img.data()
+        elif mode == "longtr":
+            # If the cact image has not been supplied then use the mean of the calib image in longtr mode
+            cact_data = calib_data
+        else:
+            raise ValueError("You must supply an image from the actual coil used for ASL acquisition using --cact (unless you use longtr mode)")
+            
+        # Take the ratio to give the sensitivity image
+        sens_data = cact_data / cref_data
+        sens_data[brain_mask == 0] = 0
 
-    # if [ $tissref = "none" ]; then
-    # # whole brain M0
-    # # in this case use the brain mask
-    #     imcp $bmask $temp_calib/refmask
-    #     maskflag=1
-    #     echo "Brain mask is being used as the reference tissue (beware!)" >> $log
-    # fi
+    log.write("MODE: %s\n" % mode)
+    log.write("Calibration gain: %f\n" % gain)
 
+    if mode == "longtr":
+        if sens_corr:
+            log.write("Applying sensitivity image\n")
+            calib_data /= sens_data
+        
+        # Mask M0 map with tissue reference
+        calib_data[ref_mask == 0] = 0
+        
+        # calcualte T1 of reference region (if a T1 image has been supplied)
+        if t1r_img:
+            t1r_data = t1r_img.data()
+            t1r = np.mean(t1r_data[ref_mask != 0])
+            log.write("Calculated T1 of reference tissue: %f\n" % t1r)
+
+        # calcualte T2 of reference region (if a T2 image has been supplied)
+        if t2r_img:
+            t2r_data = t2r_img.data()
+            t2r = np.mean(t2r_data[ref_mask != 0])
+            log.write("Calculated T1 of reference tissue: %f\n" % t2r)
+
+        # calculate M0_ref value
+        m0 = np.mean(calib_data[ref_mask != 0])
+        log.write("mean of reference tissue: %f\n" % m0)
+        m0 = m0 / (1 - math.exp(- (tr - taq) / t1r) )
+        log.write("M0 of reference tissue: %f\n" % m0)
+        
+    elif mode == "satrecov":
+        # Calibration image is control images and we want to do a saturation recovery fit
+        # NB only do the fit in the CSF mask
+        options = {
+            "method" : "vb",
+            "noise" : "white",
+            "model" : "satrecov",
+            "t1" : t1r,
+        }
+        
+        #deal with TIs
+        tis = kwargs.get("tis", [])
+        log.write("TIs: %s\n" % str(tis))
+        for idx, ti in enumerate(tis):
+            options["ti%i" % (idx+1)] = ti
+
+        # Extra options for Look Locker
+        if "fa" in kwargs:
+            options["FA"] = kwargs["fa"]
+        if "nphases" in kwargs:
+            options["phases"] = kwargs["nphases"]
+        if "lfa" in kwargs:
+            options["LFA"] = kwargs["lfa"]
+        
+        # Extra sat recovery options
+        if kwargs.get("fixa", False):
+            options["fixa"] = ""
+
+        # Do fabber within the tissue reference mask with a sensible T1 prior mean
+
+        if sens_corr:
+            log.write("Apply sensitivity image to data for reference tisse M0 estimation\n")
+            # apply sensitivity map to calibration image - ONLY for the reference tissue calculations
+            # fslmaths $calib -div $temp_calib/sens $temp_calib/calib_senscorr
+        else:
+            pass
+            # no sensitivity correction required, but copy image over ready for next command
+            # imcp $calib $temp_calib/calib_senscorr
+
+        log.write("Running FABBER within reference tissue mask\n")
+        wsp = fsl.Workspace(workdir=kwargs.get("workdir", None))
+        wsp.fabber(calib_img, ref_mask, options)
+        mean_m0 = fsl.Image("%s/mean_M0t" % wsp.workdir)
+
+        # Calculate M0 value - this is mean M0 of CSF at the TE of the sequence
+        m0_value = np.mean(mean_m0.data()[ref_mask != 0])
+
+        log.write("M0 of reference tissue: %f\n" % m0_value)
+
+        if kwargs.get("save_results"):
+            # Save useful results
+            t1_ref = fsl.Image("%s/mean_T1t" % wsp.workdir)
+            m0_ref = fsl.Image("%s/mean_M0t" % wsp.workdir)
+
+            # Do fabber again within whole brain to get estimated T1 of tissue and FA correction (if LL)
+            # (note that we do not apply sensitivity correction to the data here - thius is 'built-into' the M0t map)
+            log.write("FABBER (again) within whole brain mask\n")
+
+            wsp.fabber(calib_img, brain_mask, options)
+            # $fabber --data=$calib --mask=$bmask --output=$temp_calib/satrecovT --data-order=singlefile --model=satrecov --noise=white --method=vb $tislist $llopts $sropts 
+
+            # save useful results to specified output directory
+            #imcp $temp_calib/satrecovT/mean_T1t $outdir/T1t
+            #imcp $temp_calib/satrecovT/mean_M0t $outdir/M0t
+            #if [ ! -z $lfa ]; then
+            #imcp $temp_calib/satrecovT/mean_g $outdir/facorr
+    else:
+        raise ValueError("Unknown reference region mode: %s (Should be satrecov or longtr)" % mode)
+
+    # Use equation to get the M0 value that is needed
+    m0 = m0 / math.exp(- te / t2r) #  T2 correction
+    m0 = m0 * gain / pc
+    m0 = m0 * math.exp(- te / t2b)
+    log.write("M0: %f\n" % m0)
+
+    # Apply calibration to input image
+    if sens_corr:
+        # Apply sensitivity image
+        # fslmaths $infile -div $temp_calib/sens $temp_calib/infile
+        pass
+    else:
+        # imcp $infile $temp_calib/infile
+        pass
+
+    if alpha != 1.0:
+        log.write("Applying inversion efficiency of: %f\n")
+        m0 = m0 * alpha
+    
+    return m0
+
+def get_csf_mask():
+    pass
     # if [ -z $maskflag ]; then
 
     # # make brain mask from structural
@@ -490,133 +612,5 @@ def get_m0_refregion(calib_data, ref_mask, log=sys.stdout, **kwargs):
     # threshold reference mask if it is not already binary
     #ref_mask = ref_mask > 0.9
     
-    # Use supplied tissue reference mask
-    log.write("Using supplied reference tissue mask: %s\n" % ref_mask.iname)
-    
-    mask = ref_mask.data()
-    nonzero = np.count_nonzero(mask)
-    log.write("Number of voxels in tissue reference mask: %i" % nonzero)
-    if nonzero < 1:
-        raise ValueError("Reference mask does not contain any unmasked voxels")
-
-    log.write("MODE: %s\n" % mode)
-    log.write("Calibration gain: %f" % gain)
-    if mode == "longtr":
-        # Calibration data is a long TR acquisition - all we need to do here is take the mean 
-        if mask.ndim == 4:
-            mask = np.mean(axis=-1)
-
-        # if [ ! -z $senson ]; then
-        #     echo "Apply sensitivity image" >> $log
-        #     # apply sensitivity map to calibration image
-        #     fslmaths $temp_calib/calib -div $temp_calib/sens $temp_calib/calib
-        # fi
-
-        #mask M0 map with tissue reference
-        #calib_data[mask == 0] = 0
-        
-        # calcualte T1 of reference region (if a T1 image has been supplied)
-        if t1r_img:
-            t1r_data = t1r_img.data()
-            t1r = np.mean(t1r_data)
-            log.write("Calculated T1 of reference tissue: %f" % t1r)
-
-        # calcualte T2 of reference region (if a T2 image has been supplied)
-        if t2r_img:
-            t2r_data = t2r_img.data()
-            t2r = np.mean(t2r_data)
-            log.write("Calculated T1 of reference tissue: %f" % t2r)
-
-        # calculate M0_ref value
-        m0 = np.mean(calib_data[mask > 0])
-        m0 = m0 / (1 - math.exp(- (tr - taq) / t1r) )
-        log.write("Mz of reference tissue: %f\n" % m0)
-        
-    elif mode == "satrecov":
-        # Calibration image is control images and we want to do a saturation recovery fit
-        # NB only do the fit in the CSF mask
-        options = {
-            "model" : "satrecov",
-            "noise" : "white",
-            "method" : "vb",
-            "t1" : t1r,
-        }
-        
-        #deal with TIs
-        tis = kwargs.get("tis", [])
-        log.write("TIs: %s" % str(tis))
-        for idx, ti in enumerate(tis):
-            options["ti%i" % (idx+1)] = ti
-
-        # Extra options for Look Locker
-        if "fa" in kwargs:
-            options["FA"] = kwargs["fa"]
-        if "nphases" in kwargs:
-            options["phases"] = kwargs["nphases"]
-        if "lfa" in kwargs:
-            options["LFA"] = kwargs["lfa"]
-        
-        # Extra sat recovery options
-        if kwargs.get("fixa", False):
-            options["fixa"] = ""
-
-        # do fabber within the tissue reference mask with a sensible T1 prior mean
-        # if [ ! -z $senson ]; then
-        # echo "Apply sensitivity image to data for reference tisse M0 estimation" >> $log
-        #     # apply sensitivity map to calibration image - ONLY for the reference tissue calculations
-        # fslmaths $calib -div $temp_calib/sens $temp_calib/calib_senscorr
-        # else
-        # # no sensitivity correction required, but copy image over ready for next command
-        # imcp $calib $temp_calib/calib_senscorr
-        # fi
-        log("Running FABBER within reference tissue mask\n")
-        wsp.fabber(calib_img, ref_mask, options)
-
-        # calculate M0 value
-        # Moval=`fslstats $temp_calib/satrecov/mean_M0t -M` # this is M0 of CSF at the TE of the sequence
-        # echo "M0 of reference tissue: $Moval" >> $log
-
-        # if [ ! -z $outdir ]; then
-        #     # save useful results to specified output directory
-        # imcp $temp_calib/satrecov/mean_T1t $outdir/T1_ref
-        # imcp $temp_calib/satrecov/mean_M0t $outdir/M0_ref
-        # fi
-
-        # # do fabber again within whole brain to get estimated T1 of tissue and FA correction (if LL)
-        # # (note that we do not apply sensitivity correction to the data here - thius is 'built-into' the M0t map)
-        # echo "FABBER (again) within whole brain mask" >> $log
-        # if [ ! -z $outdir ]; then #NB we only bother with this if we have an output directory to put the results in
-        # $fabber --data=$calib --mask=$bmask --output=$temp_calib/satrecovT --data-order=singlefile --model=satrecov --noise=white --method=vb $tislist $llopts $sropts 
-
-
-        #     # save useful results to specified output directory
-        #     imcp $temp_calib/satrecovT/mean_T1t $outdir/T1t
-        #     imcp $temp_calib/satrecovT/mean_M0t $outdir/M0t
-        #     if [ ! -z $lfa ]; then
-        #     imcp $temp_calib/satrecovT/mean_g $outdir/facorr
-        #     fi
-        # fi
-
-    # use equation to get the M0 value that is needed
-    m0 = m0 / math.exp(- te / t2r) #  T2 correction
-    m0 = m0 * gain / pc
-    m0 = m0 * math.exp(- te / t2b)
-    log.write("M0: %f\n" % m0)
-
-    # Apply calibration to input image
-    # if [ ! -z $senson ]; then
-    # # apply sensitivity image
-    # fslmaths $infile -div $temp_calib/sens $temp_calib/infile
-    # else
-    # imcp $infile $temp_calib/infile
-    # fi
-
-    if alpha != 1.0:
-        log.write("Applying inversion efficiency of: %f\n")
-        # apply the inversion efficiency supplied to M0 prior to final calculation
-        m0 = m0 * alpha
-    
-    return m0
-
 if __name__ == "__main__":
     main()
