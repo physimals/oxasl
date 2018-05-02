@@ -3,6 +3,7 @@ Tests for CALIB module
 
 FIXME need satrecov tests
 FIXME need sensitivity correction tests
+FIXME need test with edge correction
 """
 import math
 import StringIO
@@ -166,7 +167,7 @@ def test_partition_coeff():
     calib_img = fsl.Image("calib", data=calib_d)
 
     log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", part_coeff=PC, log=log)
+    perf_calib = calib(perf_img, calib_img, "voxelwise", pct=PC, log=log)
     calibrated_d = perf_calib.data()
     assert(perf_calib.iname == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
@@ -307,7 +308,7 @@ def test_partition_coeff_var():
     calib_img = fsl.Image("calib", data=calib_d)
 
     log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", part_coeff=PC, var=True, log=log)
+    perf_calib = calib(perf_img, calib_img, "voxelwise", pct=PC, var=True, log=log)
     calibrated_d = perf_calib.data()
     assert(perf_calib.iname == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
@@ -516,7 +517,7 @@ def test_refregion_pc():
     ref_img = fsl.Image("ref_mask", data=ref_d)
 
     log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", pc=PC, log=log)
+    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", pcr=PC, log=log)
     calibrated_d = perf_calib.data()
 
     m0_expected =  _expected_m0(np.mean(calib_img.data()), 1.0, 50, PC)

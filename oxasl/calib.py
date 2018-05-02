@@ -65,13 +65,13 @@ def add_calib_options(parser, ignore=()):
     g.add_option("-o", dest="output", help="Output filename for calibrated image (defaut=<input_filename>_calib")
     g.add_option("--method", dest="method", help="Calibration method: voxelwise or refregion")
     g.add_option("--alpha", help="Inversion efficiency", type=float, default=1.0)
+    g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
+    g.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
     g.add_option("--debug", dest="debug", action="store_true", default=False, help="Debug mode")
     parser.add_option_group(g)
 
     g = AslOptionGroup(parser, "Voxelwise calibration", ignore=ignore)
-    g.add_option("--pc", dest="part_coeff", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
-    g.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
-    g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
+    g.add_option("--pct", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
     g.add_option("--t1t", help="T1 of tissue (s)", type=float, default=1.3)
     parser.add_option_group(g)
 
@@ -84,14 +84,12 @@ def add_calib_options(parser, ignore=()):
     g.add_option("--t2b", help="T2(*) of blood (default T2/T2*: 150/50 ms)", type=float, default=None)
     g.add_option("--refmask", dest="ref_mask", help="Reference tissue mask in perfusion/calibration image space")
     g.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
-    g.add_option("--pc", dest="part_coeff", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
+    g.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
     #g.add_option("--Mo", dest="mo", help="Save calculated M0 value to specified file")
     #g.add_option("--om", dest="om", help="Save CSF mask to specified file")
     parser.add_option_group(g)
     
     g = AslOptionGroup(parser, "longtr mode (calibration image is a control image with a long TR)", ignore=ignore)
-    g.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
-    g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
     parser.add_option_group(g)
 
     g = AslOptionGroup(parser, "satrecov mode (calibration image is a sequnce of control images at various TIs)", ignore=ignore)
@@ -147,19 +145,25 @@ def calib(perf_img, calib_img, method, output_name=None, multiplier=1.0, var=Fal
         raise ValueError("Unknown calibration method: %s" % method)
 
     if var:
+        log.write("Treating data as variance - squaring M0 correction and multiplier\n")
         m0 = m0**2
         multiplier = multiplier**2
 
-    log.write("Mean value before calibration: %f\n" % np.mean(perf_img.data()))
-    calibrated = perf_img.data() / m0 
+    if isinstance(m0, np.ndarray):
+        # If M0 is zero, make calibrated data zero
+        calibrated = np.zeros(perf_img.shape)
+        calibrated[m0 > 0] = perf_img.data()[m0 > 0] / m0[m0 > 0]
+    else:
+        calibrated = perf_img.data() / m0
+
+    log.write("Using multiplier for physical units: %f\n" % multiplier)
     calibrated *= multiplier
-    log.write("Mean value after calibration: %f\n" % np.mean(calibrated))
 
     if output_name is None:
         output_name = perf_img.iname + "_calib"
     return perf_img.derived(calibrated, name=output_name)
 
-def get_m0_voxelwise(calib_img, gain=1.0, alpha=1.0, tr=None, t1t=None, part_coeff=0.9, brain_mask=None, edgecorr=False, log=sys.stdout):
+def get_m0_voxelwise(calib_img, gain=1.0, alpha=1.0, tr=None, t1t=None, pct=0.9, brain_mask=None, edgecorr=False, log=sys.stdout):
     """
     Calculate M0 value using voxelwise calibration
 
@@ -176,32 +180,28 @@ def get_m0_voxelwise(calib_img, gain=1.0, alpha=1.0, tr=None, t1t=None, part_coe
 
     if tr is not None and tr < 5:
         if t1t is not None:
-    	    # correct the M0 image for short TR using the equation from the white paper
+    	    # Correct the M0 image for short TR using the equation from the white paper
             log.write("Correcting the calibration (M0) image for short TR (using T1 of tissue %f)\n" % t1t)
             m0 /= (1 - math.exp(-tr / t1t))
         else:
             log.write("WARNING: tr < 5 (%f) but reference tissue T1 not provided so cannot apply short TR correction\n" % tr)
 
 	# Include partiition co-effcient in M0 image to convert from M0 tissue to M0 arterial
-    log.write("Using partition coefficient: %f\n" % part_coeff)
-    m0 /= part_coeff
+    log.write("Using partition coefficient: %f\n" % pct)
+    m0 /= pct
+    log.write("Mean M0: %f\n" % np.mean(m0))
 
-    if edgecorr:
-        log.write("Doing edge correction")
-        m0 = edge_correct(m0, brain_mask, log=log)
+    if edgecorr and brain_mask is not None:
+        log.write("Doing edge correction\n")
+        m0 = edge_correct(m0, brain_mask)
         
-    # Prevent divide by zero
-    m0[m0 == 0] = 1
     return m0
 
 def edge_correct(m0, brain_mask):
     """
     Correct for (partial volume) edge effects
     """
-    if brain_mask is None:
-        brain_mask = np.ones(m0.shape)
-    else:
-        brain_mask = brain_mask.data()
+    brain_mask = brain_mask.data()
 
     # Median smoothing
     #fslmaths $Mo -fmedian -mas $tempdir/mask -ero $tempdir/calib_ero
@@ -240,6 +240,26 @@ def _masked_mean(vals):
     else:
         return voxel_val
 
+def get_tissue_defaults(tiss_type=None):
+    """
+    Get default T1, T2, T2* and PC for different tissue types
+    
+    :return: If tiss_type given, tuple of T1, T2, T2* and PC for tissue type.
+             Otherwise return dictionary of tissue type name (csf, wm, gm) to tuple
+             of T1, T2, T2* and PC for all known types
+    """
+    tiss_defaults = {
+        "csf" : [4.3, 750, 400, 1.15],
+        "gm" : [1.3, 100, 50, 0.98],
+        "wm" : [1.0, 50, 60, 0.82],
+    }
+    if tiss_type is None:
+        return tiss_defaults
+    elif tiss_type.lower() in tiss_defaults:
+        return tiss_defaults[tiss_type.lower()]
+    else:
+        raise ValueError("Invalid tissue type: %s" % tiss_type)
+
 def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", gain=1.0, alpha=1.0, log=sys.stdout, **kwargs):
     """
     Do reference region calibration
@@ -270,23 +290,16 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
     # Parameters for reference tissue type: T1, T2, T2*, partition coeffs, FAST seg ID
     # Partition coeffs based on Herscovitch and Raichle 1985 with a blood water density of 0.87
     # GM/WM T2* from Foucher 2011 JMRI 34:785-790
-    params = {
-        "csf" : [4.3, 750, 400, 1.15],
-        "gm" : [1.3, 100, 50, 0.98],
-        "wm" : [1.0, 50, 60, 0.82],
-    }
     tissref = kwargs.get("tissref", "csf")
     log.write("Using tissue reference type: %s\n" % tissref)
          
-    t1r_img, t2r_img = False, False
-    if tissref in params:
-        t1r, t2r, t2rstar, pc = params[tissref]
-        if t2star:
-            t2r = t2rstar
-    else:
-        raise ValueError("Invalid tissue reference type: %s" % tissref)
+    t1r, t2r, t2rstar, pcr = get_tissue_defaults(tissref)
+    if t2star:
+        t2r = t2rstar
 
     # Command line override of default T1, T2, PC
+    t1r_img, t2r_img = False, False
+
     if "t1r" in kwargs:
         t1r = kwargs.get("t1r", None)
         if isinstance(t1r, fsl.Image):
@@ -307,9 +320,9 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
         t2b = kwargs["t2b"]
         log.write("Using user-specified T2b value: %f\n" % t2b)
         
-    if "pc" in kwargs:
-        pc = kwargs["pc"]
-        log.write("Using user-specified partition coefficient: %f\n" % pc)
+    if "pcr" in kwargs:
+        pcr = kwargs["pcr"]
+        log.write("Using user-specified partition coefficient: %f\n" % pcr)
 
     if t1r is None:
         raise ValueError("T1 for reference tissue has not been set")
@@ -318,10 +331,10 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
             raise ValueError("T2 for reference tissue has not been set")
         else:
             t2r = 1.0
-    if pc is None:
+    if pcr is None:
         raise ValueError("Partition coefficient for reference tissue has not been set")
 
-    log.write("T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pc))
+    log.write("T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pcr))
 
     # Check the data and masks
     calib_data = calib_img.data()
@@ -480,7 +493,7 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
 
     # Use equation to get the M0 value that is needed
     m0 = m0 / math.exp(- te / t2r) #  T2 correction
-    m0 = m0 * gain / pc
+    m0 = m0 * gain / pcr
     m0 = m0 * math.exp(- te / t2b)
     log.write("M0: %f\n" % m0)
 
