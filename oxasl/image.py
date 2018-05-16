@@ -19,7 +19,7 @@ class AslOptionGroup(OptionGroup):
         OptionGroup.__init__(self, *args, **kwargs)
 
     def add_option(self, name=None, *args, **kwargs):
-        if name not in self._ignore:
+        if name not in self._ignore and name.lstrip("-") not in self._ignore and ("dest" not in kwargs or kwargs["dest"] not in self._ignore):
             OptionGroup.add_option(self, name, *args, **kwargs)
 
 def add_data_options(parser, fname_opt="-i", output_type="directory", **kwargs):
@@ -33,6 +33,8 @@ def add_data_options(parser, fname_opt="-i", output_type="directory", **kwargs):
     g.add_option("--plds", dest="plds", help="PLDs as comma-separated list")
     g.add_option("--nrpts", dest="nrpts", help="Fixed number of repeats per TI", default=None)
     g.add_option("--rpts", dest="rpts", help="Variable repeats as comma-separated list, one per TI", default=None)
+    g.add_option("--iaf", dest="iaf", help="input ASl format: diff,tc,ct")
+    g.add_option("--ibf", dest="ibf", help="input block format (for multi-TI): rpt,tis")
     parser.add_option_group(g)
 
 class AslImage(fsl.Image):
@@ -87,10 +89,13 @@ class AslImage(fsl.Image):
         phases = kwargs.pop("phases", None)
         nphases = kwargs.pop("nphases", None)
         
-        if self.ndim != 4:
-            raise RuntimeError("4D data expected")
+        if self.ndim == 4:
+            self.nvols = self.shape[3]
+        elif self.ndim == 3:
+            self.nvols = 1
+        else:
+            raise RuntimeError("3D or 4D data expected")
 
-        self.nvols = self.shape[3]
         if order is None:
             raise ValueError("Data order must be specified")
         self.order = order
@@ -226,6 +231,8 @@ class AslImage(fsl.Image):
         #print("reordering from %s to %s" % (self.order, out_order))
         output_data = np.zeros(self.shape)
         input_data = self.data()
+        if input_data.ndim == 3:
+            input_data = input_data[..., np.newaxis]
         tags = range(self.ntc)
         for ti in range(self.ntis):
             for rpt in range(self.rpts[ti]):
@@ -332,6 +339,17 @@ class AslImage(fsl.Image):
                         order=orig_order, tis=self.tis, ntis=self.ntis, nrpts=1,
                         base=self)
 
+    def perf_weighted(self):
+        """
+        Generate a perfusion weighted image by taking the mean over repeats and then
+        the mean over TIs
+        """
+        meandata = self.diff().mean_across_repeats().data()
+        if meandata.ndim > 3:
+            meandata = np.mean(meandata, axis=-1)
+        return fsl.Image(self.ipath + "_perf_weighted", data=meandata,
+                         base=self)
+            
     def split_epochs(self, epoch_size, overlap=0, time_order=None):
         asldata = self.diff()
         if time_order is not None:
