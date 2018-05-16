@@ -6,9 +6,9 @@ Copyright (c) 2008-2018 University of Oxford
 """
 
 import sys
-from optparse import OptionParser, OptionGroup
+from optparse import OptionParser
 
-from . import __version__, AslImage, fslwrap as fsl
+from . import __version__, AslImage, AslOptionGroup, fslwrap as fsl
 from .image import add_data_options
 
 __timestamp__ = "TEMP"
@@ -283,6 +283,33 @@ def get_steps(asldata, mask=None,
         
     return steps
 
+def add_basil_options(p, ignore=()):
+    g = AslOptionGroup(p, "BASIL options", ignore=ignore)
+    g.add_option("-m", dest="mask", help="Mask file")
+    g.add_option("--optfile", "-@", dest="optfile", help="If specified, file containing additional Fabber options (e.g. --ti1=1.8)")
+    p.add_option_group(g)
+    g = AslOptionGroup(p, "Extended options", ignore=ignore)
+    g.add_option("--infertau", dest="infertau", help="Infer bolus duration", action="store_true", default=False)
+    g.add_option("--inferart", dest="inferart", help="Infer macro vascular (arterial) signal component", action="store_true", default=False)
+    g.add_option("--inferpc", dest="inferpc", help="Infer pre-capillary signal component", action="store_true", default=False)
+    g.add_option("--infert1", dest="infert1", help="Include uncertainty in T1 values", action="store_true", default=False)
+    g.add_option("--artonly", dest="artonly", help="Remove tissue component and infer only arterial component", action="store_true", default=False)
+    g.add_option("--fixbat", dest="fixbat", help="Fix bolus duration", action="store_true", default=False)
+    g.add_option("--spatial", dest="spatial", help="Add step that implements adaptive spatial smoothing on CBF", action="store_true", default=False)
+    g.add_option("--fast", dest="fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
+    p.add_option_group(g)
+    g = AslOptionGroup(p, "Model options", ignore=ignore)
+    g.add_option("--disp", dest="disp", help="Model for label dispersion", default="none")
+    g.add_option("--exch", dest="exch", help="Model for tissue exchange (residue function)", default="mix")
+    p.add_option_group(g)
+    g = AslOptionGroup(p, "Partial volume correction / CBF estimation (enforces --spatial)", ignore=ignore)
+    g.add_option("--pgm", dest="pgm", help="Gray matter PV map")
+    g.add_option("--pwm", dest="pwm", help="White matter PV map")
+    p.add_option_group(g)
+    g = AslOptionGroup(p, "Special options", ignore=ignore)
+    g.add_option("--t1im", dest="t1im", help="Voxelwise T1 tissue estimates")
+    p.add_option_group(g)
+
 def main():
     """
     Entry point for BASIL command line application
@@ -294,32 +321,7 @@ def main():
     try:
         p = OptionParser(usage=usage, version=__version__)
         add_data_options(p)
-
-        g = OptionGroup(p, "BASIL options")
-        g.add_option("-m", dest="mask", help="Mask file")
-        g.add_option("--optfile", "-@", dest="optfile", help="If specified, file containing additional Fabber options (e.g. --ti1=1.8)")
-        p.add_option_group(g)
-        g = OptionGroup(p, "Extended options")
-        g.add_option("--infertau", dest="infertau", help="Infer bolus duration", action="store_true", default=False)
-        g.add_option("--inferart", dest="inferart", help="Infer macro vascular (arterial) signal component", action="store_true", default=False)
-        g.add_option("--inferpc", dest="inferpc", help="Infer pre-capillary signal component", action="store_true", default=False)
-        g.add_option("--infert1", dest="infert1", help="Include uncertainty in T1 values", action="store_true", default=False)
-        g.add_option("--artonly", dest="artonly", help="Remove tissue component and infer only arterial component", action="store_true", default=False)
-        g.add_option("--fixbat", dest="fixbat", help="Fix bolus duration", action="store_true", default=False)
-        g.add_option("--spatial", dest="spatial", help="Add step that implements adaptive spatial smoothing on CBF", action="store_true", default=False)
-        g.add_option("--fast", dest="fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
-        p.add_option_group(g)
-        g = OptionGroup(p, "Model options")
-        g.add_option("--disp", dest="disp", help="Model for label dispersion", default="none")
-        g.add_option("--exch", dest="exch", help="Model for tissue exchange (residue function)", default="mix")
-        p.add_option_group(g)
-        g = OptionGroup(p, "Partial volume correction / CBF estimation (enforces --spatial)")
-        g.add_option("--pgm", dest="pgm", help="Gray matter PV map")
-        g.add_option("--pwm", dest="pwm", help="White matter PV map")
-        p.add_option_group(g)
-        g = OptionGroup(p, "Special options")
-        g.add_option("--t1im", dest="t1im", help="Voxelwise T1 tissue estimates")
-        p.add_option_group(g)
+        add_basil_options(p)
         options, _ = p.parse_args(sys.argv)
         
         # Convert options into a dictionary. This is a bit easier to iterate over
