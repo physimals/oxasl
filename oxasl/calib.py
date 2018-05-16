@@ -21,7 +21,7 @@ def main():
     usage = """ASL_CALIB
     Calibration for ASL data
 
-    asl_pycalib -i <perfusion image> -c <calibration image> --method <voxelwise|refregion> -o <output filename> [options]
+    asl_pycalib -i <perfusion image> -c <calibration image> --calib-method <voxelwise|refregion> -o <output filename> [options]
     """
 
     debug = False
@@ -63,7 +63,7 @@ def add_calib_options(parser, ignore=()):
     g.add_option("-i", dest="perf", help="Perfusion image for calibration, in same image space as calibration image")
     g.add_option("-m", "--brain-mask", dest="brain_mask", help="brain mask in perfusion/calibration image space")
     g.add_option("-o", dest="output", help="Output filename for calibrated image (defaut=<input_filename>_calib")
-    g.add_option("--method", dest="method", help="Calibration method: voxelwise or refregion")
+    g.add_option("--calib-method", dest="calib_method", help="Calibration method: voxelwise or refregion")
     g.add_option("--alpha", help="Inversion efficiency", type=float, default=1.0)
     g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
     g.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
@@ -120,13 +120,13 @@ def add_calib_options(parser, ignore=()):
     # echo "            T1 of tissue (and FA correction) images are also calcualted"
     # echo "   >> Look-Locker flip angle correction - to perform this provide:"
 
-def calib(perf_img, calib_img, method, output_name=None, multiplier=1.0, var=False, log=sys.stdout, **kwargs):
+def calib(perf_img, calib_img, calib_method, output_name=None, multiplier=1.0, var=False, log=sys.stdout, **kwargs):
     """
     Do calibration
 
     :param data: fsl.Image containing data to calibrate
     :param calib_img: fsl.Image containing voxelwise m0 map
-    :param method: ``voxelwise`` or ``refregion``
+    :param calib_method: ``voxelwise`` or ``refregion``
     :param multiplier: Multiplication factor to turn result into desired units
     :param var: If True, assume data represents variance rather than value
 
@@ -137,12 +137,12 @@ def calib(perf_img, calib_img, method, output_name=None, multiplier=1.0, var=Fal
     if not calib_img:
         raise ValueError("Calibration data cannot be None")
 
-    if method == "voxelwise":
+    if calib_method == "voxelwise":
         m0 = get_m0_voxelwise(calib_img, log=log, **kwargs)
-    elif method == "refregion":
+    elif calib_method == "refregion":
         m0 = get_m0_refregion(calib_img, log=log, **kwargs)
     else:
-        raise ValueError("Unknown calibration method: %s" % method)
+        raise ValueError("Unknown calibration method: %s" % calib_method)
 
     if var:
         log.write("Treating data as variance - squaring M0 correction and multiplier\n")
