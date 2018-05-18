@@ -228,8 +228,8 @@ class Workspace(object):
         Create workspace
 
         :param workdir: If specified, use this path for the working directory. Will be created
-        if not already existing
-        :param log: File stream to write log output to (default: sys.stdout)
+                        if it does not not already exist
+        :param log:     File stream to write log output to (default: sys.stdout)
         :param imgs: List of Image object which will be save to working directory
         :param path: Optional list of directories to search for binaries. If not specified, will
         look in $FSLDEVDIR/bin, $FSLDIR/bin
@@ -299,6 +299,7 @@ class Workspace(object):
         if name is None:
             name = img.fname
         img.save(os.path.join(self.workdir, name))
+        return img
 
     def add_file(self, fpath, name=None):
         """
@@ -400,9 +401,15 @@ class Workspace(object):
         mask = kwargs.pop("mask", False)
         brain = kwargs.pop("brain", True)
         args = "%s %s %s" % (img.ipath, output_name, args)
-        if mask: args += " -m"
-        if not brain: args += " -n"
-        imgs, _ = self.run("bet", args=args, expected=[output_name, output_name + "_mask"])
+        expected = []
+        if mask: 
+            args += " -m"
+            expected.append(output_name + "_mask\.")
+        if brain: 
+            expected.append(output_name + "\.")
+        else:
+            args += " -n"
+        imgs, _ = self.run("bet", args=args, expected=expected)
         ret = [self._output_img(i, itype) for i in imgs]
         if len(ret) == 1:
             return ret[0]
@@ -486,10 +493,9 @@ class Workspace(object):
             invmat = np.linalg.inv(text_to_matrix(files[output_mat]))
             self.add_text(matrix_to_text(invmat), output_invmat)
             ret.append(invmat)
-        if len(ret) == 1:
-            return ret
-        return tuple(ret)
-        
+
+        return self._ret_data(ret)
+
     def apply_xfm(self, img, ref, xfm, **kwargs):
         """
         Apply linear transformation to an image
@@ -506,7 +512,29 @@ class Workspace(object):
         imgs, _ = self.run("flirt", args=args, expected=[output_name], **kwargs)
         return self._output_img(imgs[0], itype)
 
-    def mcflirt(self, img, cost=None, ref=None, **kwargs):
+    def apply_xfm_4d(self, img, ref, xfms, **kwargs):
+        """
+        Apply set of linear transformation to a 4D image
+
+        :param img: 4D Input image
+        :param ref: 4D Reference image
+        :param xfms: List of transformation matrices. May be a filenames or Numpy arrays
+        :return Transformed image.
+        """
+        img, itype = self._input_img(img)
+        output_name, args = self._get_std(img, "_reg", kwargs)
+        data_4d = img.data()
+        output_data = np.zeros(data_4d.shape)
+        for vol in range(img.nvols):
+            xfm = self.add_text(matrix_to_text(xfms[vol]), name="xfm_temp")
+            
+            data_3d = self.add_img(Image("voldata_temp", data=data_4d[..., vol]))
+            output_data[..., vol] = self.apply_xfm(data_3d, ref, "xfm_temp", output_name="reg_temp").data()
+
+        output_img = Image(output_name, data=output_data)
+        return self._output_img(output_img, itype)
+
+    def mcflirt(self, img, cost=None, ref=None, mats=False, **kwargs):
         """
         FSL motion correction tool
 
@@ -517,16 +545,29 @@ class Workspace(object):
         """
         img, itype = self._input_img(img)
         output_name, args = self._get_std(img, "_mc", kwargs)
+
         args = "-in %s -out %s %s" % (img.ipath, output_name, args)
         if cost is not None:
             args += " -cost %s" % cost
         if ref is not None:
             ref, _ = self._input_img(ref)
             args += " -r %s" % ref.ipath
-        imgs, _ = self.run("mcflirt", args=args, expected=[output_name])
-        return self._output_img(imgs[0], itype)
+        if mats:
+            args += " -mats"
 
-    def maths(self, img, *args, **kwargs):
+        imgs, _ = self.run("mcflirt", args=args, expected=[output_name])
+        ret = [self._output_img(imgs[0], itype)]
+        if mats:
+            import glob
+            retmats = []
+            mat_files = glob.glob(os.path.join(self.workdir, output_name + ".mat", "MAT_*"))
+            for mat_file in sorted(mat_files):
+                retmats.append(text_to_matrix(self._read_text_file(mat_file)))
+            ret.append(retmats)
+
+        return self._ret_data(ret)
+
+    def maths(self, img, **kwargs):
         """
         Generic FSL mathematical operations on images
 
@@ -547,7 +588,8 @@ class Workspace(object):
 
         Note that this should not really be needed. 
         """
-        args = "%s %s" % (src.ipath, dest.ipath)
+        src, _ = self._input_img(src)
+        args = "%s %s" % (src.ipath, dest)
         self.run("imcp", args=args)
     
     def _input_img(self, img):
@@ -691,6 +733,17 @@ class Workspace(object):
         with open(fname, "r") as f:
             return f.read()
 
+    def _ret_data(self, return_list):
+        """
+        When returning a list of items, if there is only one return it directly
+
+        This means callers can assign to the correct number of output variables they
+        are expecting without having to manually unpack single-length tuples
+        """
+        if len(return_list) == 1:
+            return return_list[0]
+        return tuple(return_list)
+        
 def matrix_to_text(mat):
     """
     Convert matrix array to text using spaces/newlines as col/row delimiters
