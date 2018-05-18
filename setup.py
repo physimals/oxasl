@@ -53,6 +53,7 @@ setup(
             "asl_basil=oxasl.basil:main",
             "asl_pycalib=oxasl.calib:main",
             "asl_pygui=oxasl.gui:main",
+            "asl_oxasl=oxasl.oxford_asl:main",
         ],
     },
     classifiers=[
