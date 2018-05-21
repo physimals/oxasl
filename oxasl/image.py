@@ -7,8 +7,12 @@ import math
 from optparse import OptionGroup
 
 import numpy as np
+import scipy
 
-from . import fslwrap as fsl
+from fsl.data.image import Image
+from fsl.wrappers import mcflirt, fslmaths, LOAD
+
+from .fslwrap import Workspace
 
 class AslOptionGroup(OptionGroup):
     """
@@ -37,7 +41,7 @@ def add_data_options(parser, fname_opt="-i", output_type="directory", **kwargs):
     g.add_option("--ibf", dest="ibf", help="input block format (for multi-TI): rpt,tis")
     parser.add_option_group(g)
 
-class AslImage(fsl.Image):
+class AslImage(Image):
 
     DIFFERENCED = 0
     TC_PAIRS = 1
@@ -76,8 +80,9 @@ class AslImage(fsl.Image):
       ``rpts`` - Repeats, one value per TI (may be constant but always stored as list)
     """
   
-    def __init__(self, name, **kwargs):
-        fsl.Image.__init__(self, name, **kwargs)
+    def __init__(self, image, name=None, **kwargs):
+        img_args = dict([(k, v) for k, v in kwargs.items() if k in ("header")])
+        Image.__init__(self, image, name=name, **img_args)
         
         order = kwargs.pop("order", None)
         ntis = kwargs.pop("ntis", None)
@@ -230,7 +235,7 @@ class AslImage(fsl.Image):
 
         #print("reordering from %s to %s" % (self.order, out_order))
         output_data = np.zeros(self.shape)
-        input_data = self.data()
+        input_data = self.nibImage.get_data()
         if input_data.ndim == 3:
             input_data = input_data[..., np.newaxis]
         tags = range(self.ntc)
@@ -244,7 +249,7 @@ class AslImage(fsl.Image):
                     #print("Output (%s) index %i" % (out_order, out_idx))
                     output_data[:, :, :, out_idx] = input_data[:, :, :, in_idx]
                     #print("")
-        return AslImage(self.ipath + "_reorder", data=output_data,
+        return AslImage(image=output_data, name=self.name + "_reorder",
                         order=out_order, tis=self.tis, ntis=self.ntis, rpts=self.rpts, phases=self.phases,
                         base=self)
 
@@ -273,12 +278,12 @@ class AslImage(fsl.Image):
             start += self.rpts[idx]*self.ntc
         nrpts = self.rpts[ti_idx]
         nvols = nrpts * self.ntc
-        output_data = reordered.data()[:, :, :, start:start+nvols]
+        output_data = reordered.nibImage.get_data()[:, :, :, start:start+nvols]
         if self.tis is not None:
             tis = [self.tis[ti_idx],]
         else:
             tis = None
-        return AslImage(self.ipath + "_ti%i" % ti_idx, data=output_data,
+        return AslImage(image=output_data, name=self.name + "_ti%i" % ti_idx, 
                         order=order, tis=tis, ntis=1, nrpts=nrpts, phases=self.phases, base=self)
 
     def diff(self):
@@ -291,7 +296,7 @@ class AslImage(fsl.Image):
             raise RuntimeError("Cannot difference multiphase data")
         elif "p" not in self.order and "P" not in self.order:
             # Already differenced
-            output_data = self.data()
+            output_data = self.nibImage.get_data()
         elif self.nvols % 2 != 0:
             raise RuntimeError("Invalid number of volumes for TC data: %i" % self.nvols)
         else:
@@ -299,7 +304,7 @@ class AslImage(fsl.Image):
 
             # Re-order so that TC pairs are together with the tag first
             out_order = self.order.replace("p", "").replace("P", "")
-            reordered = self.reorder("p" + out_order).data()
+            reordered = self.reorder("p" + out_order).nibImage.get_data()
             
             for t in range(int(self.nvols / 2)):
                 tag = 2*t
@@ -307,7 +312,7 @@ class AslImage(fsl.Image):
                 output_data[..., t] = reordered[..., ctrl] - reordered[..., tag]
         
         out_order = self.order.replace("p", "").replace("P", "")
-        return AslImage(self.ipath + "_diff", data=output_data, 
+        return AslImage(image=output_data, name=self.name + "_diff", 
                         order=out_order, tis=self.tis, ntis=self.ntis, rpts=self.rpts, base=self)
 
     def mean_across_repeats(self):
@@ -325,7 +330,7 @@ class AslImage(fsl.Image):
         # whatever it was beforehand
         orig_order = diff.order
         diff = diff.reorder("rt")
-        input_data = diff.data()
+        input_data = diff.nibImage.get_data()
 
         # Create output data - one volume per ti
         output_data = np.zeros(list(self.shape[:3]) + [self.ntis])
@@ -335,7 +340,7 @@ class AslImage(fsl.Image):
             output_data[..., ti] = np.mean(repeat_data, 3)
             start += nrp
         
-        return AslImage(self.ipath + "_mean", data=output_data, 
+        return AslImage(image=output_data, name=self.name + "_mean", 
                         order=orig_order, tis=self.tis, ntis=self.ntis, nrpts=1,
                         base=self)
 
@@ -344,11 +349,10 @@ class AslImage(fsl.Image):
         Generate a perfusion weighted image by taking the mean over repeats and then
         the mean over TIs
         """
-        meandata = self.diff().mean_across_repeats().data()
+        meandata = self.diff().mean_across_repeats().nibImage.get_data()
         if meandata.ndim > 3:
             meandata = np.mean(meandata, axis=-1)
-        return fsl.Image(self.ipath + "_perf_weighted", data=meandata,
-                         base=self)
+        return Image(image=meandata, name=self.name + "_perf_weighted", base=self)
             
     def split_epochs(self, epoch_size, overlap=0, time_order=None):
         asldata = self.diff()
@@ -357,7 +361,7 @@ class AslImage(fsl.Image):
         
         epoch = 0
         epoch_start = 0
-        input_data = asldata.data()
+        input_data = asldata.nibImage.get_data()
         ret = []
         while 1:
             epoch_end = min(epoch_start + epoch_size, asldata.nvols)
@@ -375,8 +379,8 @@ class AslImage(fsl.Image):
                             idx = tis.index(ti_val)
                             rpts[idx] += 1
             epoch_data = input_data[..., epoch_start:epoch_end]
-            epoch_img = AslImage(self.ipath + "_epoch%i" % epoch, 
-                                 data=epoch_data,
+            epoch_img = AslImage(image=epoch_data,
+                                 name=self.name + "_epoch%i" % epoch, 
                                  order=asldata.order,
                                  tis=tis, rpts=rpts,
                                  base=asldata).mean_across_repeats()
@@ -397,7 +401,7 @@ class AslImage(fsl.Image):
         """
         ti_str = "TIs "
         if self.have_plds: ti_str = "PLDs"
-        fsl.Image.summary(self, log)
+        #fsl.Image.summary(self, log)
         log.write("Data shape                    : %s\n" % str(self.shape))
         log.write("%s                          : %s\n" % (ti_str, str(self.tis)))
         log.write("Number of repeats at each TI  : %s\n" % str(self.rpts))
@@ -410,13 +414,13 @@ class AslImage(fsl.Image):
         else:
             log.write("Already differenced\n")
 
-    def derived(self, data, name=None, suffix=None, **kwargs):
+    def derived(self, image, name=None, suffix="", **kwargs):
         """
         Create a derived ASL image based on this one, but with different data
 
         This is only possible if the number of volumes match, otherwise we cannot
         use the existing information about TIs, repeats etc. If the number of volumes
-        do not match a generic fsl.Image is returned instead
+        do not match a generic Image is returned instead
         
         :param data: Numpy data for derived image
         :param name: Name for new image (can be simple name or full filename)
@@ -424,49 +428,57 @@ class AslImage(fsl.Image):
 
         Any further keyword parameters are passed to the Image constructor
         """
-        if data.ndim != 4 or data.shape[3] != self.shape[3]:
-            return fsl.Image.derived(self, data, name=name, suffix=suffix, **kwargs)
+        if name is None:
+            name = self.name
+        name = name + suffix
+        if image.ndim != self.ndim or (image.ndim == 4 and image.shape[3] != self.shape[3]):
+            print(kwargs)
+            return Image(image=image, name=name, **kwargs)
         else:
-            if name is None and suffix is None:
-                name = self.ipath
-            elif name is None:
-                name = self.ipath + suffix
-            return AslImage(name, data=data, base=self,
+            
+            return AslImage(image=image, name=name, base=self,
                             order=self.order, ntis=self.ntis, tis=self.tis, rpts=self.rpts, phases=self.phases, **kwargs)
 
-class AslWorkspace(fsl.Workspace):
+class AslWorkspace(Workspace):
     """
     Adds some functionality to an fslwrap.Workspace which is useful to ASL images
     """
 
     def smooth(self, img, fwhm, output_name=None):
         if output_name is None:
-            output_name = img.iname + "_smooth"
+            output_name = img.name + "_smooth"
         sigma = round(fwhm/2.355, 2)
+
         self.log.write("Spatial smoothing with FWHM: %f (sigma=%f)\n" % (fwhm, sigma))
-        args = "%s -kernel gauss %f -fmean %s" % (img.iname, sigma, output_name)
-        imgs, _, _ = self.run("fslmaths", args=args, expected=[output_name])
-        return imgs[0]
+        smoothed = scipy.ndimage.gaussian_filter(img.nibImage.get_data(), sigma=sigma)
+        return img.derived(smoothed, suffix="_smooth")
 
-    def preprocess(self, asldata, diff=False, mc=False, smooth=False, fwhm=None, ref=None, **kwargs):
+    def preprocess(self, asldata, diff=False, order=None, mc=False, smooth=False, fwhm=None, ref=None, **kwargs):
         self.log.write("ASL preprocessing...\n")
-
-        if diff: 
-            self.log.write("Tag-control subtraction\n")
-            asldata = asldata.diff().reorder("rt").save()
 
         # Keep original AslImage with info about TIs, repeats, etc
         orig = asldata
+
+        if diff: 
+            self.log.write("Tag-control subtraction\n")
+            asldata = asldata.diff()
+            
+        if order:
+            self.log.write("Re-ordering to %s\n" % order)
+            if "p" in order.lower() and diff:
+                order = order.replace("p", "").replace("P", "") 
+            asldata = asldata.reorder(order)
+
         if mc: 
             self.log.write("Motion correction\n")
-            asldata = self.mcflirt(asldata, ref=ref, cost="mutualinfo")
+            output = mcflirt(asldata, cost="mutualinfo", out=LOAD)
+            asldata = asldata.derived(output["out"].nibImage.get_data(), suffix="_mc")
 
-        if smooth: 
+        if smooth:
             asldata = self.smooth(asldata, fwhm=fwhm)
 
         self.log.write("DONE\n\n")
-        
-        return orig.derived(data=asldata.data(), name=asldata.ipath)
+        return asldata
 
     def reg(self, wsp, ref, reg_targets, options, ref_str="asl"):
         """ 
@@ -478,7 +490,7 @@ class AslWorkspace(fsl.Workspace):
         ref_bet = wsp.bet(ref)
 
         # This is done to avoid the contrast enhanced rim resulting from low intensity ref image
-        d = ref_bet.data()
+        d = ref_bet.nibImage.get_data()
         thr_ref = np.percentile(d[d != 0], 10.0)
         d[d < thr_ref] = 0
         raw_bet = ref_bet.derived(d, save=True)
@@ -486,14 +498,14 @@ class AslWorkspace(fsl.Workspace):
         for imgs in reg_targets:
             reg = imgs[0]
             reg_bet = wsp.bet(reg, args="-B -f 0.3")
-            name = "%s_2%s" % (reg.iname, ref_str)
-            name_inv = "%s_2%s" % (ref_str, reg.iname)
+            name = "%s_2%s" % (reg.name, ref_str)
+            name_inv = "%s_2%s" % (ref_str, reg.name)
             postreg, mat, invmat = wsp.flirt(ref_bet, args="-dof 7", 
                                              output_name=name,
                                              output_mat=name + ".mat",
                                              output_invmat=name_inv + ".mat")
             wsp.write_file(matrix_to_text(invmat), name_inv)
             for coreg in imgs[1:]:
-                wsp.apply_xfm(coreg, ref_bet, name_inv, args="-interp nearestneighbour", output_name="%s_fast_seg_2asl" % t1.iname)
+                wsp.apply_xfm(coreg, ref_bet, name_inv, args="-interp nearestneighbour", output_name="%s_fast_seg_2asl" % t1.name)
     
         self.log.write("DONE\n\n")

@@ -219,10 +219,6 @@ class Workspace(object):
     Based on a working directory, which may be temporary or persistent.
     """
 
-    FILENAME = 1
-    IMAGE = 2
-    NUMPY = 3
-
     def __init__(self, workdir=None, log=sys.stdout, imgs=(), path=None, debug=False, echo=False, use_local_dir=True):
         """
         Create workspace
@@ -297,7 +293,7 @@ class Workspace(object):
         :param img: Image object. It will be saved in the workspace and its filepath modified
         """
         if name is None:
-            name = img.fname
+            name = img.name
         img.save(os.path.join(self.workdir, name))
         return img
 
@@ -836,14 +832,3 @@ def _temp_wrapper(prog):
         _grab_temp_data(ret)
         return ret
     return wrapper
-
-maths = _temp_wrapper("maths")
-roi = _temp_wrapper("roi")
-stats = _temp_wrapper("stats")
-merge = _temp_wrapper("merge")
-fast = _temp_wrapper("fast")
-bet = _temp_wrapper("bet")
-flirt = _temp_wrapper("flirt")
-mcflirt = _temp_wrapper("mcflirt")
-apply_xfm = _temp_wrapper("apply_xfm")
-run = _temp_wrapper("run")

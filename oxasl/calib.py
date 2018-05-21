@@ -15,7 +15,10 @@ from optparse import OptionParser
 import numpy as np
 import scipy.ndimage
 
-from . import __version__, AslOptionGroup, fslwrap as fsl
+from fsl.data.image import Image
+
+from . import __version__, AslOptionGroup
+from .fslwrap import Workspace
 
 def main():
     usage = """ASL_CALIB
@@ -34,19 +37,19 @@ def main():
         options = vars(options)
         debug = options.pop("debug", False)
 
-        perf_img = fsl.Image(options.pop("perf", None), "Perfusion")
+        perf_img = Image(options.pop("perf", None), name="Perfusion")
         perf_img.summary()
-        calib_img = fsl.Image(options.pop("calib", None), "Calibration")
+        calib_img = Image(options.pop("calib", None), name="Calibration")
         calib_img.summary()
         brain_mask = options.pop("brain_mask", None)
         if brain_mask is not None:
-            brain_mask_img = fsl.Image(brain_mask, "Mask")
+            brain_mask_img = Image(brain_mask, name="brain_mask")
         else:
-            brain_mask_img = fsl.Image("brain_mask", role="Mask", data=np.ones(perf_img.shape))
+            brain_mask_img = Image(name="brain_mask", image=np.ones(perf_img.shape))
             
         output_name = options.pop("output", None)
         if output_name is None:
-            output_name = "%s_calib" % perf_img.iname
+            output_name = "%s_calib" % perf_img.name
 
         calibrated_img = calib(perf_img, calib_img, output_name, brain_mask=brain_mask_img, **options)
         calibrated_img.summary()
@@ -124,8 +127,8 @@ def calib(perf_img, calib_img, calib_method, output_name=None, multiplier=1.0, v
     """
     Do calibration
 
-    :param data: fsl.Image containing data to calibrate
-    :param calib_img: fsl.Image containing voxelwise m0 map
+    :param data: Image containing data to calibrate
+    :param calib_img: Image containing voxelwise m0 map
     :param calib_method: ``voxelwise`` or ``refregion``
     :param multiplier: Multiplication factor to turn result into desired units
     :param var: If True, assume data represents variance rather than value
@@ -152,22 +155,23 @@ def calib(perf_img, calib_img, calib_method, output_name=None, multiplier=1.0, v
     if isinstance(m0, np.ndarray):
         # If M0 is zero, make calibrated data zero
         calibrated = np.zeros(perf_img.shape)
-        calibrated[m0 > 0] = perf_img.data()[m0 > 0] / m0[m0 > 0]
+        calibrated[m0 > 0] = perf_img.nibImage.get_data()[m0 > 0] / m0[m0 > 0]
     else:
-        calibrated = perf_img.data() / m0
+        calibrated = perf_img.nibImage.get_data() / m0
 
     log.write("Using multiplier for physical units: %f\n" % multiplier)
     calibrated *= multiplier
 
     if output_name is None:
-        output_name = perf_img.iname + "_calib"
-    return perf_img.derived(calibrated, name=output_name)
+        output_name = perf_img.name + "_calib"
+
+    return Image(image=calibrated, name=output_name, header=perf_img.header)
 
 def get_m0_voxelwise(calib_img, gain=1.0, alpha=1.0, tr=None, t1t=None, pct=0.9, brain_mask=None, edgecorr=False, log=sys.stdout):
     """
     Calculate M0 value using voxelwise calibration
 
-    :param calib_img: fsl.Image containing voxelwise m0 map
+    :param calib_img: Image containing voxelwise m0 map
     :param gain: Calibration gain
     :param alpha: Inversion efficiency
     :param tr: Sequence TR (s) (optional for short TR correction)
@@ -176,7 +180,7 @@ def get_m0_voxelwise(calib_img, gain=1.0, alpha=1.0, tr=None, t1t=None, pct=0.9,
     log.write("Doing voxelwise calibration\n")
     
     # Calculate M0 value
-    m0 = calib_img.data() * alpha * gain
+    m0 = calib_img.nibImage.get_data() * alpha * gain
 
     if tr is not None and tr < 5:
         if t1t is not None:
@@ -201,7 +205,7 @@ def edge_correct(m0, brain_mask):
     """
     Correct for (partial volume) edge effects
     """
-    brain_mask = brain_mask.data()
+    brain_mask = brain_mask.nibImage.get_data()
 
     # Median smoothing
     #fslmaths $Mo -fmedian -mas $tempdir/mask -ero $tempdir/calib_ero
@@ -266,7 +270,7 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
 
     FIXME this is not yet complete
 
-    :param calib_img: Calibration image as fsl.Image
+    :param calib_img: Calibration image as Image
     :param ref_mask: Reference region mask image
     :param mode: Calibration mode, ``longtr`` or ``satrecov``
     :param gain: Calibration gain
@@ -302,16 +306,16 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
 
     if "t1r" in kwargs:
         t1r = kwargs.get("t1r", None)
-        if isinstance(t1r, fsl.Image):
-            log.write("Using T1 image for reference region: %s\n" % t1r.iname)
+        if isinstance(t1r, Image):
+            log.write("Using T1 image for reference region: %s\n" % t1r.name)
             t1r_img = True
         elif t1r is not None:
             log.write("Using user-specified T1r value: %f\n" % t1r)
 
     if "t2r" in kwargs:
         t2r = kwargs.get("t2r", None)
-        if isinstance(t2r, fsl.Image):
-            log.write("Using T2 image for reference region: %s\n" % t2r.iname)
+        if isinstance(t2r, Image):
+            log.write("Using T2 image for reference region: %s\n" % t2r.name)
             t2r_img = True
         elif t2r is not None:
             log.write("Using user-specified T2r value: %f\n" % t2r)
@@ -337,19 +341,19 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
     log.write("T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pcr))
 
     # Check the data and masks
-    calib_data = calib_img.data()
+    calib_data = calib_img.nibImage.get_data()
     if calib_data.ndim == 4:
         log.write("Taking mean across calibration images\n")
         calib_data = np.mean(calib_data, -1)
 
     if brain_mask is not None:
-        brain_mask = brain_mask.data()
+        brain_mask = brain_mask.nibImage.get_data()
     else:
         brain_mask = np.ones(calib_img.shape[:3])
 
     if ref_mask is not None:
-        log.write("Using supplied reference tissue mask: %s\n" % ref_mask.iname)
-        ref_mask = ref_mask.data()
+        log.write("Using supplied reference tissue mask: %s\n" % ref_mask.name)
+        ref_mask = ref_mask.nibImage.get_data()
     else:
         # In this case use the brain mask
         log.write("Brain mask is being used as the reference tissue (beware!)\n")
@@ -368,21 +372,21 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
 
     sens_corr = False
     if sens_img:
-        log.write("Using sensitivity image: %s\n" % sens_img.iname)
+        log.write("Using sensitivity image: %s\n" % sens_img.name)
         sens_corr = True
-        sens_data = sens_img.data()
+        sens_data = sens_img.nibImage.get_data()
     elif cref_img:
         log.write("Calculate sensitivity image from reference image\n")
         sens_corr = True
 
         # Take the mean (and mask with the mask from the main calib image)
-        cref_data = cref_img.data()
+        cref_data = cref_img.nibImage.get_data()
         if cref_data.ndim == 4:
             cref_data = np.mean(cref_data, -1)
         cref_data[brain_mask == 0] = 0
         
         if cact_img:
-            cact_data = cact_img.data()
+            cact_data = cact_img.nibImage.get_data()
         elif mode == "longtr":
             # If the cact image has not been supplied then use the mean of the calib image in longtr mode
             cact_data = calib_data
@@ -406,13 +410,13 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
         
         # calcualte T1 of reference region (if a T1 image has been supplied)
         if t1r_img:
-            t1r_data = t1r_img.data()
+            t1r_data = t1r_img.nibImage.get_data()
             t1r = np.mean(t1r_data[ref_mask != 0])
             log.write("Calculated T1 of reference tissue: %f\n" % t1r)
 
         # calcualte T2 of reference region (if a T2 image has been supplied)
         if t2r_img:
-            t2r_data = t2r_img.data()
+            t2r_data = t2r_img.nibImage.get_data()
             t2r = np.mean(t2r_data[ref_mask != 0])
             log.write("Calculated T1 of reference tissue: %f\n" % t2r)
 
@@ -462,19 +466,19 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
             # imcp $calib $temp_calib/calib_senscorr
 
         log.write("Running FABBER within reference tissue mask\n")
-        wsp = fsl.Workspace(workdir=kwargs.get("workdir", None))
+        wsp = Workspace(workdir=kwargs.get("workdir", None))
         wsp.fabber(calib_img, ref_mask, options)
-        mean_m0 = fsl.Image("%s/mean_M0t" % wsp.workdir)
+        mean_m0 = Image("%s/mean_M0t" % wsp.workdir)
 
         # Calculate M0 value - this is mean M0 of CSF at the TE of the sequence
-        m0_value = np.mean(mean_m0.data()[ref_mask != 0])
+        m0_value = np.mean(mean_m0.nibImage.get_data()[ref_mask != 0])
 
         log.write("M0 of reference tissue: %f\n" % m0_value)
 
         if kwargs.get("save_results"):
             # Save useful results
-            t1_ref = fsl.Image("%s/mean_T1t" % wsp.workdir)
-            m0_ref = fsl.Image("%s/mean_M0t" % wsp.workdir)
+            t1_ref = Image("%s/mean_T1t" % wsp.workdir)
+            m0_ref = Image("%s/mean_M0t" % wsp.workdir)
 
             # Do fabber again within whole brain to get estimated T1 of tissue and FA correction (if LL)
             # (note that we do not apply sensitivity correction to the data here - thius is 'built-into' the M0t map)

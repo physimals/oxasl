@@ -9,7 +9,9 @@ import StringIO
 import pytest
 import numpy as np
 
-from oxasl import basil, AslImage, fsl
+from fsl.data.image import Image
+
+from oxasl import basil, AslImage
 
 DEFAULTS = {
     "method" : "vb",
@@ -62,7 +64,7 @@ def test_infer_nothing():
     Check we get an error if there is nothing to infer
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     with pytest.raises(ValueError):
@@ -73,7 +75,7 @@ def test_defaults():
     Check the basic defaults (infer tissue perfusion and bolus arrival time)
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     options = _get_defaults(img)
@@ -88,7 +90,7 @@ def test_fix_bat():
     Check fixing the arrival time, which is normally inferred
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     options = _get_defaults(img)
@@ -105,7 +107,7 @@ def test_inferart():
     Check inference of arterial component
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     options = _get_defaults(img)
@@ -128,7 +130,7 @@ def test_infertau():
     Check inference of bolus duration (tau)
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     options = _get_defaults(img)
@@ -151,7 +153,7 @@ def test_inferarttau():
     Check inference of bolus duration (tau) and arterial component
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     options = _get_defaults(img)
@@ -184,7 +186,7 @@ def test_infert1():
     Check inference of T1
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     options = _get_defaults(img)
@@ -207,11 +209,11 @@ def test_t1im():
     Check T1 image priors are correctly handled
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     t1d = np.random.rand(5, 5, 5)
-    t1im = fsl.Image("t1file", data=t1d)
+    t1im = Image(name="t1file", image=t1d)
     steps = basil.get_steps(img, infert1=True, t1im=t1im, log=log)
     assert(len(steps) == 2)
 
@@ -235,7 +237,7 @@ def test_inferpc():
     Check the pre-capiliary component
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     options = _get_defaults(img)
@@ -258,7 +260,7 @@ def test_artonly():
     Check we can infer arterial component without tissue step
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     steps = basil.get_steps(img, infertiss=False, inferart=True, log=log)
@@ -279,11 +281,11 @@ def test_initmvn():
     Check the supply of an initialization MVN
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     mvnd = np.random.rand(5, 5, 5, 6)
-    initmvn = fsl.Image("mvnfile", data=mvnd)
+    initmvn = Image(name="mvnfile", image=mvnd)
     steps = basil.get_steps(img, initmvn=initmvn, log=log)
     assert(len(steps) == 1)
 
@@ -299,7 +301,7 @@ def test_spatial():
     Check final spatial step
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     options = _get_defaults(img)
@@ -324,7 +326,7 @@ def test_onestep():
     Check that single step mode works when you would normally get multiple steps
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     steps = basil.get_steps(img, infertau=True, inferart=True, spatial=True, onestep=True, log=log)
@@ -350,7 +352,7 @@ def test_max_iterations():
     Check that max iterations can be overridden
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     kwargs = {
@@ -370,7 +372,7 @@ def test_random_extra_options():
     Check that any additional keyword arguments are passed to Fabber
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     kwargs = {
@@ -389,11 +391,11 @@ def test_pvc_only_one_map_given1():
     Check that PVC correction fails if you only give the GM map
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     pgmd = np.random.rand(5, 5, 5)
-    pgm = fsl.Image("pgm_map", data=pgmd)
+    pgm = Image(name="pgm_map", image=pgmd)
     with pytest.raises(ValueError):
         basil.get_steps(img, pgm=pgm, log=log)
     
@@ -402,11 +404,11 @@ def test_pvc_only_one_map_given2():
     Check that PVC correction fails if you only give the WM map
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     pwmd = np.random.rand(5, 5, 5)
-    pwm = fsl.Image("pwm_map", data=pwmd)
+    pwm = Image(name="pwm_map", image=pwmd)
     with pytest.raises(ValueError):
         basil.get_steps(img, pwm=pwm, log=log)
     
@@ -415,14 +417,14 @@ def test_pvc_no_tissue():
     Check that PVC correction fails if you do not infer the tissue component
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     pgmd = np.random.rand(5, 5, 5)
-    pgm = fsl.Image("pgm_map", data=pgmd)
+    pgm = Image(name="pgm_map", image=pgmd)
 
     pwmd = np.random.rand(5, 5, 5)
-    pwm = fsl.Image("pwm_map", data=pwmd)
+    pwm = Image(name="pwm_map", image=pwmd)
 
     with pytest.raises(ValueError):
         basil.get_steps(img, pgm=pgm, pwm=pwm, infertiss=False, log=log)
@@ -433,14 +435,14 @@ def test_pvc():
     and how to do this is not finalized
     """
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage("asldata", data=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
     log = StringIO.StringIO()
 
     pgmd = np.random.rand(5, 5, 5)
-    pgm = fsl.Image("pgm_map", data=pgmd)
+    pgm = Image(name="pgm_map", image=pgmd)
 
     pwmd = np.random.rand(5, 5, 5)
-    pwm = fsl.Image("pwm_map", data=pwmd)
+    pwm = Image(name="pwm_map", image=pwmd)
 
     steps = basil.get_steps(img, pgm=pgm, pwm=pwm, log=log)
     assert(len(steps) == 3)

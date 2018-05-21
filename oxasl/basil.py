@@ -8,6 +8,8 @@ Copyright (c) 2008-2018 University of Oxford
 import sys
 from optparse import OptionParser
 
+from fsl.data.image import Image
+
 from . import __version__, AslImage, AslOptionGroup, fslwrap as fsl
 from .image import add_data_options
 
@@ -31,8 +33,8 @@ def _do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sy
     :param step: Step number
     :param step_desc: Description of step. The special value "PVC" indicates partial volume
                       correction preprocessing step
-    :param infile: Input data as fsl.Image
-    :param mask: Optional mask as fsl.Image (or None)
+    :param infile: Input data as Image
+    :param mask: Optional mask as Image (or None)
     :param options: Dictionary of Fabber options, not including the ``--`` command line prefix
     :param prev_step: Optional number of previous step to initialize from
     :param log: File stream for log output
@@ -53,14 +55,14 @@ def _do_pvc_init(wsp, mask, prev_step, options):
 
     # Modified pvgm map
     #fsl.maths(pgm, " -sub 0.2 -thr 0 -add 0.2 temp_pgm")
-    temp_pgm = options["pgm"].data()
+    temp_pgm = options["pgm"].nibImage.get_data()
     temp_pgm[temp_pgm < 0.2] = 0.2
 
     # First part of correction psuedo WM CBF term
-    #fsl.run("mvntool", "--input=temp --output=temp_ftiss --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --val" % (mask.iname, prev_step))
-    #fsl.maths("temp_ftiss", "-mul %f -mul %s wmcbfterm" % (wm_cbf_ratio, pwm.iname))
-    prev_ftiss = fsl.Image("step%i/mean_ftiss" % prev_step).data()
-    wm_cbf_term = (prev_ftiss * wm_cbf_ratio) * options["pwm"].data()
+    #fsl.run("mvntool", "--input=temp --output=temp_ftiss --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --val" % (mask.name, prev_step))
+    #fsl.maths("temp_ftiss", "-mul %f -mul %s wmcbfterm" % (wm_cbf_ratio, pwm.name))
+    prev_ftiss = Image("step%i/mean_ftiss" % prev_step).nibImage.get_data()
+    wm_cbf_term = (prev_ftiss * wm_cbf_ratio) * options["pwm"].nibImage.get_data()
 
     #fsl.maths("temp_ftiss", "-sub wmcbfterm -div temp_pgm gmcbf_init")
     #fsl.maths("gmcbf_init -mul %f wmcbf_init" % wm_cbf_ratio)
@@ -69,8 +71,8 @@ def _do_pvc_init(wsp, mask, prev_step, options):
 
     # load these into the MVN, GM cbf is always param 1
     mvnfile = "step%i/finalMVN" % prev_step
-    fsl.run("mvntool", "--input=%s --output=%s --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --write --valim=gmcbf_init --var=0.1" % (mask.iname, mvnfile, mvnfile, prev_step))
-    fsl.run("mvntool", "--input=%s --output=%s --mask=%s --param=fwm --param-list=step%i/paramnames.txt --write --valim=wmcbf_init --var=0.1" % (mask.iname, mvnfile, mvnfile, prev_step))
+    fsl.run("mvntool", "--input=%s --output=%s --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --write --valim=gmcbf_init --var=0.1" % (mask.name, mvnfile, mvnfile, prev_step))
+    fsl.run("mvntool", "--input=%s --output=%s --mask=%s --param=fwm --param-list=step%i/paramnames.txt --write --valim=wmcbf_init --var=0.1" % (mask.name, mvnfile, mvnfile, prev_step))
 
 def run_steps(wsp, steps, log=sys.stdout):
     for step in steps:
@@ -98,10 +100,10 @@ def get_steps(asldata, mask=None,
     :param inferpc: If True, infer PC 
     :param spatial: If True, include final spatial VB step
     :param onestep: If True, do all inference in a single step
-    :param t1im: T1 map as fsl.Image
-    :param pgm:  Grey matter partial volume map as fsl.Image
-    :param t1im: White matter partial volume map as fsl.Image
-    :param initmvn: MVN structure to use as initialization as fsl.Image   
+    :param t1im: T1 map as Image
+    :param pgm:  Grey matter partial volume map as Image
+    :param t1im: White matter partial volume map as Image
+    :param initmvn: MVN structure to use as initialization as Image   
     :param kwargs: Additional model options can be passed as keyword arguments,
                    e.g. ``ti1=1.8``
     """
@@ -182,12 +184,12 @@ def get_steps(asldata, mask=None,
 
     if initmvn:
         # we are being supplied with an initial MVN
-        log.write("Initial MVN being loaded %s" % initmvn.iname)
-        options["continue-from-mvn"] = initmvn.iname
+        log.write("Initial MVN being loaded %s" % initmvn.name)
+        options["continue-from-mvn"] = initmvn.name
     
     # T1 image prior
     if t1im:
-        spriors = _add_prior(options, spriors, "T_1", type="I", image=t1im.iname)
+        spriors = _add_prior(options, spriors, "T_1", type="I", image=t1im.name)
 
     step = 1
     steps = []
@@ -256,14 +258,14 @@ def get_steps(asldata, mask=None,
         options["pvcorr"] = True
 
         # set the image priors for the PV maps
-        spriors = _add_prior(options, spriors, "pvgm", type="I", image=pgm.iname)
-        spriors = _add_prior(options, spriors, "pvwm", type="I", image=pwm.iname)
+        spriors = _add_prior(options, spriors, "pvgm", type="I", image=pgm.name)
+        spriors = _add_prior(options, spriors, "pvwm", type="I", image=pwm.name)
         spriors = _add_prior(options, spriors, "fwm", type="M")
 
         if prev_step:
             # Add initialisaiton step for PV correction - ONLY if we have something to init from 
             # (either step greater than 1 or initmvn set)
-            step, prev_step = _add_step(steps, step, "PVC", asldata, mask, {"pgm" : pgm.iname, "pwm" : pwm.iname}, prev_step)
+            step, prev_step = _add_step(steps, step, "PVC", asldata, mask, {"pgm" : pgm.name, "pwm" : pwm.name}, prev_step)
 
     ### --- SPATIAL MODULE ---
     if spatial:
@@ -339,12 +341,15 @@ def main():
             "pgm" : "Grey matter PV map",
         }
 
-        # Convert image options into fsl.Image objects and copy into workspace - this 
+        # Convert image options into Image objects and copy into workspace - this 
         # also checks they exist and can be loaded
-        options["asldata"] = AslImage(options["asldata"], role="Input", **options).diff().reorder("rt")
+        if not options.get("asldata", None):
+            raise ValueError("ASL input data not specified")
+        options["asldata"] = AslImage(options["asldata"], **options).diff().reorder("rt")
+        wsp.add_img(options["asldata"])
         for opt, role in images.items():
             if options[opt]:
-                options[opt] = fsl.Image(options[opt], role=role)
+                options[opt] = Image(image=options[opt], name=role)
                 wsp.add_img(options[opt])
 
         # Remove options consumed by AslImage
@@ -359,11 +364,6 @@ def main():
 
         # Deal with --fixbat
         options["inferbat"] = not options.pop("fixbat", False)
-
-        # Save input image and mask into output dir - not strictly necessary
-        # but may be useful to the user since output is then more self-contained
-        wsp.add_img(options["asldata"])
-        wsp.add_img(options["mask"])
 
         # Adjust number of iterations based on fast option
         fast = options.pop("fast", 0)
