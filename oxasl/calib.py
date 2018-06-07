@@ -18,6 +18,7 @@ import scipy.ndimage
 from fsl.data.image import Image
 
 from . import __version__, AslOptionGroup
+from .image import summary
 from .fslwrap import Workspace
 
 def main():
@@ -33,17 +34,28 @@ def main():
         add_calib_options(p)
         options, _ = p.parse_args()
         
+        if not options.perf:
+            sys.stderr.write("Perfusion input file not specified\n")
+            p.print_help()
+            sys.exit(1)
+
+        if not options.calib:
+            sys.stderr.write("Calibration input file not specified\n")
+            p.print_help()
+            sys.exit(1)
+
         # Convert to dictionary for easier handling
         options = vars(options)
         debug = options.pop("debug", False)
 
-        perf_img = Image(options.pop("perf", None), name="Perfusion")
-        perf_img.summary()
-        calib_img = Image(options.pop("calib", None), name="Calibration")
-        calib_img.summary()
+        perf_img = Image(options.pop("perf", None))
+        summary(perf_img)
+        calib_img = Image(options.pop("calib", None))
+        summary(calib_img)
+
         brain_mask = options.pop("brain_mask", None)
         if brain_mask is not None:
-            brain_mask_img = Image(brain_mask, name="brain_mask")
+            brain_mask_img = Image(brain_mask)
         else:
             brain_mask_img = Image(name="brain_mask", image=np.ones(perf_img.shape))
             
@@ -51,9 +63,9 @@ def main():
         if output_name is None:
             output_name = "%s_calib" % perf_img.name
 
-        calibrated_img = calib(perf_img, calib_img, output_name, brain_mask=brain_mask_img, **options)
-        calibrated_img.summary()
-        calibrated_img.save()
+        calibrated_img = calib(perf_img, calib_img, options.pop("calib_method", None), output_name, brain_mask=brain_mask_img, **options)
+        summary(calibrated_img)
+        calibrated_img.save(calibrated_img.name)
     except Exception as e:
         sys.stderr.write("ERROR: " + str(e) + "\n")
         if debug:
@@ -167,7 +179,7 @@ def calib(perf_img, calib_img, calib_method, output_name=None, multiplier=1.0, v
 
     return Image(image=calibrated, name=output_name, header=perf_img.header)
 
-def get_m0_voxelwise(calib_img, gain=1.0, alpha=1.0, tr=None, t1t=None, pct=0.9, brain_mask=None, edgecorr=False, log=sys.stdout):
+def get_m0_voxelwise(calib_img, gain=1.0, alpha=1.0, tr=None, t1t=None, pct=0.9, brain_mask=None, edgecorr=False, log=sys.stdout, **kwargs):
     """
     Calculate M0 value using voxelwise calibration
 
@@ -304,27 +316,27 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
     # Command line override of default T1, T2, PC
     t1r_img, t2r_img = False, False
 
-    if "t1r" in kwargs:
-        t1r = kwargs.get("t1r", None)
+    if kwargs.get("t1r", None):
+        t1r = kwargs["t1r"]
         if isinstance(t1r, Image):
             log.write("Using T1 image for reference region: %s\n" % t1r.name)
             t1r_img = True
-        elif t1r is not None:
+        else:
             log.write("Using user-specified T1r value: %f\n" % t1r)
 
-    if "t2r" in kwargs:
-        t2r = kwargs.get("t2r", None)
+    if kwargs.get("t2r", None):
+        t2r = kwargs["t2r"]
         if isinstance(t2r, Image):
             log.write("Using T2 image for reference region: %s\n" % t2r.name)
             t2r_img = True
-        elif t2r is not None:
+        else:
             log.write("Using user-specified T2r value: %f\n" % t2r)
 
-    if "t2b" in kwargs:
+    if kwargs.get("t2b", None):
         t2b = kwargs["t2b"]
         log.write("Using user-specified T2b value: %f\n" % t2b)
         
-    if "pcr" in kwargs:
+    if kwargs.get("pcr", None):
         pcr = kwargs["pcr"]
         log.write("Using user-specified partition coefficient: %f\n" % pcr)
 

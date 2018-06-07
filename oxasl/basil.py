@@ -39,7 +39,7 @@ def _do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sy
     :param prev_step: Optional number of previous step to initialize from
     :param log: File stream for log output
     """
-    if prev_step == "PVC":
+    if step_desc == "PVC":
         _do_pvc_init(wsp, mask, prev_step, options)
     else:
         if prev_step is not None:

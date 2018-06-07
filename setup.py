@@ -49,11 +49,11 @@ setup(
     install_requires=requirements,
     entry_points = {
         'console_scripts' : [
-            "asl_preproc=oxasl.preproc:main", 
-            "asl_basil=oxasl.basil:main",
-            "asl_pycalib=oxasl.calib:main",
-            "asl_pygui=oxasl.gui:main",
-            "asl_oxasl=oxasl.oxford_asl:main",
+            "oxasl_preproc=oxasl.preproc:main", 
+            "oxasl_basil=oxasl.basil:main",
+            "oxasl_calib=oxasl.calib:main",
+            "oxasl_gui=oxasl.gui:main",
+            "oxasl=oxasl.oxford_asl:main",
         ],
     },
     classifiers=[

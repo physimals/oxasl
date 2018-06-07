@@ -41,6 +41,14 @@ def add_data_options(parser, fname_opt="-i", output_type="directory", **kwargs):
     g.add_option("--ibf", dest="ibf", help="input block format (for multi-TI): rpt,tis")
     parser.add_option_group(g)
 
+def summary(img, log=sys.stdout):
+    """
+    Write a summary of the data to a file stream
+    """
+    log.write("%s:\n" % (img.name.ljust(30)))
+    if hasattr(img, "summary"):
+        img.summary(log=log)
+
 class AslImage(Image):
 
     DIFFERENCED = 0
@@ -81,10 +89,15 @@ class AslImage(Image):
     """
   
     def __init__(self, image, name=None, **kwargs):
+        if image is None:
+            raise ValueError("No image data (filename, Nibabel object or Numpy array)")
+
         img_args = dict([(k, v) for k, v in kwargs.items() if k in ("header")])
         Image.__init__(self, image, name=name, **img_args)
         
         order = kwargs.pop("order", None)
+        iaf = kwargs.pop("iaf", None)
+        ibf = kwargs.pop("ibf", None)
         ntis = kwargs.pop("ntis", None)
         nplds = kwargs.pop("nplds", None)
         tis = kwargs.pop("tis", None)
@@ -101,7 +114,12 @@ class AslImage(Image):
         else:
             raise RuntimeError("3D or 4D data expected")
 
-        if order is None:
+        if iaf is not None:
+            if order:
+                raise ValueError("Can't specifiy IAF and order parameters together")
+            raise RuntimeError("iaf is not implemented yet")
+        elif order is None:
+            #warnings.warn("Data order was not specified - assuming TC pairs in blocks of repeats")
             raise ValueError("Data order must be specified")
         self.order = order
 
@@ -234,8 +252,8 @@ class AslImage(Image):
             raise RuntimeError("Output order contains multiphases but data does not")
 
         #print("reordering from %s to %s" % (self.order, out_order))
-        output_data = np.zeros(self.shape)
         input_data = self.nibImage.get_data()
+        output_data = np.zeros(self.shape, dtype=input_data.dtype)
         if input_data.ndim == 3:
             input_data = input_data[..., np.newaxis]
         tags = range(self.ntc)
@@ -249,7 +267,7 @@ class AslImage(Image):
                     #print("Output (%s) index %i" % (out_order, out_idx))
                     output_data[:, :, :, out_idx] = input_data[:, :, :, in_idx]
                     #print("")
-        return AslImage(image=output_data, name=self.name + "_reorder",
+        return AslImage(image=output_data, name=self.name + "_reorder", header=self.header,
                         order=out_order, tis=self.tis, ntis=self.ntis, rpts=self.rpts, phases=self.phases,
                         base=self)
 
@@ -453,24 +471,24 @@ class AslWorkspace(Workspace):
         smoothed = scipy.ndimage.gaussian_filter(img.nibImage.get_data(), sigma=sigma)
         return img.derived(smoothed, suffix="_smooth")
 
-    def preprocess(self, asldata, diff=False, order=None, mc=False, smooth=False, fwhm=None, ref=None, **kwargs):
+    def preprocess(self, asldata, diff=False, reorder=None, mc=False, smooth=False, fwhm=None, ref=None, **kwargs):
         self.log.write("ASL preprocessing...\n")
 
         # Keep original AslImage with info about TIs, repeats, etc
         orig = asldata
 
         if diff: 
-            self.log.write("Tag-control subtraction\n")
+            self.log.write("  - Tag-control subtraction\n")
             asldata = asldata.diff()
             
-        if order:
-            self.log.write("Re-ordering to %s\n" % order)
-            if "p" in order.lower() and diff:
-                order = order.replace("p", "").replace("P", "") 
-            asldata = asldata.reorder(order)
+        if reorder:
+            self.log.write("  - Re-ordering to %s\n" % reorder)
+            if "p" in reorder.lower() and diff:
+                reorder = reorder.replace("p", "").replace("P", "") 
+            asldata = asldata.reorder(reorder)
 
         if mc: 
-            self.log.write("Motion correction\n")
+            self.log.write("  - Motion correction\n")
             output = mcflirt(asldata, cost="mutualinfo", out=LOAD)
             asldata = asldata.derived(output["out"].nibImage.get_data(), suffix="_mc")
 

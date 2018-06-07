@@ -43,7 +43,7 @@ def _check_step(step, step_num=None, desc_text=None, data_name=None, options=Non
     if desc_text:
         assert(desc_text.lower().strip() in step[1].lower())
     if data_name:
-        assert(step[2].iname == data_name)
+        assert(step[2].name == data_name)
     if options:
         for k, v in options.items():
             assert(step[4][k] == v)

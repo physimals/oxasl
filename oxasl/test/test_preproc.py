@@ -38,7 +38,7 @@ def test_preproc_reorder_diff():
     orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
     
     wsp = AslWorkspace()
-    proc = wsp.preprocess(orig, diff=True, order="ptr")
+    proc = wsp.preprocess(orig, diff=True, reorder="ptr")
     assert proc.ntis == orig.ntis
     assert proc.tis == orig.tis
     assert proc.have_plds == orig.have_plds
@@ -52,7 +52,7 @@ def test_preproc_diff_reorder():
     orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
     
     wsp = AslWorkspace()
-    proc = wsp.preprocess(orig, diff=True, order="tr")
+    proc = wsp.preprocess(orig, diff=True, reorder="tr")
     assert proc.ntis == orig.ntis
     assert proc.tis == orig.tis
     assert proc.have_plds == orig.have_plds

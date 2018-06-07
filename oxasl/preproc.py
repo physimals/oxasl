@@ -21,16 +21,22 @@ def main():
     Entry point for command line tool
     """
     try:
-        p = OptionParser(usage="asl_preproc", version="@VERSION@")
+        p = OptionParser(usage="asl_preproc -i <filename> [options]", version="@VERSION@")
         add_data_options(p, output_type="file")
         add_preproc_options(p)
         options, _ = p.parse_args(sys.argv)
 
+        if not options.asldata:
+            sys.stderr.write("Input file not specified\n")
+            p.print_help()
+            sys.exit(1)
+
         options.asldata = AslImage(options.asldata, role="Input data", **vars(options))
         if options.output is None:
-            options.output = options.asldata.iname + "_out"
+            options.output = options.asldata.name + "_out"
         options.asldata.summary()
-        
+        print("")
+
         wsp = AslWorkspace(echo=options.debug)
         data_preproc = wsp.preprocess(**vars(options))
         data_preproc.save(options.output)
