@@ -1,15 +1,14 @@
 import pytest
 import numpy as np
 
-from oxasl import AslImage, AslWorkspace
+from oxasl import AslImage, preprocess
 
 def test_preproc_none():
     d = np.random.rand(5, 5, 5, 6)
     orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
     orig.summary()
 
-    wsp = AslWorkspace()
-    proc = wsp.preprocess(orig)
+    proc = preprocess(orig)
     proc.summary()
     assert orig.name == proc.name
     assert orig.ntis == proc.ntis
@@ -23,8 +22,7 @@ def test_preproc_diff():
     d = np.random.rand(5, 5, 5, 6)
     orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
 
-    wsp = AslWorkspace()
-    proc = wsp.preprocess(orig, diff=True)
+    proc = preprocess(orig, diff=True)
     assert proc.ntis == orig.ntis
     assert proc.tis == orig.tis
     assert proc.have_plds == orig.have_plds
@@ -37,8 +35,7 @@ def test_preproc_reorder_diff():
     d = np.random.rand(5, 5, 5, 6)
     orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
     
-    wsp = AslWorkspace()
-    proc = wsp.preprocess(orig, diff=True, reorder="ptr")
+    proc = preprocess(orig, diff=True, reorder="ptr")
     assert proc.ntis == orig.ntis
     assert proc.tis == orig.tis
     assert proc.have_plds == orig.have_plds
@@ -51,8 +48,7 @@ def test_preproc_diff_reorder():
     d = np.random.rand(5, 5, 5, 6)
     orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
     
-    wsp = AslWorkspace()
-    proc = wsp.preprocess(orig, diff=True, reorder="tr")
+    proc = preprocess(orig, diff=True, reorder="tr")
     assert proc.ntis == orig.ntis
     assert proc.tis == orig.tis
     assert proc.have_plds == orig.have_plds
@@ -65,8 +61,7 @@ def test_preproc_smooth():
     d = np.random.rand(5, 5, 5, 6)
     orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
     
-    wsp = AslWorkspace()
-    proc = wsp.preprocess(orig, smooth=True, fwhm=1.5)
+    proc = preprocess(orig, smooth=True, fwhm=1.5)
     assert proc.ntis == orig.ntis
     assert proc.tis == orig.tis
     assert proc.have_plds == orig.have_plds
@@ -79,8 +74,7 @@ def test_preproc_moco():
     d = np.random.rand(5, 5, 5, 6)
     orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
     
-    wsp = AslWorkspace()
-    proc = wsp.preprocess(orig, mc=True)
+    proc = preprocess(orig, mc=True)
     assert proc.ntis == orig.ntis
     assert proc.tis == orig.tis
     assert proc.have_plds == orig.have_plds

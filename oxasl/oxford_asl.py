@@ -14,10 +14,13 @@ from optparse import OptionParser
 
 import numpy as np
 
-from . import __version__, AslOptionGroup, AslImage, fslwrap as fsl, basil
-from .image import add_data_options
+from fsl.data.image import Image
+
+from . import __version__, AslOptionGroup
+from .image import AslImage, add_data_options
 from .calib import add_calib_options
-from .basil import add_basil_options
+from .basil import basil, add_basil_options
+from .workspace import Workspace
 
 def add_oxasl_options(parser, ignore=()):
     g = AslOptionGroup(parser, "Main Options", ignore=ignore)

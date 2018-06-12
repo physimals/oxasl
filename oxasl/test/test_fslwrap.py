@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from oxasl import fsl
+import oxasl.fslwrap as fsl
 
 def test_numpy_image():
     d = np.random.rand(5, 5, 5, 6)

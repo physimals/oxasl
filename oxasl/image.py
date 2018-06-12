@@ -1,18 +1,13 @@
 """
-Basic classes for ASL data processing
+Subclass of fsl.data.image.Image which represents ASL data
 """
 
 import sys
-import math
 from optparse import OptionGroup
 
 import numpy as np
-import scipy
 
 from fsl.data.image import Image
-from fsl.wrappers import mcflirt, fslmaths, LOAD
-
-from .fslwrap import Workspace
 
 class AslOptionGroup(OptionGroup):
     """
@@ -27,6 +22,9 @@ class AslOptionGroup(OptionGroup):
             OptionGroup.add_option(self, name, *args, **kwargs)
 
 def add_data_options(parser, fname_opt="-i", output_type="directory", **kwargs):
+    """
+    Add options to an OptionParser for specifying an AslImage
+    """
     parser.add_option("-o", dest="output", help="Output %s" % output_type, default=None)
     parser.add_option("--debug", dest="debug", help="Debug mode", action="store_true", default=False)
 
@@ -50,13 +48,8 @@ def summary(img, log=sys.stdout):
         img.summary(log=log)
 
 class AslImage(Image):
-
-    DIFFERENCED = 0
-    TC_PAIRS = 1
-    MULTIPHASE = 2
-
     """
-    Subclass of fslwrap.Image which adds ASL structure information
+    Subclass of fsl.data.image.Image which adds ASL structure information
 
     An AslImage contains information about the structure of the data enabling it to perform
     operations such as reordering and tag/control differencing.
@@ -88,6 +81,10 @@ class AslImage(Image):
       ``rpts`` - Repeats, one value per TI (may be constant but always stored as list)
     """
   
+    DIFFERENCED = 0
+    TC_PAIRS = 1
+    MULTIPHASE = 2
+
     def __init__(self, image, name=None, **kwargs):
         if image is None:
             raise ValueError("No image data (filename, Nibabel object or Numpy array)")
@@ -114,9 +111,9 @@ class AslImage(Image):
         else:
             raise RuntimeError("3D or 4D data expected")
 
-        if iaf is not None:
-            if order:
-                raise ValueError("Can't specifiy IAF and order parameters together")
+        if order and (iaf or ibf):
+            raise ValueError("Can't specifiy IAF and order parameters together")
+        elif iaf:
             raise RuntimeError("iaf is not implemented yet")
         elif order is None:
             #warnings.warn("Data order was not specified - assuming TC pairs in blocks of repeats")
@@ -373,6 +370,9 @@ class AslImage(Image):
         return Image(image=meandata, name=self.name + "_perf_weighted", base=self)
             
     def split_epochs(self, epoch_size, overlap=0, time_order=None):
+        """
+        Split ASL data into 'epochs' of a specified size, with optional overlap
+        """
         asldata = self.diff()
         if time_order is not None:
             asldata = asldata.reorder(time_order)
@@ -450,80 +450,8 @@ class AslImage(Image):
             name = self.name
         name = name + suffix
         if image.ndim != self.ndim or (image.ndim == 4 and image.shape[3] != self.shape[3]):
-            print(kwargs)
             return Image(image=image, name=name, **kwargs)
         else:
             
             return AslImage(image=image, name=name, base=self,
                             order=self.order, ntis=self.ntis, tis=self.tis, rpts=self.rpts, phases=self.phases, **kwargs)
-
-class AslWorkspace(Workspace):
-    """
-    Adds some functionality to an fslwrap.Workspace which is useful to ASL images
-    """
-
-    def smooth(self, img, fwhm, output_name=None):
-        if output_name is None:
-            output_name = img.name + "_smooth"
-        sigma = round(fwhm/2.355, 2)
-
-        self.log.write("Spatial smoothing with FWHM: %f (sigma=%f)\n" % (fwhm, sigma))
-        smoothed = scipy.ndimage.gaussian_filter(img.nibImage.get_data(), sigma=sigma)
-        return img.derived(smoothed, suffix="_smooth")
-
-    def preprocess(self, asldata, diff=False, reorder=None, mc=False, smooth=False, fwhm=None, ref=None, **kwargs):
-        self.log.write("ASL preprocessing...\n")
-
-        # Keep original AslImage with info about TIs, repeats, etc
-        orig = asldata
-
-        if diff: 
-            self.log.write("  - Tag-control subtraction\n")
-            asldata = asldata.diff()
-            
-        if reorder:
-            self.log.write("  - Re-ordering to %s\n" % reorder)
-            if "p" in reorder.lower() and diff:
-                reorder = reorder.replace("p", "").replace("P", "") 
-            asldata = asldata.reorder(reorder)
-
-        if mc: 
-            self.log.write("  - Motion correction\n")
-            output = mcflirt(asldata, cost="mutualinfo", out=LOAD)
-            asldata = asldata.derived(output["out"].nibImage.get_data(), suffix="_mc")
-
-        if smooth:
-            asldata = self.smooth(asldata, fwhm=fwhm)
-
-        self.log.write("DONE\n\n")
-        return asldata
-
-    def reg(self, wsp, ref, reg_targets, options, ref_str="asl"):
-        """ 
-        FIXME not functional yet
-        """
-        self.log.write("Segmentation and co-registration...\n")
-
-        # Brain-extract ref image
-        ref_bet = wsp.bet(ref)
-
-        # This is done to avoid the contrast enhanced rim resulting from low intensity ref image
-        d = ref_bet.nibImage.get_data()
-        thr_ref = np.percentile(d[d != 0], 10.0)
-        d[d < thr_ref] = 0
-        raw_bet = ref_bet.derived(d, save=True)
-
-        for imgs in reg_targets:
-            reg = imgs[0]
-            reg_bet = wsp.bet(reg, args="-B -f 0.3")
-            name = "%s_2%s" % (reg.name, ref_str)
-            name_inv = "%s_2%s" % (ref_str, reg.name)
-            postreg, mat, invmat = wsp.flirt(ref_bet, args="-dof 7", 
-                                             output_name=name,
-                                             output_mat=name + ".mat",
-                                             output_invmat=name_inv + ".mat")
-            wsp.write_file(matrix_to_text(invmat), name_inv)
-            for coreg in imgs[1:]:
-                wsp.apply_xfm(coreg, ref_bet, name_inv, args="-interp nearestneighbour", output_name="%s_fast_seg_2asl" % t1.name)
-    
-        self.log.write("DONE\n\n")

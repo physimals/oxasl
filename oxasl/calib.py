@@ -19,7 +19,7 @@ from fsl.data.image import Image
 
 from . import __version__, AslOptionGroup
 from .image import summary
-from .fslwrap import Workspace
+from .workspace import Workspace
 
 def main():
     usage = """ASL_CALIB
@@ -435,13 +435,15 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
         # calculate M0_ref value
         m0 = np.mean(calib_data[ref_mask != 0])
         log.write("mean of reference tissue: %f\n" % m0)
-        m0 = m0 / (1 - math.exp(- (tr - taq) / t1r) )
+        m0 = m0 / (1 - math.exp(- (tr - taq) / t1r))
         log.write("M0 of reference tissue: %f\n" % m0)
         
     elif mode == "satrecov":
         # Calibration image is control images and we want to do a saturation recovery fit
         # NB only do the fit in the CSF mask
         options = {
+            "data" : calib_img,
+            "mask" : ref_mask,
             "method" : "vb",
             "noise" : "white",
             "model" : "satrecov",
@@ -479,7 +481,7 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
 
         log.write("Running FABBER within reference tissue mask\n")
         wsp = Workspace(workdir=kwargs.get("workdir", None))
-        wsp.fabber(calib_img, ref_mask, options)
+        wsp.fabber(options)
         mean_m0 = Image("%s/mean_M0t" % wsp.workdir)
 
         # Calculate M0 value - this is mean M0 of CSF at the TE of the sequence
@@ -495,8 +497,8 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
             # Do fabber again within whole brain to get estimated T1 of tissue and FA correction (if LL)
             # (note that we do not apply sensitivity correction to the data here - thius is 'built-into' the M0t map)
             log.write("FABBER (again) within whole brain mask\n")
-
-            wsp.fabber(calib_img, brain_mask, options)
+            options["mask"] = brain_mask
+            wsp.fabber(options)
             # $fabber --data=$calib --mask=$bmask --output=$temp_calib/satrecovT --data-order=singlefile --model=satrecov --noise=white --method=vb $tislist $llopts $sropts 
 
             # save useful results to specified output directory

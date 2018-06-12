@@ -1,21 +1,18 @@
-#!/usr/bin/env python
 """
-FSL wrapper functions - named fslwrap so as not to clash with any potential
-'official' FSL python modules which would probably be named 'fsl'
+Workspace for executing FSL commands
 """
 
 import os
 import sys
 import shutil
-import shlex
-import subprocess
 import errno
 import tempfile
-import collections
-import re
 
-import nibabel as nib
 import numpy as np
+
+from fsl.data.image import Image
+
+from .fabber import Fabber, percent_progress
 
 class Workspace(object):
     """
@@ -31,11 +28,11 @@ class Workspace(object):
         :param workdir: If specified, use this path for the working directory. Will be created
                         if it does not not already exist
         :param log:     File stream to write log output to (default: sys.stdout)
-        :param imgs: List of Image object which will be save to working directory
-        :param path: Optional list of directories to search for binaries. If not specified, will
-        look in $FSLDEVDIR/bin, $FSLDIR/bin
-        :param debug: If True, enable debugging messages
-        :param echo: If True, echo commands and their output to the log
+        :param imgs:    List of Image object which will be save to working directory
+        :param path:    Optional list of directories to search for binaries. If not specified, will
+                        look in $FSLDEVDIR/bin, $FSLDIR/bin
+        :param debug:   If True, enable debugging messages
+        :param echo:    If True, echo commands and their output to the log
         :param use_local_dir: If True, use the directory of the calling program (sys.argv[0])
         as the first entry in the binary search path. This is enabled by default because
         it gives a useful way for scripts to replace standard FSL programs with their own copies
@@ -70,6 +67,12 @@ class Workspace(object):
     def __del__(self):
         if self.is_temp:
             shutil.rmtree(self.workdir)
+
+    def img(self, name):
+        """
+        Get an fsl.data.image.Image from the workspace
+        """
+        return Image(os.path.join(self.workdir, name))
 
     def add_img(self, img, name=None):
         """
@@ -123,40 +126,37 @@ class Workspace(object):
         """
         return Workspace(os.path.join(self.workdir, name), imgs=imgs, log=self.log)
 
-    def fabber(self, model_group, img, mask, options, overwrite=True, **kwargs):
+    def _wsp_fn(method):
+        def _func(self, *args, **kwargs):
+            cwd = os.getcwd()
+            try:
+                os.chdir(self.workdir)
+                return method(self, *args, **kwargs)
+            finally:
+                os.chdir(cwd)
+        return _func
+
+    @_wsp_fn
+    def fabber(self, options, **kwargs):
         """
         Fabber model fitting
 
-        :param img: Input image
-        :param mask: Mask image
-        :return: MVN output image
+        :param options: Fabber options
         """
         options = dict(options)
+        output_name = options.pop("output", "fabber_output")
 
-        img, itype = self._input_img(img)
-        output_name, extra_args = self._get_std(img, "_fabber", kwargs)
-        options["data"] = img.ipath
+        # Replace fsl.Image objects with the underlying data
+        for key in options.keys():
+            value = options[key]
+            if isinstance(value, Image):
+                options[key] = value.nibImage.get_data()
 
-        if mask:
-            mask, _ = self._input_img(mask)
-            options["mask"] = mask.ipath
-            
-        options["output"] = output_name
-        options["save-mvn"] = ""
-        if overwrite:
-            options["overwrite"] = ""
-        option_args = ""
-        for k in sorted(options.keys()):
-            v = options[k]
-            if v == "" or (v and type(v) == bool):
-                option_args += " --%s" % k
-            elif v:
-                option_args += " --%s=%s" % (k, str(v))
+        fab = Fabber()
+        run = fab.run(options, percent_progress)
+        run.write_to_dir(os.path.join(self.workdir, output_name))
+        return run
 
-        args = "%s %s" % (option_args, extra_args)
-        imgs, _ = self.run("fabber_%s" % model_group.lower(), args=args, expected=[output_name + "/finalMVN"])
-        return self._output_img(imgs[0], itype)
-        
 def matrix_to_text(mat):
     """
     Convert matrix array to text using spaces/newlines as col/row delimiters
@@ -199,8 +199,8 @@ def mkdir(dirname, fail_if_exists=False, warn_if_exists=True):
     """
     try:
         os.makedirs(dirname)
-    except OSError as e:
-        if e.errno == errno.EEXIST:
+    except OSError as exc:
+        if exc.errno == errno.EEXIST:
             if fail_if_exists: raise
             elif warn_if_exists: print("WARNING: mkdir - Directory %s already exists" % dirname)
     return os.path.abspath(dirname)

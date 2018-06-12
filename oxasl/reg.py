@@ -17,6 +17,36 @@ from optparse import OptionParser, OptionGroup
 from . import fslhelpers as fsl
 from . import __version__
 
+def reg(self, wsp, ref, reg_targets, options, ref_str="asl"):
+    """ 
+    FIXME not functional yet
+    """
+    self.log.write("Segmentation and co-registration...\n")
+
+    # Brain-extract ref image
+    ref_bet = wsp.bet(ref)
+
+    # This is done to avoid the contrast enhanced rim resulting from low intensity ref image
+    d = ref_bet.nibImage.get_data()
+    thr_ref = np.percentile(d[d != 0], 10.0)
+    d[d < thr_ref] = 0
+    raw_bet = ref_bet.derived(d, save=True)
+
+    for imgs in reg_targets:
+        reg = imgs[0]
+        reg_bet = wsp.bet(reg, args="-B -f 0.3")
+        name = "%s_2%s" % (reg.name, ref_str)
+        name_inv = "%s_2%s" % (ref_str, reg.name)
+        postreg, mat, invmat = wsp.flirt(ref_bet, args="-dof 7", 
+                                            output_name=name,
+                                            output_mat=name + ".mat",
+                                            output_invmat=name_inv + ".mat")
+        wsp.write_file(matrix_to_text(invmat), name_inv)
+        for coreg in imgs[1:]:
+            wsp.apply_xfm(coreg, ref_bet, name_inv, args="-interp nearestneighbour", output_name="%s_fast_seg_2asl" % t1.name)
+
+    self.log.write("DONE\n\n")
+
 def main():
     usage = """ASL_REG
     Registration for ASL data

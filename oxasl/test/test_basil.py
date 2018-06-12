@@ -43,12 +43,12 @@ def _check_step(step, step_num=None, desc_text=None, data_name=None, options=Non
     if desc_text:
         assert(desc_text.lower().strip() in step[1].lower())
     if data_name:
-        assert(step[2].name == data_name)
+        assert(step[2]["data"].name == data_name)
     if options:
         for k, v in options.items():
-            assert(step[4][k] == v)
+            assert(step[2][k] == v)
     if prev_step:
-        assert(step[5] == prev_step)
+        assert(step[3] == prev_step)
 
 def test_nodata():
     """

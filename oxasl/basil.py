@@ -10,8 +10,9 @@ from optparse import OptionParser
 
 from fsl.data.image import Image
 
-from . import __version__, AslImage, AslOptionGroup, fslwrap as fsl
+from . import __version__, AslImage, AslOptionGroup
 from .image import add_data_options
+from .workspace import Workspace
 
 __timestamp__ = "TEMP"
 
@@ -22,10 +23,13 @@ def _add_prior(options, prior_idx, param, **kwargs):
     return prior_idx + 1
 
 def _add_step(steps, step, step_desc, infile, mask, options, prev_step=None):
-    steps.append((step, step_desc, infile, mask, dict(options), prev_step))
+    options = dict(options)
+    options["data"] = infile
+    options["mask"] = mask
+    steps.append((step, step_desc, options, prev_step))
     return len(steps)+1, len(steps)
 
-def _do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sys.stdout):
+def _do_step(wsp, step, step_desc, options, prev_step=None, log=sys.stdout):
     """
     Perform a single model fitting step
 
@@ -33,23 +37,25 @@ def _do_step(wsp, step, step_desc, infile, mask, options, prev_step=None, log=sy
     :param step: Step number
     :param step_desc: Description of step. The special value "PVC" indicates partial volume
                       correction preprocessing step
-    :param infile: Input data as Image
-    :param mask: Optional mask as Image (or None)
     :param options: Dictionary of Fabber options, not including the ``--`` command line prefix
     :param prev_step: Optional number of previous step to initialize from
     :param log: File stream for log output
     """
+    options = dict(options)
+    options["output"] = "step%i" % step
+
     if step_desc == "PVC":
-        _do_pvc_init(wsp, mask, prev_step, options)
+        _do_pvc_init(wsp, prev_step, options)
     else:
         if prev_step is not None:
             step_desc += " - init with STEP %i" % prev_step
-            options["continue-from-mvn"] = "step%i/finalMVN" % prev_step
+            options["continue-from-mvn"] = wsp.img("step%i/finalMVN" % prev_step)
 
         log.write("\n%s\n" % step_desc)
-        wsp.fabber("asl", infile, mask, options, output_name="step%i" % step)
+        wsp.fabber(options)
 
-def _do_pvc_init(wsp, mask, prev_step, options):
+def _do_pvc_init(wsp, prev_step, options):
+    mask = options["mask"]
     # set the inital GM amd WM values using a simple PV correction
     wm_cbf_ratio = 0.4
 
@@ -90,8 +96,8 @@ def get_steps(asldata, mask=None,
     Run Bayesian ASL model fitting
 
     :param wsp: FSL workspace for output files
-    :param asldata: ASL data (can be AslImage or fslwrap.Image)
-    :param mask: Brain mask (fslwrap.Image)
+    :param asldata: ASL data (can be AslImage or fsl.Image)
+    :param mask: Brain mask (fsl.Image)
     :param infertiss: If True, infer tissue component
     :param inferbat: If True, infer bolus arrival time
     :param infertau: If True, infer bolus duration
@@ -129,6 +135,9 @@ def get_steps(asldata, mask=None,
         "max-trials" : 10,
         "disp" : "none",
         "exch" : "mix",
+        "save-mean" : True,
+        "save-mvn" : True,
+        "save-std" : True,
     }
     for idx, ti in enumerate(asldata.tis):
         options["ti%i" % (idx+1)] = ti
@@ -329,9 +338,10 @@ def main():
         # Convert options into a dictionary. This is a bit easier to iterate over
         # and turn into keyword arguments to the basil function
         options = vars(options)
+        debug=options.pop("debug", False)
 
         # Create workspace which is the equivalent of the output directory
-        wsp = fsl.Workspace(options["output"], echo=True, debug=options.pop("debug", False))
+        wsp = Workspace(options["output"], echo=True, debug=debug)
 
         # Names and descriptions of options which are images
         images = {
@@ -398,6 +408,9 @@ def main():
     except ValueError as e:
         sys.stderr.write("\nERROR: " + str(e) + "\n")
         sys.stderr.write("Use --help for usage information\n")
+        if debug:
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":

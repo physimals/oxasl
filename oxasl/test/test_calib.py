@@ -13,7 +13,7 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from oxasl import calib, AslImage, fsl
+from oxasl import calib, AslImage
 
 def _get_imgs(shape=(5, 5, 5)):
     """
