@@ -12,6 +12,8 @@ import nibabel as nib
 import wx
 from wx.lib.pubsub import pub
 
+from oxasl import AslImage
+
 class OptionError(RuntimeError):
     pass
 
@@ -163,30 +165,16 @@ class AslRun(wx.Frame):
 
     def get_preview_data(self):
         """
-        Run ASL_FILE for perfusion weighted image - just for the preview
+        Get a perfusion weighted image for the preview
         """
         infile = self.input.data()
-        if infile == "":
-            # Don't bother if we have not input file yet!
-            return None
-        
-        tempdir = tempfile.mkdtemp()
-        self.preview_data = None
-        try:
-            meanfile = "%s/mean.nii.gz" % tempdir
-            cmd = FslCmd("asl_file")
-            cmd.add('--data="%s"' % self.input.data())
-            cmd.add("--ntis=%i" % self.input.ntis())
-            cmd.add('--mean="%s"' % meanfile)
-            cmd.add(" ".join(self.get_data_order_options()))
-            cmd.run()
-            img = nib.load(meanfile)
-            return img.get_data()
-        except:
-            traceback.print_exc()
-            return None
-        finally:
-            shutil.rmtree(tempdir)
+        if infile:
+            order, tagfirst = self.input.data_order()
+            if not tagfirst:
+                order = order.replace("p", "P")
+            asldata = AslImage(infile, ntis=self.input.ntis(), order=order)
+            print("returning pwi")
+            return asldata.perf_weighted().nibImage.get_data()
 
     def get_data_order_options(self):
         """
@@ -199,7 +187,7 @@ class AslRun(wx.Frame):
             else: order += ",ct"
             diff_opt = "--diff"
         if order not in self.order_opts:
-            raise OptionError("This data ordering is not supported by ASL_FILE")
+            raise OptionError("This data ordering is not supported by OXFORD_ASL")
         else: 
             return self.order_opts[order], diff_opt
 
