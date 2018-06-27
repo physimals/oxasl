@@ -1,0 +1,217 @@
+"""
+FSL-compatible wrappers for Fabber tools
+"""
+import sys
+import os
+import StringIO
+
+import numpy as np
+import nibabel as nib
+
+from fsl.data.image import Image
+from fsl.wrappers import LOAD, wrapperutils  as wutils
+import fsl.utils.assertions as asrt
+
+from oxasl.fabber import Fabber, FabberException, percent_progress
+
+class Tee(object):
+    """
+    Output stream which keeps a string record of everything
+    written to it, and also sends it on to any number of
+    sub-streams
+    """
+
+    def __init__(self):
+        self._streams = [StringIO.StringIO(),]
+
+    def add(self, stream):
+        """ 
+        Add a sub-stream
+        """
+        if stream:
+            self._streams.append(stream)
+
+    def write(self, text):
+        """
+        Write to all output streams
+        """
+        for stream in self._streams:
+            stream.write(text)
+
+    def flush(self):
+        """
+        Flush all output streams
+        """
+        for stream in self._streams:
+            stream.flush()
+
+    def __str__(self):
+        return self._streams[0].getvalue()
+
+def _matching_image(base_img, img):
+    if isinstance(base_img, nib.Nifti1Image):
+        return img.nibImage
+    elif isinstance(base_img, np.ndarray):
+        return img.nibImage.get_data()
+    else:
+        return img
+
+class _Results(dict):
+    """
+    Nicked from fsl.wrapperutils
+    """
+    def __init__(self, output):
+        dict.__init__(self)
+        self.__output = output
+
+    @property
+    def output(self):
+        """Access the return value of the decorated function. """
+        return self.__output
+
+
+def fabber(options, output_data=None, ref_nii=None, progress=None, **kwargs):
+    """
+    Wrapper for Fabber tool
+
+    This is not a 'conventional' FSL command line tool wrapper. Rather it is
+    using the Fabber Python API which interfaces to the C++ code using the
+    pure-C api and Python ctypes.
+
+    The main reason for not using a conventional wrapper is that Fabber
+    can take an arbitrary number of inputs including image inputs so the
+    @fileOrImage type decorators don't really work well. Also you can't
+    tell what image inputs you might have until you query the individual
+    model for its options which is clumsy to do using the CL tool.
+    
+    Nevertheless we aim to replicate the interface of FSL tools as much as
+    possible, e.g. accepting fsl.data.image.Image instances for input
+    data, and respecting the LOAD special parameter to indicate which
+    data items should be returned as Image instances.
+
+    :param options: Fabber run options
+    :param output_data: Dictionary of output data items name:output_filename. The
+                        special fsl.wrappers.LOAD value is supported
+    :param ref_nii: Optional reference Nibabel image to use when writing output
+                    files. Not required if main data is FSL or Nibabel image.
+    :return: Dictionary of output data items name:image. The image matches the
+             type of the main input data unless this was a file in which case
+             an fsl.data.image.Image is returned.
+    """
+    options = dict(options)
+    if output_data is None:
+        output_data = {}
+    main_data = options.get("data", None)
+    if main_data is None:
+        raise ValueError("Main data not specified")
+
+    output_dir = options.pop("output", "fabber")
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Get a reference Nibabel image to use when generating output
+    if not ref_nii:
+        if isinstance(main_data, Image):
+            ref_nii = main_data.nibImage
+        else:
+            ref_nii = Image(main_data).nibImage
+        
+    if ref_nii:
+        header = ref_nii.header
+        affine = ref_nii.header.get_best_affine()
+    else:
+        header = None
+        affine = np.identity(4)
+
+    # Replace fsl.Image objects with the underlying nibabel object. The Fabber
+    # Python API can already handle Numpy arrays, nibabel images and filenames
+    for key in options.keys():
+        value = options[key]
+        if isinstance(value, Image):
+            options[key] = value.nibImage
+
+    # Streams to capture stdout and stderr and maybe send them elsewhere too
+    stdout = Tee()
+    stderr = Tee()
+
+    # Deal with standard keyword arguments
+    ret_exitcode = kwargs.pop("exitcode", False)
+    ret_stdout = kwargs.pop("stdout", True)
+    ret_stderr = kwargs.pop("stderr", False)
+    log = kwargs.pop("log", {})
+
+    stdout.add(log.get("stdout", None))
+    stderr.add(log.get("stderr", None))
+    if log.get("tee", False):
+        stdout.add(sys.stdout)
+        stderr.add(sys.stderr)
+
+    if kwargs.pop("submit", False):
+        raise ValueError("submit not supported for Fabber")
+
+    exception = None
+    cmd_output = []
+    ret = _Results(cmd_output)
+    try:
+        fab = Fabber()
+        if log.get("cmd", False):
+            stdout.write("fabber <options>\n")
+
+        if progress:
+            progress = percent_progress(progress)
+        run = fab.run(options, progress)
+        stdout.write(run.log)
+
+        # Write output data or save it as required
+        for data_name, data in run.data.items():
+            fname = output_data.get(data_name, data_name)
+            img = Image(nib.Nifti1Image(data, header=header, affine=affine))
+            if fname == LOAD:
+                # Return in-memory data items as the same type as image as the main data
+                ret[data_name] = _matching_image(main_data, img)
+            elif fname:
+                img.save(os.path.join(output_dir, fname))
+
+        # Write logfile or save it as required
+        logfile_fname = output_data.get("logfile", None)
+        if logfile_fname == LOAD:
+            ret["logfile"] = run.log
+        elif logfile_fname:
+            with open(os.path.join(output_dir, logfile_fname), "w") as logfile:
+                logfile.write(run.log)
+
+    except FabberException as exc:
+        # Error while actually running Fabber - may raise later
+        # or replace with exit code
+        exception = exc
+        stderr.write(str(exc) + "\n")
+
+    if ret_stdout:
+        cmd_output.append(str(stdout))
+    if ret_stderr:
+        cmd_output.append(str(stderr))
+    if ret_exitcode:
+        cmd_output.append(int(exception is not None))
+
+    if exception and not ret_exitcode:
+        raise exception
+
+    return ret
+
+@wutils.fileOrImage('input', 'output', 'valim', 'varim')
+@wutils.fslwrapper
+def mvntool(mvn, param, **kwargs):
+    """
+    Wrapper for MVNTOOL.
+
+    :param mvn: Input MVN data
+    :param param: Parameter index (or name, but only if param-list is specified)
+
+    For other arguments, see command line tool for now
+    """
+    asrt.assertIsNifti(input)
+
+    cmd = ['mvntool', '--input={}'.format(mvn), '--param={}'.format(param)]
+    cmd += wutils.applyArgStyle('--=', **kwargs)
+
+    return cmd
