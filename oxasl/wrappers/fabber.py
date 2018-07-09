@@ -1,6 +1,8 @@
 """
 FSL-compatible wrappers for Fabber tools
 """
+from __future__ import absolute_import
+
 import sys
 import os
 import StringIO
@@ -12,7 +14,7 @@ from fsl.data.image import Image
 from fsl.wrappers import LOAD, wrapperutils  as wutils
 import fsl.utils.assertions as asrt
 
-from oxasl.fabber import Fabber, FabberException, percent_progress
+from fabber import Fabber, FabberException, percent_progress
 
 class Tee(object):
     """
@@ -70,7 +72,7 @@ class _Results(dict):
         return self.__output
 
 
-def fabber(options, output_data=None, ref_nii=None, progress=None, **kwargs):
+def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
     """
     Wrapper for Fabber tool
 
@@ -90,8 +92,9 @@ def fabber(options, output_data=None, ref_nii=None, progress=None, **kwargs):
     data items should be returned as Image instances.
 
     :param options: Fabber run options
-    :param output_data: Dictionary of output data items name:output_filename. The
-                        special fsl.wrappers.LOAD value is supported
+    :param output: Name of output directory to put results in. The special value
+                   LOAD is supported and will cause output to be returned as
+                   a dictionary instead.
     :param ref_nii: Optional reference Nibabel image to use when writing output
                     files. Not required if main data is FSL or Nibabel image.
     :return: Dictionary of output data items name:image. The image matches the
@@ -99,8 +102,6 @@ def fabber(options, output_data=None, ref_nii=None, progress=None, **kwargs):
              an fsl.data.image.Image is returned.
     """
     options = dict(options)
-    if output_data is None:
-        output_data = {}
     main_data = options.get("data", None)
     if main_data is None:
         raise ValueError("Main data not specified")
@@ -154,8 +155,8 @@ def fabber(options, output_data=None, ref_nii=None, progress=None, **kwargs):
     ret = _Results(cmd_output)
     try:
         fab = Fabber()
-        if log.get("cmd", False):
-            stdout.write("fabber <options>\n")
+        if log.get("cmd", None):
+            log["cmd"].write("fabber <options>\n")
 
         if progress:
             progress = percent_progress(progress)
@@ -164,21 +165,13 @@ def fabber(options, output_data=None, ref_nii=None, progress=None, **kwargs):
 
         # Write output data or save it as required
         for data_name, data in run.data.items():
-            fname = output_data.get(data_name, data_name)
             img = Image(nib.Nifti1Image(data, header=header, affine=affine))
-            if fname == LOAD:
+            if output == LOAD:
                 # Return in-memory data items as the same type as image as the main data
                 ret[data_name] = _matching_image(main_data, img)
-            elif fname:
-                img.save(os.path.join(output_dir, fname))
-
-        # Write logfile or save it as required
-        logfile_fname = output_data.get("logfile", None)
-        if logfile_fname == LOAD:
-            ret["logfile"] = run.log
-        elif logfile_fname:
-            with open(os.path.join(output_dir, logfile_fname), "w") as logfile:
-                logfile.write(run.log)
+            else:
+                fname = os.path.join(output, data_name)
+                img.save(fname)
 
     except FabberException as exc:
         # Error while actually running Fabber - may raise later
