@@ -4,4 +4,4 @@ Additional FSL wrappers intended to be compatible with FSL python wrappers as fa
 
 from .fabber import fabber, mvntool
 
-__all__ = ["fabber", "mvntool]
+__all__ = ["fabber", "mvntool"]
