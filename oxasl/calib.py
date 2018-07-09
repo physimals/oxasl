@@ -10,130 +10,89 @@ Copyright (c) 2008-2013 Univerisity of Oxford
 import sys
 import math
 import traceback
-from optparse import OptionParser
 
 import numpy as np
 import scipy.ndimage
 
 from fsl.data.image import Image
 
-from . import __version__, AslOptionGroup
+from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup
 from .image import summary
-from .workspace import Workspace
+from .wrappers import fabber
 
-def main():
-    usage = """ASL_CALIB
-    Calibration for ASL data
-
-    asl_pycalib -i <perfusion image> -c <calibration image> --calib-method <voxelwise|refregion> -o <output filename> [options]
+class CalibOptions(OptionCategory):
+    """
+    OptionCategory which contains options for preprocessing ASL data
     """
 
-    debug = False
-    try:
-        p = OptionParser(usage=usage, version=__version__)
-        add_calib_options(p)
-        options, _ = p.parse_args()
+    def __init__(self, **kwargs):
+        OptionCategory.__init__(self, "calib", **kwargs)
+
+    def groups(self, parser):
+        groups = []
+        group = IgnorableOptionGroup(parser, "Calibration", ignore=self.ignore)
+        group.add_option("-c", dest="calib", help="Calibration image")
+        group.add_option("-i", dest="perf", help="Perfusion image for calibration, in same image space as calibration image")
+        group.add_option("-m", "--brain-mask", dest="brain_mask", help="brain mask in perfusion/calibration image space")
+        group.add_option("-o", dest="output", help="Output filename for calibrated image (defaut=<input_filename>_calib")
+        group.add_option("--calib-method", dest="calib_method", help="Calibration method: voxelwise or refregion")
+        group.add_option("--alpha", help="Inversion efficiency", type=float, default=1.0)
+        group.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
+        group.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
+        group.add_option("--debug", dest="debug", action="store_true", default=False, help="Debug mode")
+        groups.append(group)
+
+        group = IgnorableOptionGroup(parser, "Voxelwise calibration", ignore=self.ignore)
+        group.add_option("--pct", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
+        group.add_option("--t1t", help="T1 of tissue (s)", type=float, default=1.3)
+        groups.append(group)
+
+        group = IgnorableOptionGroup(parser, "Reference region calibration", ignore=self.ignore)
+        group.add_option("--mode", help="Calibration mode (longtr or satrevoc)", default="longtr")
+        group.add_option("--tissref", help="Tissue reference type (csf, wm, gm or none)", default="csf")
+        group.add_option("--te", help="Sequence TE", type=float, default=0.0)
+        group.add_option("--t1r", help="T1 of reference tissue (defaults: csf 4.3, gm 1.3, wm 1.0 s)", type=float, default=None)
+        group.add_option("--t2r", help="T2 of reference tissue (defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50  ms)", type=float, default=None)
+        group.add_option("--t2b", help="T2(*) of blood (default T2/T2*: 150/50 ms)", type=float, default=None)
+        group.add_option("--refmask", dest="ref_mask", help="Reference tissue mask in perfusion/calibration image space")
+        group.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
+        group.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
+        #group.add_option("--Mo", dest="mo", help="Save calculated M0 value to specified file")
+        #group.add_option("--om", dest="om", help="Save CSF mask to specified file")
+        groups.append(group)
         
-        if not options.perf:
-            sys.stderr.write("Perfusion input file not specified\n")
-            p.print_help()
-            sys.exit(1)
+        group = IgnorableOptionGroup(parser, "longtr mode (calibration image is a control image with a long TR)", ignore=self.ignore)
+        groups.append(group)
 
-        if not options.calib:
-            sys.stderr.write("Calibration input file not specified\n")
-            p.print_help()
-            sys.exit(1)
+        group = IgnorableOptionGroup(parser, "satrecov mode (calibration image is a sequnce of control images at various TIs)", ignore=self.ignore)
+        group.add_option("--tis", help="Comma separated list of inversion times, e.group. --tis 0.2,0.4,0.6")
+        group.add_option("--fa", help="Flip angle (in degrees) for Look-Locker readouts", type=float)
+        group.add_option("--lfa", help="Lower flip angle (in degrees) for dual FA calibration", type=float)
+        group.add_option("--nphases", help="Number of phases (repetitions) of higher FA", type=int)
+        group.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
+        groups.append(group)
 
-        # Convert to dictionary for easier handling
-        options = vars(options)
-        debug = options.pop("debug", False)
+        group = IgnorableOptionGroup(parser, "Coil sensitivity correction, either using existing sensitivity image or reference images collected using same parameters", ignore=self.ignore)
+        group.add_option("--isen", help="Input coil sensitivity image")
+        group.add_option("--cref", help="Reference image from coil with minimal variation e.group. body.")
+        group.add_option("--cact", help="Image from coil used for actual ASL acquisition (default: calibration image - only in longtr mode)")
+        groups.append(group)
 
-        perf_img = Image(options.pop("perf", None))
-        summary(perf_img)
-        calib_img = Image(options.pop("calib", None))
-        summary(calib_img)
+        # echo " CSF masking options (only for --tissref csf)"
+        # echo "  By default asl_calib extracts CSF from the structural image by segmentation and"
+        # echo "  this is then masked using the ventricles in MNI152 space."
+        #group.add_option("-s", dest="struc", help="Structural image")
+        #group.add_option("-t", dest="trans", help="ASL->Structural transformation matrix")
+        # echo " --csfmaskingoff : turns off the ventricle masking, reference is based on segmentation only."
+        # echo "  Registration between structural image and MNI152 is done automatically unless:"
+        # echo "  --str2std  : Structural to MNI152 linear registration (.mat)"
+        # echo "  --warp     : Structural to MNI152 non-linear registration (warp)"
+        # echo ""
+        # echo "            M0 is to be determined from a saturation recovery"
+        # echo "            T1 of tissue (and FA correction) images are also calcualted"
+        # echo "   >> Look-Locker flip angle correction - to perform this provide:"
 
-        brain_mask = options.pop("brain_mask", None)
-        if brain_mask is not None:
-            brain_mask_img = Image(brain_mask)
-        else:
-            brain_mask_img = Image(name="brain_mask", image=np.ones(perf_img.shape))
-            
-        output_name = options.pop("output", None)
-        if output_name is None:
-            output_name = "%s_calib" % perf_img.name
-
-        calibrated_img = calib(perf_img, calib_img, options.pop("calib_method", None), output_name, brain_mask=brain_mask_img, **options)
-        summary(calibrated_img)
-        calibrated_img.save(calibrated_img.name)
-    except Exception as e:
-        sys.stderr.write("ERROR: " + str(e) + "\n")
-        if debug:
-            traceback.print_exc()
-        sys.exit(1)
-
-def add_calib_options(parser, ignore=()):
-    g = AslOptionGroup(parser, "Calibration", ignore=ignore)
-    g.add_option("-c", dest="calib", help="Calibration image")
-    g.add_option("-i", dest="perf", help="Perfusion image for calibration, in same image space as calibration image")
-    g.add_option("-m", "--brain-mask", dest="brain_mask", help="brain mask in perfusion/calibration image space")
-    g.add_option("-o", dest="output", help="Output filename for calibrated image (defaut=<input_filename>_calib")
-    g.add_option("--calib-method", dest="calib_method", help="Calibration method: voxelwise or refregion")
-    g.add_option("--alpha", help="Inversion efficiency", type=float, default=1.0)
-    g.add_option("--cgain", dest="gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
-    g.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
-    g.add_option("--debug", dest="debug", action="store_true", default=False, help="Debug mode")
-    parser.add_option_group(g)
-
-    g = AslOptionGroup(parser, "Voxelwise calibration", ignore=ignore)
-    g.add_option("--pct", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
-    g.add_option("--t1t", help="T1 of tissue (s)", type=float, default=1.3)
-    parser.add_option_group(g)
-
-    g = AslOptionGroup(parser, "Reference region calibration", ignore=ignore)
-    g.add_option("--mode", help="Calibration mode (longtr or satrevoc)", default="longtr")
-    g.add_option("--tissref", help="Tissue reference type (csf, wm, gm or none)", default="csf")
-    g.add_option("--te", help="Sequence TE", type=float, default=0.0)
-    g.add_option("--t1r", help="T1 of reference tissue (defaults: csf 4.3, gm 1.3, wm 1.0 s)", type=float, default=None)
-    g.add_option("--t2r", help="T2 of reference tissue (defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50  ms)", type=float, default=None)
-    g.add_option("--t2b", help="T2(*) of blood (default T2/T2*: 150/50 ms)", type=float, default=None)
-    g.add_option("--refmask", dest="ref_mask", help="Reference tissue mask in perfusion/calibration image space")
-    g.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
-    g.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
-    #g.add_option("--Mo", dest="mo", help="Save calculated M0 value to specified file")
-    #g.add_option("--om", dest="om", help="Save CSF mask to specified file")
-    parser.add_option_group(g)
-    
-    g = AslOptionGroup(parser, "longtr mode (calibration image is a control image with a long TR)", ignore=ignore)
-    parser.add_option_group(g)
-
-    g = AslOptionGroup(parser, "satrecov mode (calibration image is a sequnce of control images at various TIs)", ignore=ignore)
-    g.add_option("--tis", help="Comma separated list of inversion times, e.g. --tis 0.2,0.4,0.6")
-    g.add_option("--fa", help="Flip angle (in degrees) for Look-Locker readouts", type=float)
-    g.add_option("--lfa", help="Lower flip angle (in degrees) for dual FA calibration", type=float)
-    g.add_option("--nphases", help="Number of phases (repetitions) of higher FA", type=int)
-    g.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
-    parser.add_option_group(g)
-
-    g = AslOptionGroup(parser, "Coil sensitivity correction, either using existing sensitivity image or reference images collected using same parameters", ignore=ignore)
-    g.add_option("--isen", help="Input coil sensitivity image")
-    g.add_option("--cref", help="Reference image from coil with minimal variation e.g. body.")
-    g.add_option("--cact", help="Image from coil used for actual ASL acquisition (default: calibration image - only in longtr mode)")
-    parser.add_option_group(g)
-
-    # echo " CSF masking options (only for --tissref csf)"
-    # echo "  By default asl_calib extracts CSF from the structural image by segmentation and"
-    # echo "  this is then masked using the ventricles in MNI152 space."
-    #g.add_option("-s", dest="struc", help="Structural image")
-    #g.add_option("-t", dest="trans", help="ASL->Structural transformation matrix")
-    # echo " --csfmaskingoff : turns off the ventricle masking, reference is based on segmentation only."
-    # echo "  Registration between structural image and MNI152 is done automatically unless:"
-    # echo "  --str2std  : Structural to MNI152 linear registration (.mat)"
-    # echo "  --warp     : Structural to MNI152 non-linear registration (warp)"
-    # echo ""
-    # echo "            M0 is to be determined from a saturation recovery"
-    # echo "            T1 of tissue (and FA correction) images are also calcualted"
-    # echo "   >> Look-Locker flip angle correction - to perform this provide:"
+        return groups
 
 def calib(perf_img, calib_img, calib_method, output_name=None, multiplier=1.0, var=False, log=sys.stdout, **kwargs):
     """
@@ -249,7 +208,7 @@ def _masked_mean(vals):
     voxel_val = vals[int((len(vals)-1) / 2)]
     if voxel_val == 0:
         nonzero = vals[vals != 0]
-        if len(nonzero) > 0:
+        if np.any(nonzero):
             return np.mean(nonzero)
         else:
             return 0
@@ -480,12 +439,11 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
             # imcp $calib $temp_calib/calib_senscorr
 
         log.write("Running FABBER within reference tissue mask\n")
-        wsp = Workspace(workdir=kwargs.get("workdir", None))
-        wsp.fabber(options)
-        mean_m0 = Image("%s/mean_M0t" % wsp.workdir)
-
+        fabber_result = fabber(options)
+        mean_m0 = fabber_result["mean_M0t"]
+        
         # Calculate M0 value - this is mean M0 of CSF at the TE of the sequence
-        m0_value = np.mean(mean_m0.nibImage.get_data()[ref_mask != 0])
+        m0_value = np.mean(mean_m0.data[ref_mask != 0])
 
         log.write("M0 of reference tissue: %f\n" % m0_value)
 
@@ -531,6 +489,9 @@ def get_m0_refregion(calib_img, ref_mask=None, brain_mask=None, mode="longtr", g
     return m0
 
 def get_csf_mask():
+    """
+    Calculate the CSF mask
+    """
     pass
     # if [ -z $maskflag ]; then
 
@@ -645,3 +606,52 @@ def get_csf_mask():
     
 if __name__ == "__main__":
     main()
+
+def main():
+    """
+    Entry point for oxasl_calib command line program
+    """
+
+    debug = False
+    try:
+        parser = AslOptionParser(usage="oxasl_calib -i <perfusion image> -c <calibration image> --calib-method <voxelwise|refregion> -o <output filename> [options]")
+        parser.add_category(CalibOptions())
+        options, _ = parser.parse_args()
+        
+        if not options.perf:
+            sys.stderr.write("Perfusion input file not specified\n")
+            parser.print_help()
+            sys.exit(1)
+
+        if not options.calib:
+            sys.stderr.write("Calibration input file not specified\n")
+            parser.print_help()
+            sys.exit(1)
+
+        # Convert to dictionary for easier handling
+        options = vars(options)
+        debug = options.pop("debug", False)
+
+        perf_img = Image(options.pop("perf", None))
+        summary(perf_img)
+        calib_img = Image(options.pop("calib", None))
+        summary(calib_img)
+
+        brain_mask = options.pop("brain_mask", None)
+        if brain_mask is not None:
+            brain_mask_img = Image(brain_mask)
+        else:
+            brain_mask_img = Image(name="brain_mask", image=np.ones(perf_img.shape))
+            
+        output_name = options.pop("output", None)
+        if output_name is None:
+            output_name = "%s_calib" % perf_img.name
+
+        calibrated_img = calib(perf_img, calib_img, options.pop("calib_method", None), output_name, brain_mask=brain_mask_img, **options)
+        summary(calibrated_img)
+        calibrated_img.save(calibrated_img.name)
+    except ValueError as exc:
+        sys.stderr.write("ERROR: " + str(exc) + "\n")
+        if debug:
+            traceback.print_exc()
+        sys.exit(1)
