@@ -3,6 +3,5 @@ Additional FSL wrappers intended to be compatible with FSL python wrappers as fa
 """
 
 from .fabber import fabber, mvntool
-from .fast import fast
 
-__all__ = ["fabber", "mvntool", "fast"]
+__all__ = ["fabber", "mvntool]
