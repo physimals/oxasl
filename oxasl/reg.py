@@ -1,253 +1,181 @@
 #!/bin/env python
+"""
+ASL_REG: Registration for ASL data
 
-# ASL_REG: Registration for ASL data
-#
-# Michael Chappell, IBME QuBIc & FMRIB Image Analysis Groups
-#
-# Copyright (c) 2008-2016 University of Oxford
-#
-# SHCOPYRIGHT
+Michael Chappell, IBME QuBIc & FMRIB Image Analysis Groups
 
-import os, sys
-import shutil
-import tempfile
-import collections
-from optparse import OptionParser, OptionGroup
+Copyright (c) 2008-2018 University of Oxford
+"""
 
-from . import fslhelpers as fsl
-from . import __version__
+import os
+import sys
 
-def reg(self, wsp, ref, reg_targets, options, ref_str="asl"):
+from fsl.wrappers import LOAD, flirt
+
+import oxasl.struc as struc
+
+from oxasl.workspace import AslWorkspace
+from .options import AslOptionParser
+from ._version import __version__
+
+def reg_flirt(reg_img, struc_brain_img, log=sys.stdout, **kwargs):
     """ 
-    FIXME not functional yet
+    Register low resolution ASL or calibration data to a high resolution
+    structural image using Flirt rigid-body registration
+
+    The brain extracted structural image is used as the reference image. If
+    this is not supplied, BET will be run on the whole head structural image.
+
+    :param reg_img: Data to register, e.g. PWI or calibration image. Normally would be brain extracted
+    :param struc_brain_img: Brain-extracted structural image
+    :return Tuple of registered image, transform matrix
     """
-    self.log.write("Segmentation and co-registration...\n")
-
-    # Brain-extract ref image
-    ref_bet = wsp.bet(ref)
-
+    log.write("Registration to structural data...\n")
+        
     # This is done to avoid the contrast enhanced rim resulting from low intensity ref image
-    d = ref_bet.nibImage.get_data()
-    thr_ref = np.percentile(d[d != 0], 10.0)
-    d[d < thr_ref] = 0
-    raw_bet = ref_bet.derived(d, save=True)
+    # FIXME from ENABLE!
+    #ref_data = ref_img.data
+    #threshold = np.percentile(ref_data[ref_data != 0], 10.0)
+    #ref_data[ref_data < threshold] = 0
+    #ref_img = Image(ref_data, name=ref_img.name + "_thr", header=ref_img.header)
+    
+    log.write(" - Registering image: %s\n" % reg_img.name)
 
-    for imgs in reg_targets:
-        reg = imgs[0]
-        reg_bet = wsp.bet(reg, args="-B -f 0.3")
-        name = "%s_2%s" % (reg.name, ref_str)
-        name_inv = "%s_2%s" % (ref_str, reg.name)
-        postreg, mat, invmat = wsp.flirt(ref_bet, args="-dof 7", 
-                                            output_name=name,
-                                            output_mat=name + ".mat",
-                                            output_invmat=name_inv + ".mat")
-        wsp.write_file(matrix_to_text(invmat), name_inv)
-        for coreg in imgs[1:]:
-            wsp.apply_xfm(coreg, ref_bet, name_inv, args="-interp nearestneighbour", output_name="%s_fast_seg_2asl" % t1.name)
+    # Step 1: 3D translation only
+    flirt_opts = {
+        "schedule" : os.path.join(os.environ["FSLDIR"], "etc", "flirtsch", "xyztrans.sch"),
+        "init" : kwargs.get("initmat", None),
+        "inweight" : kwargs.get("inweight", None),
+        "log" : kwargs.get("fsllog", {"cmd" : log}),
+    }
+    step1_trans = flirt(reg_img, struc_brain_img, omat=LOAD, **flirt_opts)["omat"]
 
-    self.log.write("DONE\n\n")
+    # Step 2: 6 DOF transformation with small search region
+    flirt_opts.update({
+        "schedule" : os.path.join(os.environ["FSLDIR"], "etc", "flirtsch", kwargs.get("flirtsch", "simple3D.sch")),
+        "init" : step1_trans,
+        "dof" : kwargs.get("dof", 6),
+    })
+    flirt_result = flirt(reg_img, struc_brain_img, out=LOAD, omat=LOAD, **flirt_opts)
+
+    log.write("DONE registration\n\n")
+    return flirt_result["out"], flirt_result["omat"]
+
+def reg_bbr(reg_img, struc_img, struc_brain_img, wm_seg, log=sys.stdout, **kwargs):
+    """
+    Perform BBR registration
+    """
+    log.write("BBR registration using epi_reg\n")
+
+    # brain extract the perfsion image - using supplied mask or mask derived from the strctural BET
+    #mask = kwargs.get("mask", None)
+    #if mask is None:
+    #    log.write(" - Generating brain mask\n")
+    #    #convert_xfm -omat $tempdir/high2low.mat -inverse $tempdir/low2high.mat
+    #    raise NotImplementedError("Mask generation disabled")
+        #struc_brain_mask = fslmaths(struc_brain_img).thr(0).bin().run()
+	    #flirt(struc_brain_mask, $infile -applyxfm -init $tempdir/high2low.mat -out $tempdir/mask -interp trilinear
+	    #fslmaths $tempdir/mask -thr 0.25 -bin -fillh $tempdir/mask
+	    #fslcpgeom $infile $tempdir/mask
+	    #mask=$tempdir/mask
+        
+    # Refinement of the registration using perfusion and the white matter segmentation
+    # using epi_reg to get BBR (and allow for fielmap correction in future)
+    epi_reg_opts = {
+        "inweight" : kwargs.get("inweight", None),
+        "init" : kwargs.get("initmat", None),
+    }
+    #if fmap:
+    if False:
+    	# With fieldmap
+        # FIXME
+	    #fmapregstr=""
+        #if [ ! -z $nofmapreg ]; then
+	    #    fmapregstr="--nofmapreg"
+        epi_reg_opts.update({
+            "fmap" : kwargs.get("fmap", None),
+            "fmapmag" : kwargs.get("fmapmag", None),
+            "fmapmagbrain" : kwargs.get("fmapmagbrain", None),
+            "pedir" : kwargs.get("pedir", None),
+            "echospacing" : kwargs.get("echospacing", None),
+        })
+    
+    trans = epi_reg(reg_img, t1=struc_img, t1brain=struc_brain_img, wmseg=wm_seg, **epi_reg_opts)
+    log.write("BBR end\n")
+    return trans
+
+    #OUTPUT
+    #echo "Saving FINAL output"
+    #if [ -z $finalonly ]; then
+	#cp $outdir/asl2struct.mat $outdir/asl2struct_init.mat # save the initial transformation matrix to allow chekcing if this part failed
+    #fi
+    #cp $tempdir/low2high_final.mat $outdir/asl2struct.mat #the transformation matrix from epi_reg - this overwrites the version from MAIN registration
+    #convert_xfm -omat $outdir/struct2asl.mat -inverse $outdir/asl2struct.mat #often useful to have the inverse transform, so calcuate it
+    #if [ ! -z $fmap ]; then
+	#imcp $tempdir/low2high_final_warp $outdir/asl2struct_warp #the warp from epi_reg
+    #fi
+    #imcp $tempdir/low2high_final $outdir/asl2struct # save the transformed image to check on the registration
+    # 
+    # # copy the edge image from epi_reg output as that is good for visualisation
+    # imcp $wm_seg $outdir/wm_seg
+    #imcp $tempdir/low2high_final_fast_wmedge $outdir/tissedge
 
 def main():
-    usage = """ASL_REG
-    Registration for ASL data
-
-    asl_reg -i <input> -s <struct> [options]"""
-
-    p = OptionParser(usage=usage, version=__version__)
-    g = OptionGroup(p, "Required arguments")
-    g.add_option("-i", dest="input", help="input image - e.g. perfusion-weighted image")
-    g.add_option("-s", "--t1", dest="struc", help="structural brain image - wholehead")
-    p.add_option_group(g)
-
-    g = OptionGroup(p, "Optional arguments")
-    g.add_option("-o", dest="outdir", help="output directory", default=os.getcwd())
-    g.add_option("--sbet", dest="sbet", help="structural brain image - brain extracted")
-    g.add_option("--init", "--imat", dest="init", help="initial transformation matrix for input to structural image")
-    g.add_option("--debug", dest="debug", help="Keep temporary files for debugging", action="store_true", default=False)
-    p.add_option_group(g)
-
-    g = OptionGroup(p, "Extra 'final' registration refinement")
-    g.add_option("-c", dest="cfile", help="ASL control/calibration image for initial registration - brain extracted")
-    g.add_option("-m", dest="mask", help="brain mask for brain extraction of the input image")
-    g.add_option("--tissseg", dest="tissseg", help="tissue segmenation image for bbr (in structural image space)")
-    g.add_option("--flirtsch", dest="flirtsch", help="user-specified FLIRT schedule for registration")
-    g.add_option("--finalonly", action="store_true", dest="finalonly", help="only run the 'final' registration step", default=False)
-    g.add_option("--mainonly", action="store_true", dest="mainonly", help="only run the initial registration step", default=False)
-    p.add_option_group(g)
-
-    g = OptionGroup(p, "Distortion correction using fieldmap (see epi_reg)")
-    g.add_option("--fmap", dest="fmap", help="fieldmap image (in rad/s)")
-    g.add_option("--fmapmag", dest="fmapmag", help="fieldmap magnitude image - wholehead extracted")
-    g.add_option("--fmapmagbrain", dest="fmapmagbrain", help="fieldmap magnitude image - brain extracted")
-    g.add_option("--wmseg", dest="wmseg", help="white matter segmentation of T1 image")
-    g.add_option("--echospacing", dest="echospacing", help="Effective EPI echo spacing (sometimes called dwell time) - in seconds", type="float")
-    g.add_option("--pedir", dest="pedir", help="phase encoding direction, dir = x/y/z/-x/-y/-z")
-    g.add_option("--nofmapreg", dest="nofmapreg", help="do not perform registration of fmap to T1 (use if fmap already registered)", action="store_true", default=False)
-    p.add_option_group(g)
-
-    g = OptionGroup(p, "Deprecated")
-    g.add_option("-r", dest="lowstruc", help="extra low resolution structural image - brain extracted")
-    g.add_option("--inweight", dest="inweight", help="specify weights for input image - same functionality as the flirt -inweight option", type="float")
-    p.add_option_group(g)
-
-    options, args = p.parse_args()
-
-    print("ASL_REG")
-
-    vars = collections.defaultdict(str)
-    vars["fsldir"] = os.environ["FSLDIR"]
-    vars["infile"] = fsl.Image(options.input, "input").full
-    vars["struc"] = fsl.Image(options.struc, "struc").full
-    vars["outdir"] = options.outdir
-
-    print("Input file is: %(infile)s" % vars)
-    print("Output directory is: %(outdir)s" % vars)
-    
-    if not os.path.exists(vars["outdir"]):
-        print("Creating output directory")
-        fsl.mkdir(vars["outdir"])
-  
-    vars["tempdir"] = fsl.tmpdir("asl_reg", options.debug)
-    fsl.set_echo(options.debug)
-            
-    # Initial matrix option
-    if options.init:
-        vars["init"] = "-init %s" % options.init
-        vars["epi_init"] = "--init=%s" % options.init
-
-    # Weighting applied to input image
-    if options.inweight:
-        vars["inweight"] = "-inweight %s" % options.inweight
-
-    # Degrees of freedom - we will routinely use 6
-    vars["dof"] = 6
-    vars["xyzsch"] = os.path.join(vars["fsldir"], "etc", "flirtsch", "xyztrans.sch")
-
-    # Optional flirt schedule for main transformation of asl to structural
-    if options.flirtsch:
-        print("Using supplied FLIRT schedule")
-        vars["flirtsch"] = options.flirtsch
-    else:
-        vars["flirtsch"] = os.path.join(vars["fsldir"], "etc", "flirtsch", "simple3D.sch")
-
-    # BET the structural image if required
-    if options.sbet:
-        vars["sbet"] = fsl.Image(options.sbet, "sbet").full
-    else:
-        print("Running BET on structural image")
-        fsl.bet("%(struc)s %(tempdir)s/struc_brain" % vars)
-        vars["sbet"] = "%(tempdir)s/struc_brain" % vars
-
-    # do the MAIN registration run - use the supplementary image for this if available
-    if not options.finalonly:
-        print("Registration MAIN stage (FLIRT)")
-
-        # Check if a supplementary image has been provded on which to base (inital) registration
-        if options.cfile:
-            vars["cfile"] = options.cfile
-        else:
-            vars["cfile"] = vars["infile"]
-            
-        if not options.lowstruc:
-            # Step1: 3DOF translation only transformation
-            fsl.flirt("-in %(cfile)s -ref %(sbet)s -schedule %(xyzsch)s -omat %(tempdir)s/low2high1.mat -out %(tempdir)s/low2hig1 %(init)s %(inweight)s" % vars)
-            # Step2: 6DOF transformation with small search region
-            fsl.flirt("-in %(cfile)s -ref %(sbet)s -dof %(dof)s -omat %(tempdir)s/low2high.mat -init %(tempdir)s/low2high1.mat -schedule %(flirtsch)s -out %(tempdir)s/low2high  %(inweight)s" % vars)
-        else:
-            # We have a structural image in perfusion space use it to improve registration
-            vars["lowstruc"] = fsl.Image(options.lowstruc, "lowstruc").full
-            print("Using structral image in perfusion space (%(lowstruc)s)" % vars)
-            # Step1: 3DOF translation only transformation perfusion->lowstruc
-            fsl.flirt("-in %(cfile)s -ref %(lowstruc)s -schedule %(xyzsch)s -omat %(tempdir)s/low2low1.mat %(init)s %(inweight)s" % vars)
-            # Step2: 6DOF limited transformation in perfusion space
-            fsl.flirt("-in %(cfile)s -ref %(lowstruc)s -dof %(dof)s -schedule %(flirtsch)s -init %(tempdir)s/low2low1.mat -omat %(tempdir)s/low2low.mat %(inweight)s" % vars)
-            # Step3: 6DOF transformation of lowstruc to struc
-            fsl.flirt("-in %(lowstruc)s -ref %(sbet)s -omat %(tempdir)s/str2str.mat" % vars)
-            # Step4: combine the two transformations
-            fsl.Prog("convert_xfm")("-omat %(tempdir)s/low2high.mat -concat %(tempdir)s/str2str.mat %(tempdir)s/low2low.mat" % vars)
-
-        # update the init text ready for the 'final' step to start with the result of the MAIN registration
-        vars["epi_init"] = "--init=%(tempdir)s/low2high.mat" % vars
-
-        # OUTPUT from MAIN registration
-        shutil.copy("%(tempdir)s/low2high.mat" % vars, "%(outdir)s/asl2struct.mat" % vars)
-
-    # do the FINAL registration run using BBR - this ONLY makes sense when the input is a perfusion image (or something with decent tissue contrast)
-    if not options.mainonly:
-        print("Registration FINAL stage (BBR)")
-
-        if options.tissseg:
-            vars["tissseg"] = options.tissseg
-        else:
-            # Running FAST segmentation
-            fsl.fast("-o %(tempdir)s/struct_fast %(sbet)s" % vars)
-            # WM segmentation
-            fsl.maths("%(tempdir)s/struct_fast_pve_2 -thr 0.5 -bin %(tempdir)s/fast_tissseg" % vars)
-            vars["tissseg"] = "%(tempdir)s/fast_tissseg" % vars
-
-        # Brain extract the perfusion image - using supplied mask or mask derived from the strctural BET
-        if options.mask:
-            vars["mask"] = options.mask
-        else:
-            fsl.Prog("convert_xfm")("-omat %(tempdir)s/high2low.mat -inverse %(tempdir)s/low2high.mat" % vars)
-
-            fsl.maths("%(sbet)s -thr 0 -bin %(tempdir)s/struct_brain_mask" % vars)
-            fsl.flirt("-in %(tempdir)s/struct_brain_mask -ref %(infile)s -applyxfm -init %(tempdir)s/high2low.mat -out %(tempdir)s/mask -interp trilinear" % vars)
-            fsl.maths("%(tempdir)s/mask -thr 0.25 -bin -fillh %(tempdir)s/mask" % vars)
-            fsl.Prog("fslcpgeom")("%(infile)s %(tempdir)s/mask" % vars)
-            vars["mask"] = "%(tempdir)s/mask" % vars
-
-        # Apply mask to asldata
-        fsl.maths("%(infile)s -mas %(mask)s %(tempdir)s/asldata_brain" % vars)
-
-        # Copy mask to output for future reference
-        fsl.imcp("%(mask)s" % vars, "%(outdir)s/mask" % vars)
+    """
+    Entry point for command line tool
+    """
+    try:
+        parser = AslOptionParser(usage="asl_reg -i <aslimg> [options]", version=__version__)
+        parser.add_option("-i", dest="regfrom", help="Registration image (e.g. perfusion weighted image)", type="image")
+        parser.add_option("-o", "--output", dest="output", help="Output file for registered image", default=None)
+        parser.add_option("-m", "--mask", dest="mask", help="brain mask for brain extraction of the input image")
+        parser.add_option("--omat", dest="omat", help="Output file for transform matrix", default=None)
+        parser.add_option("--debug", dest="debug", help="Debug mode", action="store_true", default=False)
+        parser.add_option("--bbr", help="Include BBR registration step using EPI_REG", action="store_true", default=False)
+        parser.add_option("--flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
+        parser.add_option("--flirtsch", dest="flirtsch", help="user-specified FLIRT schedule for registration")
         
-        # Do a final refinement of the registration using the perfusion and the white matter 
-        # segmentation - using epi_reg to get BBR (and allow for fieldmap correction in future)
-        if options.fmap:
-            if options.nofmapreg:
-                vars["fmapregstr"] = "--nofmapreg"
-            fsl.Prog("epi_reg")("--epi=%(tempdir)s/asldata_brain --t1=%(struc)s --t1brain=%(sbet)s %(epi_init)s --out=%(tempdir)s/low2high_final --wmseg=%(tissseg)s %(inweight)s --fmap=%(fmap)s --fmapmag=%(fmapmag)s --fmapmagbrain=%(fmapmagbrain)s --pedir=%(pedir)s --echospacing=%(echospacing)s %(fmapregstr)s" % vars)
-        else:
-            fsl.Prog("epi_reg")("--epi=%(tempdir)s/asldata_brain --t1=%(struc)s --t1brain=%(sbet)s %(epi_init)s --out=%(tempdir)s/low2high_final --wmseg=%(tissseg)s %(inweight)s" % vars)
-                
-        #flirt -ref %(sbet)s -in %(infile)s -dof 6 -cost bbr -wmseg $wmseg -init %(tempdir)s/low2high.mat -omat %(tempdir)s/low2high.mat -out %(tempdir)s/low2high_final -schedule ${FSLDIR}/etc/flirtsch/bbr.sch
-        print("BBR end")
+        parser.add_category(struc.StructuralImageOptions())
 
-        print("Saving FINAL output")
-        if not options.finalonly:
-            # Save the initial transformation matrix to allow chekcing if this part failed
-            shutil.copy("%(outdir)s/asl2struct.mat" % vars, "%(outdir)s/asl2struct_init.mat" % vars)
-
-        # The transformation matrix from epi_reg - this overwrites the version from MAIN registration
-        shutil.copy("%(tempdir)s/low2high_final.mat" % vars, "%(outdir)s/asl2struct.mat" % vars)
-
-        # Often useful to have the inverse transform, so calcuate it
-        fsl.Prog("convert_xfm")("-omat %(outdir)s/struct2asl.mat -inverse %(outdir)s/asl2struct.mat" % vars)
-
-        if options.fmap:
-            # The warp from epi_reg
-            fsl.imcp("%(tempdir)s/low2high_final_warp" % vars, "%(outdir)s/asl2struct_warp" % vars)
-
-        # Save the transformed image to check on the registration
-        fsl.imcp("%(tempdir)s/low2high_final" % vars, "%(outdir)s/asl2struct" % vars)
+        options, _ = parser.parse_args(sys.argv)
+        wsp = AslWorkspace(**vars(options))
         
-        # Copy the edge image from epi_reg output as that is good for visualisation
-        fsl.imcp("%(tissseg)s" % vars, "%(outdir)s/tissseg" % vars)
-        fsl.imcp("%(tempdir)s/low2high_final_fast_wmedge" % vars, "%(outdir)s/tissedge" % vars)
+        if not options.regfrom:
+            sys.stderr.write("Input file not specified\n")
+            parser.print_help()
+            sys.exit(1)
 
-    # ASL-->standard transformation (if specified)
-    #if options.transflag
-    #    print("Combining transformations")
-    #    fsl.Prog("convert_xfm")("-omat %(outdir)s/asl2std.mat -concat $trans %(tempdir)s/low2high.mat" % vars)
+        wsp.reg_asl2struc(do_bbr=options.bbr, do_flirt=options.flirt)
+        if wsp.output:
+            wsp.regto.save(wsp.output)
+        if wsp.omat:
+            with open(wsp.omat, "w") as transform_file:
+                for row in wsp.asl2struc:
+                    transform_file.write(" ".join(["%f" % val for val in row]) + "\n")
 
-    #if options.lowstruc:
-    #    ASL--> low structral transformtaion (if supllied)
-    #    shutil.copy("%(tempdir)s/low2low.mat" % vars, "%(outdir)s/asl2lowstruct.mat" % vars)
+    except ValueError as exc:
+        sys.stderr.write("ERROR: " + str(exc) + "\n")
+        sys.exit(1)
 
-    print("ASL_REG - Done.")
+    #g = OptionGroup(p, "Extra 'final' registration refinement")
+    #g.add_option("-c", dest="cfile", help="ASL control/calibration image for initial registration - brain extracted")
+    #g.add_option("--wm_seg", dest="wm_seg", help="tissue segmenation image for bbr (in structural image space)")
+    #p.add_option_group(g)
+
+    #g = OptionGroup(p, "Distortion correction using fieldmap (see epi_reg)")
+    #g.add_option("--fmap", dest="fmap", help="fieldmap image (in rad/s)")
+    #g.add_option("--fmapmag", dest="fmapmag", help="fieldmap magnitude image - wholehead extracted")
+    #g.add_option("--fmapmagbrain", dest="fmapmagbrain", help="fieldmap magnitude image - brain extracted")
+    #g.add_option("--wmseg", dest="wmseg", help="white matter segmentation of T1 image")
+    #g.add_option("--echospacing", dest="echospacing", help="Effective EPI echo spacing (sometimes called dwell time) - in seconds", type="float")
+    #g.add_option("--pedir", dest="pedir", help="phase encoding direction, dir = x/y/z/-x/-y/-z")
+    #g.add_option("--nofmapreg", dest="nofmapreg", help="do not perform registration of fmap to T1 (use if fmap already registered)", action="store_true", default=False)
+    #p.add_option_group(g)
+
+    #g = OptionGroup(p, "Deprecated")
+    #g.add_option("-r", dest="lowstruc", help="extra low resolution structural image - brain extracted")
+    #g.add_option("--inweight", dest="inweight", help="specify weights for input image - same functionality as the flirt -inweight option", type="float")
+    #p.add_option_group(g)
 
 if __name__ == "__main__":
     main()
-
