@@ -10,41 +10,41 @@ Copyright (c) 2008-2013 Univerisity of Oxford
 import sys
 import os
 import traceback
-from optparse import OptionParser
 
 import numpy as np
 
-from fsl.data.image import Image
+from ._version import __version__
+from .image import AslImage, AslImageOptions
+from .calib import CalibOptions
+from .struc import StructuralImageOptions
+from .workspace import AslWorkspace
+from .options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 
-from . import __version__, AslOptionGroup
-from .image import AslImage, add_data_options
-from .calib import add_calib_options
-from .basil import basil, add_basil_options
-from .workspace import Workspace
+class OxfordAslOptions(OptionCategory):
+    """
+    OptionCategory which contains options for preprocessing ASL data
+    """
 
-def add_oxasl_options(parser, ignore=()):
-    g = AslOptionGroup(parser, "Main Options", ignore=ignore)
-    g.add_option("-m", dest="mask", help="Brain mask (in native space of ASL data)")
-    g.add_option("--wp", dest="wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
-    g.add_option("--mc", dest="mc", help="Motion correct data", action="store_true", default=False)
-    parser.add_option_group(g)
-    g = AslOptionGroup(parser, "Acquisition/Data specific", ignore=ignore)
-    g.add_option("--casl", dest="casl", help="ASL acquisition is  pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
-    g.add_option("--bolus", dest="bolus", help="Bolus duration", type=float, default=1.8)
-    g.add_option("--bat", dest="bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
-    g.add_option("--t1", dest="t1", help="Tissue T1 value", type=float, default=1.3)
-    g.add_option("--t1b", dest="t1b", help="Blood T1 value", type=float, default=1.65)
-    g.add_option("--slicedt", dest="slicedt", help="Timing difference between slices", type=float, default=0.0)
-    g.add_option("--sliceband", dest="sliceband", help="Number of slices per pand in multi-band setup", type=int)
-    g.add_option("--artsupp", dest="artsupp", help="Arterial suppression (vascular crushing) was used", action="store_true", default=False)
-    parser.add_option_group(g)
-    g = AslOptionGroup(parser, "Structural image (optional) (see also Registration)", ignore=ignore)
-    g.add_option("--fslanat", dest="fslanat", help=" An fsl_anat directory from structural image")
-    g.add_option("-s", dest="struct", help="Structural image (whole head)")
-    g.add_option("--sbrain", dest="sbrain", help="Structural image (Brain extracted)")
-    g.add_option("--fastsrc", dest="fastsrc", help="Images from a FAST segmentation - if not set FAST will be run on structural image")
-    g.add_option("--senscorr", dest="senscorr", help="Use bias field (from segmentation) for sensitivity correction", action="store_true", default=False)
-    parser.add_option_group(g)
+    def __init__(self, **kwargs):
+        OptionCategory.__init__(self, "oxford_asl", **kwargs)
+
+    def groups(self, parser):
+        ret = []
+        g = IgnorableOptionGroup(parser, "Main Options")
+        g.add_option("--wp", dest="wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
+        g.add_option("--mc", dest="mc", help="Motion correct data", action="store_true", default=False)
+        ret.append(g)
+        g = IgnorableOptionGroup(parser, "Acquisition/Data specific")
+        g.add_option("--casl", dest="casl", help="ASL acquisition is  pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
+        g.add_option("--bolus", dest="bolus", help="Bolus duration", type=float, default=1.8)
+        g.add_option("--bat", dest="bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
+        g.add_option("--t1", dest="t1", help="Tissue T1 value", type=float, default=1.3)
+        g.add_option("--t1b", dest="t1b", help="Blood T1 value", type=float, default=1.65)
+        g.add_option("--slicedt", dest="slicedt", help="Timing difference between slices", type=float, default=0.0)
+        g.add_option("--sliceband", dest="sliceband", help="Number of slices per pand in multi-band setup", type=int)
+        g.add_option("--artsupp", dest="artsupp", help="Arterial suppression (vascular crushing) was used", action="store_true", default=False)
+        ret.append(g)
+        return ret
 
 """
 Usage_extended() {
@@ -128,45 +128,29 @@ Usage_extended() {
 """
 
 def main():
-    usage = """OXFORD_ASL
-
-    oxford_asl -i <perfusion image> -c <calibration image> --method <voxelwise|refregion> -o <output filename> [options]
-    """
     debug = True
     try:
-        p = OptionParser(usage=usage, version=__version__)
-        add_data_options(p)
-        add_oxasl_options(p)
-        add_calib_options(p, ignore=["perf", "brain_mask", "output", "debug", "tis"])
-        add_basil_options(p, ignore=["mask"])
-        options, _ = p.parse_args()
-        
-        # Convert to dictionary for easier handling
-        options = vars(options)
-        debug = options.pop("debug", False)
+        parser = AslOptionParser(usage="oxford_asl -i <asl_image> [options]", version=__version__)
+        parser.add_category(AslImageOptions())
+        parser.add_category(StructuralImageOptions())
+        parser.add_category(OxfordAslOptions())
+        parser.add_category(CalibOptions(ignore=["perf", "brain_mask", "output", "debug", "tis"]))
+        #parser.add_category(BasilOption())
+        parser.add_category(GenericOptions())
 
-        outdir = options.pop("output")
-        if outdir is None:
-            outdir = "oxasl"
-        wsp_output = fsl.Workspace(workdir=outdir, debug=debug)
-        print(wsp_output.workdir)
+        options, _ = parser.parse_args(sys.argv)
+        if not options.output:
+            options.output = "oxasl"
 
-        if debug:
-            options["wsp"] = wsp_output.sub("temp")
+        if not options.asldata:
+            sys.stderr.write("Input file not specified\n")
+            parser.print_help()
+            sys.exit(1)
 
-        options["asl_img"] = AslImage(options.pop("asldata", None), role="Input", **options)
-        images = {
-            "calib" : "Calibration",
-        }
-        for opt, role in images.items():
-            if options[opt]:
-                options[opt] = fsl.Image(options[opt], role=role)
+        wsp = AslWorkspace(savedir=options.output, **vars(options))
+        wsp.asldata = AslImage(options.asldata, **parser.filter(vars(wsp), "image"))
 
-        # Remove options consumed by AslImage
-        for opt in ["order", "ntis", "tis", "nplds", "plds", "nrpts", "rpts", "nphases", "phases"]:
-            options.pop(opt, None)
-
-        oxasl(wsp_output, **options)
+        oxasl(wsp)
         # save command line to logfile
         #log=$outdir/logfile
         #echo $# > $log
@@ -177,225 +161,44 @@ def main():
             traceback.print_exc()
         sys.exit(1)
 
-def oxasl(wsp_out, asl_img, mask=None,
-          fslanat=None, struc_img=None, struc_bet_img=None, 
-          calib=None, calib_ref_img=None, calib_blip_img=None,
-          wsp=None, log=sys.stdout, **kwargs):
- 
-    # Workspace for temporary data
-    if wsp is None:
-        wsp = fsl.Workspace()
+def oxasl(wsp):
+    """
+    Run standard processing on ASL data
 
+    This method requires wsp to be a Workspace containing certain standard information.
+    As a minimum, the attribute ``asldata`` must contain an AslImage object.
+    """
+ 
     # What spaces results will be output in. Always include native space
-    output_spaces = {
+    wsp.output_spaces = {
         "native_space" : {} 
     }
+
+    wsp.log.write("OXFORD_ASL - running\n")
+    wsp.log.write("Version: %s\n" % __version__)
+    wsp.log.write("Input ASL data: %s\n" % wsp.asldata.name)
+    wsp.asldata.summary(wsp.log)
 
     # if kwargs.get("std_trans", False):
     #     if not struc_img:
     #         raise ValueError("Structural image is required along with transformation matrix to output results in standard space")
     #     stdout = True
 
-    log.write("OXFORD_ASL - running\n")
-    log.write("Version: %s\n" % __version__)
+    wsp.preproc_asl()
+    wsp.preproc_calib()
+    wsp.preproc_struc()
+    #wsp.motion_correct()
+    wsp.generate_mask()
+    wsp.basil()
 
-    # Check required inputs are present
-    if not asl_img:
-        raise ValueError("ASL input data must be provided")
-    
-    log.write("Input ASL data: %s\n" % asl_img.fpath)
-    asldata = wsp.add_img(asl_img, name="asldata")
-    asldata.summary(log)
+    #wsp.generate_mask()
+    #wsp.output()
+    #wsp.calibrate()
 
-    diffdata = asldata.diff()
-    wsp.add_img(diffdata, "diffdata")
+    wsp.log.write("\nOutput is %s\n" % wsp.savedir)
+    wsp.log.write("OXFORD_ASL - done\n")
 
-    diffdata_mean = diffdata.mean_across_repeats()
-    wsp.add_img(diffdata_mean, "diffdata_mean")
-
-    perf_weighted = asldata.perf_weighted()
-    wsp.add_img(perf_weighted, "pwi")
-
-    if fslanat:
-        # Copy over the structural and brain extracted structural
-        log.write("Using FSL_ANAT output directory: %s" % fslanat)
-        if (os.path.isfile(os.path.join(fslanat, "T1_biascorr")) and
-            os.path.isfile(os.path.join(fslanat, "T1_biascorr_brain"))):
-            log.write("Using bias-corrected structural images")
-            struc_img = wsp.add_img(fsl.Image(os.path.join(fslanat, "T1_biascorr")), name="struc")
-            struc_bet_img = wsp.add_img(fsl.Image(os.path.join(fslanat, "T1_biascorr_brain")), name="struc_bet")
-        else:
-            log.write("Using non bias-corrected structural images")
-            struc_img = wsp.add_img(fsl.Image(os.path.join(fslanat, "T1")), name="struc")
-            struc_bet_img = wsp.add_img(fsl.Image(os.path.join(fslanat, "T1_brain")), name="struc_bet")
-        
-        output_spaces["struct_space"] = {
-            "xfm" : None # FIXME
-        }
-        
-        if os.path.isfile(os.path.join(fslanat, "T1_to_MNI_nonlin_coeff")):
-            output_spaces["std_space"] = {
-                "warp" : os.path.join(fslanat, "T1_to_MNI_nonlin_coeff")
-            }
-        elif os.path.isfile(os.path.join(fslanat, "T1_to_MNI_lin.mat")):
-            output_spaces["std_space"] = {
-                "xfm" : os.path.join(fslanat, "T1_to_MNI_lin")
-            }
-
-    elif struc_img:
-        output_spaces["struct_space"] = None
-        log.write("Using structural image: %s\n" % struc_img.fpath)
-        wsp.add_img(struc_img, "struc")
-        if not struc_bet_img:
-            log.write("Running BET on structural image\n")
-            struc_bet_img = wsp.bet(struc_img, "struc_bet")
-        else:
-            struc_bet_img = wsp.add_img(struc_bet_img, "struc_bet")
-
-        output_spaces["struct_space"] = {
-            "xfm" : None # FIXME
-        }
-
-    elif kwargs.get("struc_img_lowres", None):
-        struc_img_lowres = kwargs.pop("struc_img_lowres")
-        log.write("Low-resolution tructural image: %s\n" % struc_img_lowres.fpath)     
-        struc_img_lowres = wsp.add_img(struc_img_lowres, "lowstruc")
-
-    elif "std_xfm" in kwargs or "std_warp" in kwargs:
-        output_spaces["std_space"] = {
-            "xfm" : kwargs.pop("std_xfm", None),
-            "warp" : kwargs.pop("std_warp", None),
-            "brain" : kwargs.pop("std_brain", None),
-        }
-        
-        if not output_spaces["std_space"]["std_brain"]:
-            output_spaces["std_space"]["std_brain"] = os.path.join(fsldir, "data", "standard", "MNI152_T1_2mm")
-        log.write("Standard brain is: %s" % output_spaces["std_space"]["std_brain"])
-    
-    else:
-        log.write("No structural data found - output will be in native space only\n")
-
-    log.write("\nPre-processing\n")
-       
-    # Pre-process calibration images
-    calib = preproc_calib(wsp, calib, "calib", "Calibration")
-    calib_ref_img = preproc_calib(wsp, calib_ref_img, "cref", "Calibration reference")
-    calib_blip_img = preproc_calib(wsp, calib_blip_img, "cblip", "Calibration BLIP")
-
-    if not mask:
-        mask = generate_mask(wsp, meanasl=perf_weighted, struc_bet_img=struc_bet_img, calib_img=calib, log=log)
-    wsp.add_img(mask, name="mask")
-
-    if kwargs.pop("mc", False): 
-        motion_correct(wsp, asldata, ref=calib, log=log)
-
-    # Single or Multi TI setup
-    if asldata.ntis == 1:
-        # Single TI data - don't try to infer arterial component of bolus duration, we don't have enough info
-        log.write("Operating in Single TI mode\n")
-        kwargs["artoff"] = True
-        kwargs["fixbolus"] = True
-        singleti = True
-    
-    casl = kwargs.pop("casl", False)
-
-    if kwargs.get("wp", False):
-        # White paper mode - this overrides defaults, but can be overwritten by command line 
-        # specification of individual parameters
-        log.write("Analysis in white paper mode\n")
-        t1_default = 1.65
-        bat_default = 0.0
-        calib_method = "voxel"
-    else:
-        t1_default = 1.3
-        if casl:
-            bat_default = 1.3
-        else:
-            bat_default = 0.7
-
-    kwargs["t1"] = kwargs.get("t1", t1_default)
-    kwargs["t1b"] = kwargs.get("t1b", 1.65)
-    kwargs["bat"] = kwargs.get("bat", bat_default)
-    kwargs["bolusdur"] = kwargs.get("bolusdur", 1.8)
-
-    # if we are doing CASL then fix the bolus duration, except where the user has 
-    # explicitly told us otherwise
-    kwargs["fixbolus"] = kwargs.get("fixbolus", casl)
-        
-    # Initial BASIL run on mean data
-    log.write("\nDoing initial fit on mean at each TI\n")
-    run_basil(wsp, "init", diffdata_mean, mask=mask, log=log, **kwargs)
-
-    log.write("Output is %s\n" % wsp_out.workdir)
-    log.write("OXFORD_ASL - done\n")
-
-def preproc_calib(wsp, img, output_name, desc, log=sys.stdout):
-    """
-    Standard pre-processing of calibration images
-    
-    assumed to be in native space but not necessarily motion corrected or 
-    aligned to ASL data
-    """
-    if img:
-        log.write("%s image from %s\n" % (desc, img.fpath))
-        data = img.data()
-        if img.ndim == 4:
-            if img.shape[3] > 1:
-                log.write("Removing first volume to ensure data is in steady state" % desc)
-                data = data[..., :-1]
-                    
-                #if [ ! -z $moco ]; then
-                #    #motion correction
-                #    mcflirt -in $tempdir/calib -o $tempdir/calib
-                #fi
-            
-            # Take the mean across time axis
-            data = np.mean(data, axis=-1)
-
-        return wsp.add_img(img.derived(data=data, name=output_name))
-
-def generate_mask(wsp, meanasl, struc_bet_img=None, regfrom_img=None, calib_img=None, struc_lowres_bet_img=None, log=sys.stdout):
-    """
-    Generate mask for ASL data
-    """
-    log.write("Automatic mask generation\n")
-    if struc_bet_img:
-        # Preferred option is to use brain extracted structural
-        struc_bet_mask = wsp.maths(struc_bet_img, args="-bin")
-        mask = wsp.apply_xfm(struc_bet_mask, regfrom_img, "struct2asl.mat", args="-interp trilinear")
-        mask = wsp.maths(mask, args="-thr 0.25 -bin -fillh")
-        #wsp.fslcpgeom(regfrom_img, mask) FIXME
-        log.write("Mask generated from brain extracted structural image: %s\n" % struc_bet_img.fpath)
-    elif regfrom_img:
-        # Otherwise use the regfrom image (should already be BETed) - note that regfrom may have been set in the Registration section.
-        mask = wsp.maths(regfrom_img, args="-bin")
-        log.write("Mask generated from regfrom image: %s" % regfrom_img.fpath)
-    elif calib_img:
-        # Next option is to use betted version of mean M0 calib image as mask
-        mask = wsp.bet(calib_img, mask=True, brain=False)
-        log.write("Mask generated from calibration image (post BET)\n")
-    #elif [ ! -z $lowstrucflag ]; then
-    #    # Use the low resolution strucutral image to create mask (ahould already be BETed)
-    #    flirt -in $tempdir/lowstruc -applyxfm -init $FSLDIR/etc/flirtsch/ident.mat -out $tempdir/mask -paddingsize 0.0 -interp trilinear -ref $tempdir/asldata
-    #    fslmaths $tempdir/mask -bin $tempdir/mask
-    #    log.write("Mask generated from low res. structural\n")
-    else:
-        # otherwise just use mean time series - use a fairly low fraction value to avoid erosion
-        mask = wsp.bet(meanasl, mask=True, brain=False, args="-f 0.2")
-        log.write("Mask generated from mean time series\n")
-
-    return mask
-
-def run_basil(wsp, subdir, asldata, mask, log=sys.stdout, **kwargs):
-    steps = basil.get_steps(asldata, mask=mask, log=log, **kwargs)
-    basil_wsp = wsp.sub(subdir)
-    basil.run_steps(basil_wsp, steps, log)
-    final_step = 1
-    while 1:
-        if not os.path.isdir(os.path.join(basil_wsp.workdir, "step%i" % (final_step+1))):
-            break
-        final_step += 1
-    basil_wsp.imcp(os.path.join(basil_wsp.workdir, "step%i/finalMVN" % final_step), os.path.join(basil_wsp.workdir, "finalMVN"))
+"""
 
 # # extract images from BASIL results (and throw away values below zero)
 # fslmaths ${finalstep}/mean_ftiss -thr 0 $2/ftiss
@@ -735,132 +538,6 @@ def output(wsp, basil_name, output_name, spaces):
 #    cp $tempdir/$subdir/paramnames.txt $outdir/advanced/$subdir/paramnames.txt
 # fi
 
-# }
-
-def motion_correct(wsp, asldata, calib_img=None, cref_img=None, cblip_img=None, log=sys.stdout):
-    """
-    Motion Correction (main)
-    
-    Note motion correction within calibration data is done above
-    """
-    log.write("Motion Correction\n")
-    if calib_img:
-        # use supplied image as our reference for motion correction
-        # Normally the calibration image since this will be most consistent if the data has a range of different TIs and background suppression etc
-        # this also removes motion effects between asldata and calibration image
-        log.write("Using calibration image as reference\n")
-        asldata_mc, mats = wsp.mcflirt(asldata, ref=calib_img, mats=True)
-
-        # To reduce interpolation of the ASL data change the transformations so that we end up in the space of the central volume of asldata
-        asl2calib = mats[len(mats)/2+1]
-        calib2asl = np.linalg.inv(middlemat)
-        log.write("middle volume->calib:\n%s\n" % str(asl2calib))
-        log.write("calib->middle volume:\n%s\n" % str(calib2asl))
-
-        # Convert all the volumes to this space
-        asl_moco_mats = [np.dot(mat, calib2asl) for mat in mats]
-        wsp.apply_xfm_4d(asldata, asldata_mc, asl_moco_mats, output_name=asldata.iname + "_mc", args="-fourdigit")
-
-        # Convert all calibration images to align with asldata
-        wsp.apply_xfm(calib_img, asldata, xfm=calib2asl)
-        if cref_img:
-            wsp.apply_xfm(cref_img, asldata, xfm=calib2asl)
-        if cblip_img:
-            wsp.apply_xfm(cblip_img, asldata, xfm=calib2asl)
-
-    else:
-         log.write("Using ASL data middle volume as reference\n")
-         mcdata, mats = wsp.mcflirt(asldata, mats=True)
-         
-    #cat $tempdir/asldata.mat/MAT* > $tempdir/asldata.cat # save the motion matrices for distortion correction if reqd
-
-def get_asl2struc(wsp, asldata, regfrom):
-    """
-    Registration (1/2)
-    # Make sure we have some form of transformation between the ASL data and the structural (if that has been supplied)
-    # only 'initial' step in asl_reg is used here
-    """
-    pass
-    #register=0
-    #if [ ! -z $strucflag ]; then # if structural image has not been suppled then skip the registration
-    #    register=1
-    #    if [ ! -z $asl2struc ]; then # we have been supplied with a transformation matrix - we do not need registration, but we do want to transform the results
-    #    register=0
-    #    Log "Using existing asl to structural transform: $asl2struc"
-    #    cp $asl2struc $tempdir/asl2struct.mat
-    #    convert_xfm -omat $tempdir/struct2asl.mat -inverse $tempdir/asl2struct.mat
-    #    fi
-    #fi
-
-    # if not regfrom:
-    #     # No regfrom iamge supplied so we will use the mean of the asl timeseries - unless it was diff data
-    #     # NB in the case of really good background suppresion this might not be best option even if raw ASL data has 
-    #     # been supplied, in which case a calibration image could be provided to regfrom (or failing that the PWI). 
-    #     # We wont force that here as we dont know.
-    #     if calib_img and "p" not in asldata.order and "P" not in asldata.order:
-    #         #if available use calibration image
-    #         regfrom_img = wsp.bet(calib_img, "calib_brain")
-    #     else:
-    #         regfrom_img = wsp.bet(meanasl_img, "meanasl_brain", "-f 0.2")
-
-    # #if [ $register -eq 1 ]; then
-    # # registration here using asl_reg (inital only)
-    # log.write("Performing registration\n")
-    # log.write("Using %s as base for inital registration" % regfrom_img.iname)
-    # extraoptions="--mainonly " # to ensure we only do the initil flirt part
-    # if low_struc:
-    #     extraoptions += "-r $tempdir/lowstruc"
-
-    # Registration(regfrom_img, extraoptions)
-    # #convert_xfm -omat $tempdir/struct2asl.mat -inverse $tempdir/asl2struct.mat
-
-def segment():
-    pass
-    ### Segmentation of structural image - if we have a structural image we ALWAYS ensure we have a segmentation
-    # if [ ! -z $fslanat ]; then
-    #     # we are being supplied with an fslanat directory
-    #     fasthasrun=1 #this means that we have PVE for calibration & PVC purposes
-        
-    #     # copy over the things we need and place them using the names used elsewhere
-    #     imcp $fslanat/T1_fast_pve_0 $tempdir/pvcsf_struct #indicate that it is in structural space!
-    #     imcp $fslanat/T1_fast_pve_1 $tempdir/pvgm_struct
-    #     imcp $fslanat/T1_fast_pve_2 $tempdir/pvwm_struct
-
-    #     if [ ! -z $fslanat/T1_fast_bias ]; then # test to check that there is a bias field here
-    #     Log "Bias field extracted from $fslanat sucessfully"
-    #     imcp $fslanat/T1_fast_bias $tempdir/biasfield_struct
-    #     else
-    #     Log "No Bias field found in $fslanat"
-    #     fi
-        
-    # elif [ ! -z $struc ]; then
-    #     # do we have the results from FAST already? If not run it
-    #     if [ -z $fastsrc ]; then
-    #     echo "Segmenting the structural image"
-    #     Log "Segmenting the structural image"
-    #     fast -B -b -o $tempdir/seg -p $tempdir/struc_bet
-    #     fastsrc=$tempdir/seg
-    #     else
-    #     # FAST has been run externally
-    #     Log "Using FAST outputs at: $fastsrc"
-    #     fi
-        
-    #     # we are now sure we have FAST outputs
-    #     fasthasrun=1
-
-    #     # copy over the things we need and place them using the names used elsewhere
-    #     imcp ${fastsrc}_pve_0 $tempdir/pvcsf_struct #indicate that it is in structural space!
-    #     imcp ${fastsrc}_pve_1 $tempdir/pvgm_struct
-    #     imcp ${fastsrc}_pve_2 $tempdir/pvwm_struct
-
-    #     if [ ! -z ${fastsrc}_bias ]; then # test to see if there is a bias field in the FAST output
-    #     Log "Bias field extracted from ${fastsrc} sucessfully"
-    #     imcp ${fastsrc}_bias $tempdir/biasfield_struct
-    #     else
-    #     Log "No Bias field found with ${fastsrc}"
-    #     fi
-        
-    # fi
 
     # # some useful preproc to do with FAST outputs
     # if [ ! -z $fasthasrun ]; then
@@ -1490,4 +1167,4 @@ def distcorr():
 # else
 #     rm -r $tempdir
 # fi
-
+"""
