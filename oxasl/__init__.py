@@ -2,10 +2,11 @@
 Python package for ASL-MRI analysis
 ===================================
 
-The modules in this package are mostly Python versions of existing shell script
+The modules in this package are mostly Python replacements for existing shell script
 and C++ code from the oxford_asl FSL module.
 
-For many tools, FSL is required.
+For many tools, FSL is required. The ``fslpy`` package is used to wrap required tools
+such as BET and FAST.
 
 Design
 ------
@@ -21,27 +22,6 @@ a perfusion-weighted image.
     img = AslImage("mpld.nii.gz", plds=[0.25, 0.5, 0.75, 1.0], order='prt')
     diffdata = img.diff()
     pwi = img.perf_weighted()
-
-Module functions
-~~~~~~~~~~~~~~~~
-Other modules typically contains one or more functions which take data images
-and process them in some way. For example the ``calib`` module calibrates a
-perfusion image using either voxelwise or reference region methods.
-
-These functions take parameters they need and return data and/or images as
-appropriate.
-
-    perf_calib_img = calib(perf_img, calib_img, method="voxelwise")
-
-Command line tools
-~~~~~~~~~~~~~~~~~~
-Most modules include a ``main()`` function which implements a command line
-tool to wrap the module functionality. For example the ``preproc`` module
-implements the ``oxasl_preproc`` command line tool which can be used to
-do simple preprocessing of ASL data, such as the following to perform
-label-control subtraction:
-
-    oxasl_preproc -i asldata.nii.gz --nplds=5 --diff -o asldata_diff.nii.gz
 
 Workspaces
 ~~~~~~~~~~
@@ -69,28 +49,43 @@ for passing to FSL Python wrapper commands.
     wsp.log.write("Hello World\n")
     wsp.mask = fslmaths(img).bin().run(log=wsp.fsllog)
 
-The base ``Workspace`` class simply does the above and can be subclassed to
-include additional methods which act on data already in the workspace to produce
-new data. The ``AslWorkspace`` class has methods used by the ``oxasl`` tool,
-for example the ``generate_mask`` method which examines the data present in the
-workspace (whether there is a structural image, etc) and generates a brain
-mask in the space of the ASL data and sets the ``mask`` attribute to this
-image.
+Module functions
+~~~~~~~~~~~~~~~~
+Other modules typically contains one or more functions which operate on a 
+workspace, in some cases with additional parameters (but not always).
+
+For example the ``calib`` module contains the ``calibrate`` function which
+calibrates a perfusion image to physical units using either voxelwise or reference 
+region methods. It reads parameters required for this from the workspace, including 
+the calibration method to use.
+
+Most of these functions write their output back into the workspace under a standard
+name, however in some cases the function might be called on different input images
+and might therefore return an image directly, which can be added to the workspace
+by the caller under whatever name they prefer 
+
+Command line tools
+~~~~~~~~~~~~~~~~~~
+Most modules include a ``main()`` function which implements a command line
+tool to wrap the module functionality. For example the ``preproc`` module
+implements the ``oxasl_preproc`` command line tool which can be used to
+do simple preprocessing of ASL data, such as the following to perform
+label-control subtraction:
+
+    oxasl_preproc -i asldata.nii.gz --nplds=5 --diff -o asldata_diff.nii.gz
+
 """
 
 from ._version import __version__, __timestamp__
 
 from .image import AslImage, AslImageOptions
-from .calib import calib
 from .preproc import AslPreprocOptions, preprocess
-from . import basil
+from .workspace import Workspace
 
 __all__ = [
     "__version__",
     "AslImage",
     "AslImageOptions", 
     "AslPreprocOptions",
-    "preprocess",
-    "basil", 
-    "calib", 
+    "Workspace",
 ]

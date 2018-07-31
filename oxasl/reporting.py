@@ -4,6 +4,9 @@ For generating human-readable output reports
 import sys
 import os
 import math
+import datetime
+import shutil
+import six
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -31,6 +34,17 @@ class RstContent(object):
         """
         self._content += txt + "\n\n"
 
+    def maths(self, content):
+        """
+        Write mathematical content
+        """
+        self.text(".. math::")
+        if isinstance(content, six.string_types):
+            self.text("    " + content)
+        else:
+            for line in content:
+                self.text("    " + line)
+
     def heading(self, txt, level=0):
         """
         Add a heading
@@ -43,6 +57,65 @@ class RstContent(object):
     def __str__(self):
         return self._content
 
+REPORT_CONF = """
+# This file is execfile()d with the current directory set to its
+# containing dir.
+
+extensions = ['sphinx.ext.mathjax',]
+templates_path = ['_templates']
+source_suffix = '.rst'
+master_doc = 'index'
+project = u'oxasl'
+copyright = u'2018, oxasl'
+author = u'oxasl'
+version = u''
+release = u''
+language = None
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+pygments_style = 'sphinx'
+todo_include_todos = False
+
+html_theme = 'alabaster'
+# html_theme_options = {}
+html_static_path = ['_static']
+html_sidebars = {
+    '**': [
+        'relations.html',  # needs 'show_related': True theme option to display
+        'searchbox.html',
+    ]
+}
+htmlhelp_basename = 'oxasldoc'
+
+# -- Options for LaTeX output ---------------------------------------------
+
+latex_elements = {
+    # 'papersize': 'letterpaper',
+    # 'pointsize': '10pt',
+    # 'preamble': '',
+    # 'figure_align': 'htbp',
+}
+
+latex_documents = [
+    (master_doc, 'oxasl.tex', u'oxasl Documentation',
+     u'oxasl', 'manual'),
+]
+"""
+
+INDEX_TEMPLATE = """
+OXASL processing report
+=======================
+
+Start time: %s
+
+End time: %s
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Contents:
+
+%s
+"""
+
 class Report(object):
     """
     A report consisting of .rst documents and associated images
@@ -51,10 +124,34 @@ class Report(object):
 
     def __init__(self, report_dir):
         self._dir = report_dir
+        self._rst_files = []
+        self._start_time = datetime.datetime.now()
+        self._end_time = None
+
         if not os.path.exists(report_dir):
             os.makedirs(report_dir)
         elif not os.path.isdir(report_dir):
             raise ValueError("%s exists but is not a directory" % report_dir)
+
+    def generate_html(self, dest_dir):
+        """
+        Generate an HTML report
+        """
+        self._end_time = datetime.datetime.now()
+        with open(os.path.join(self._dir, "conf.py"), "w") as conffile:
+            conffile.write(REPORT_CONF)
+
+        with open(os.path.join(self._dir, "index.rst"), "w") as indexfile:
+            rst_files = "\n".join(["  %s" % rst_file for rst_file in self._rst_files])
+            indexfile.write(INDEX_TEMPLATE % (self._start_time.strftime("%Y-%m-%d %H:%M:%S"), self._end_time.strftime("%Y-%m-%d %H:%M:%S"), rst_files))
+
+        os.system('sphinx-build -M html "%s" "%s"' % (self._dir, os.path.join(self._dir, "_build")))
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
+        elif not os.path.isdir(dest_dir):
+            raise ValueError("Report destination is not a directory: %s" % dest_dir)
+
+        shutil.copytree(os.path.join(self._dir, "_build", "html"), os.path.join(dest_dir, "report"))
 
     def add_rst(self, fname, src):
         """
@@ -66,6 +163,7 @@ class Report(object):
         """
         if not fname.endswith(".rst"):
             fname += ".rst"
+        self._rst_files.append(fname[:-4])
         with open(os.path.join(self._dir, fname), "w") as rstfile:
             rstfile.write(str(src))
 

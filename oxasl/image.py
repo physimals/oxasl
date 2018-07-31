@@ -341,7 +341,7 @@ class AslImage(Image):
             raise RuntimeError("Cannot difference multiphase data")
         elif "p" not in self.order and "P" not in self.order:
             # Already differenced
-            output_data = self.data
+            return self
         elif self.nvols % 2 != 0:
             raise RuntimeError("Invalid number of volumes for TC data: %i" % self.nvols)
         else:

@@ -101,7 +101,7 @@ class GenericOptions(OptionCategory):
     def groups(self, parser):
         group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
         group.add_option("-o", "--output", dest="output", help="Output %s" % self.output_type, default=None)
-        group.add_option("-m", "--mask", dest="mask", help="Mask image in native ASL space", default=None)
+        group.add_option("-m", "--mask", dest="mask", help="Brain mask image in native ASL space", default=None, type="image")
         group.add_option("--debug", help="Debug mode", action="store_true", default=False)
         return [group, ]
 
