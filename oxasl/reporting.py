@@ -1,5 +1,27 @@
 """
 For generating human-readable output reports
+
+Example usage:
+
+    report = Report()
+
+    page = ReportPage()
+    page.heading("Registration to standard space")
+    page.heading("Structural image", level=1)
+    page.text("This image was used as the registration source")
+
+    page.heading("Standard image", level=1)
+    page.text("This image was used to obtain the registration target")
+
+    page.heading("Transformation", level=1)
+    page.heading("Affine transformation structural->standard", level=2)
+    page.maths()
+    page.heading("Affine transformation standard->structural", level=2)
+    page.maths()
+    
+    report.add_rst("registration"< page)
+    report.generate_html("my-report")
+
 """
 import sys
 import os
@@ -54,6 +76,18 @@ class RstContent(object):
         self._content += txt + "\n"
         self._content += self._heading_chars[level] * len(txt) + "\n\n"
         
+    def table(self, name, tabdata):
+        self._content += ".. csv-table:: " + name + "\n\n"
+        import io
+        import csv
+        csvtxt = io.BytesIO()
+        writer = csv.writer(csvtxt)
+        for row in tabdata:
+            writer.writerow(row)
+        for line in csvtxt.getvalue().splitlines():
+            self._content += "    " + line + "\n"
+        self._content += "\n"
+
     def __str__(self):
         return self._content
 
