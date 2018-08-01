@@ -38,12 +38,15 @@ class AslOptionParser(OptionParser):
         """
         Filter options, returning only those in a specified category
 
-        :param options: Options dictionary
+        :param options: Options dictionary or namespace
         :param category: Category name
         :param consume: If True, remove filtered options from the passed dictionary
         
         :return: Dictionary of options that were found in the specified category
         """
+        if not isinstance(options, dict):
+            options = vars(options)
+            
         filtered = {}
         for option in self._categories[category]:
             if option.dest in options:
