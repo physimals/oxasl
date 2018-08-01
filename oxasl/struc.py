@@ -6,6 +6,7 @@ Copyright (c) 2008-2018 University of Oxford
 import os
 
 import fsl.wrappers as fsl
+from fsl.data.image import Image
 
 from .options import OptionCategory, IgnorableOptionGroup
 
@@ -46,12 +47,12 @@ def preproc_struc(wsp):
         biascorr_brain = os.path.join(wsp.fslanat, "T1_biascorr_brain")
         if os.path.isfile(biascorr) and os.path.isfile(biascorr_brain):
             wsp.log.write(" - Using bias-corrected structural images")
-            wsp.struc = fsl.Image(biascorr)
-            wsp.struc_brain = fsl.Image(biascorr_brain)
+            wsp.struc = Image(biascorr)
+            wsp.struc_brain = Image(biascorr_brain)
         else:
             wsp.log.write(" - Using non bias-corrected structural images")
-            wsp.struc = fsl.Image(os.path.join(wsp.fslanat, "T1"))
-            wsp.struc_brain = fsl.Image(os.path.join(wsp.fslanat, "T1_brain"))
+            wsp.struc = Image(os.path.join(wsp.fslanat, "T1"))
+            wsp.struc_brain = Image(os.path.join(wsp.fslanat, "T1_brain"))
             
         warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff")
         mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
@@ -83,21 +84,22 @@ def segment(wsp):
     """
     if None in (wsp.wm_seg, wsp.gm_seg, wsp.csf_seg):
         preproc_struc(wsp)
+        wsp.log.write("\nGetting structural segmentation\n")
         if wsp.fslanat:
-            wsp.log.write("\nGetting structural segmentation from FSL_ANAT output\n")
-            wsp.csf_pv_struc = fsl.Image(os.path.join(wsp.fslanat, "T1_fast_pve_0"))
-            wsp.gm_pv_struc = fsl.Image(os.path.join(wsp.fslanat, "T1_fast_pve_1"))
-            wsp.wm_pv_struc = fsl.Image(os.path.join(wsp.fslanat, "T1_fast_pve_2"))
+            wsp.log.write(" - Using FSL_ANAT output\n")
+            wsp.csf_pv_struc = Image(os.path.join(wsp.fslanat, "T1_fast_pve_0"))
+            wsp.gm_pv_struc = Image(os.path.join(wsp.fslanat, "T1_fast_pve_1"))
+            wsp.wm_pv_struc = Image(os.path.join(wsp.fslanat, "T1_fast_pve_2"))
         
             try:
-                wsp.bias_struc = fsl.Image(os.path.join(wsp.fslanat, "T1_fast_bias"))
+                wsp.bias_struc = Image(os.path.join(wsp.fslanat, "T1_fast_bias"))
                 wsp.log.write(" - Bias field extracted sucessfully")
             except:
                 wsp.log.write(" - No bias field found")
         elif wsp.fastdir:
             raise NotImplementedError("Specifying FAST output directory")
         elif wsp.struc:
-            wsp.log.write("\nRunning FAST to segment structural image\n")
+            wsp.log.write(" - Running FAST\n")
             fast_result = fsl.fast(wsp.struc_brain, out=fsl.LOAD, log=wsp.fsllog)
             print(fast_result)
             wsp.csf_pv_struc = fast_result["out_pve_0"]
@@ -105,7 +107,7 @@ def segment(wsp):
             wsp.wm_pv_struc = fast_result["out_pve_2"]
             #wsp.bias_struc = fast_result["fast_bias"]
         else:
-            raise ValueError("\nNo structural data provided - cannot segment\n")
+            raise ValueError("No structural data provided - cannot segment")
 
         wsp.csf_seg_struc = wsp.csf_pv_struc.data > 0.5
         wsp.gm_seg_struc = wsp.gm_pv_struc.data > 0.5
