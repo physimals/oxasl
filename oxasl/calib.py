@@ -509,7 +509,7 @@ def get_csf_mask(wsp):
         if not wsp.stdmaskfnirt:
             # FIXME use struc as ref?
             wsp.log.write(" - Registering standard space ventricle mask to structural using FLIRT\n")
-            flirt_result = fsl.applyxfm(wsp.ventricles, mat=wsp.std2struc, ref=wsp.refpve, out=fsl.LOAD, interp="nn")
+            flirt_result = fsl.applyxfm(wsp.ventricles, mat=wsp.std2struc, ref=wsp.refpve, out=fsl.LOAD, interp="nearestneighbour")
             wsp.ventricles_struc = flirt_result["out"]
         else:
             wsp.log.write(" - Registering standard space ventricle mask to structural using FNIRT\n")
@@ -532,7 +532,8 @@ def get_csf_mask(wsp):
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
     # new conversion using applywarp, supersmapling and integration
-    result = fsl.applywarp(wsp.refpve, ref=wsp.asldata_mean, out=fsl.LOAD, premat=wsp.struc2asl, super=True, interp="spline", superlevel=4)
+    #result = fsl.applywarp(wsp.refpve, ref=wsp.asldata_mean, out=fsl.LOAD, premat=wsp.struc2asl, super=True, interp="spline", superlevel=4)
+    result = fsl.applyxfm(wsp.refpve, ref=wsp.asldata_mean, mat=wsp.struc2asl, out=fsl.LOAD)
     wsp.refpve_calib = result["out"]
     
     if wsp.sensitivity is None:
@@ -548,9 +549,7 @@ def get_csf_mask(wsp):
 
     # threshold reference mask if it is not already binary
     wsp.log.write(" - Thresholding reference mask\n")
-    thr_data = wsp.refpve_calib.data
-    thr_data[thr_data < 0.9] = 0
-    wsp.ref_mask = Image(thr_data, header=wsp.refpve_calib.header)
+    wsp.ref_mask = Image((wsp.refpve_calib.data > 0.9).astype(np.int), header=wsp.refpve_calib.header)
 
 TISS_DEFAULTS = {
     "csf" : [4.3, 750, 400, 1.15],
