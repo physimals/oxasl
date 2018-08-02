@@ -3,11 +3,12 @@ Wrapper for epi_reg command
 """
 
 import fsl.utils.assertions as asrt
-from . import wrapperutils  as wutils
+from fsl.wrappers import wrapperutils  as wutils
 
-@wutils.fileOrImage('epi', 't1', 't1brain', 'out', 'fmap', 'fmapmag', 'fmapmagbrain', 'gdc', 'wmseg', 'weight')
+@wutils.fileOrImage('epi', 't1', 't1brain', 'fmap', 'fmapmag', 'fmapmagbrain', 'gdc', 'wmseg', 'weight', outprefix='out')
+@wutils.fileOrArray('init')
 @wutils.fslwrapper
-def epi_reg(epi, t1, t1brain, out, **kwargs):
+def epi_reg(**kwargs):
     """Wrapper for the ``epi_reg`` command.
     
     Required options:
@@ -34,7 +35,7 @@ def epi_reg(epi, t1, t1brain, out, **kwargs):
         'nofmapreg' : wutils.SHOW_IF_TRUE,
     }
 
-    cmd = ['epi_reg', "--epi=", epi, "--t1=", t1, "--t1brain=", t1brain, "--output=", out]
-    cmd += wutils.applyArgStyle('--=', valmap=valmap, single_char_args=True, **kwargs)
+    cmd = ['epi_reg', ]
+    cmd += wutils.applyArgStyle('--=', valmap=valmap, singlechar_args=True, **kwargs)
 
     return cmd
