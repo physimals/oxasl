@@ -142,6 +142,7 @@ def oxasl(wsp):
     wsp.struc2asl_initial = wsp.struc2asl
     wsp.asl2struc = None
     wsp.struc2asl = None
+    wsp.initmat = wsp.asl2struc_initial
     reg_asl2struc(wsp)
 
     do_output(wsp)
