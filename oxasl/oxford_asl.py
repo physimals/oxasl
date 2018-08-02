@@ -20,7 +20,7 @@ from .struc import StructuralImageOptions
 from .basil import BasilOptions
 from .workspace import Workspace
 from .options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
-from .reporting import Report
+from .reg import reg_asl2struc
 
 class OxfordAslOptions(OptionCategory):
     """
@@ -93,15 +93,15 @@ def main():
                 options.calib_method = "voxelwise"
 
         #basil_options = parser.filter(vars(options), "basil", consume=True)
-        wsp = Workspace(savedir=options.output, report=Report("oxasl_report"), **vars(options))
+        wsp = Workspace(savedir=options.output, **vars(options))
         #wsp.basil_options = basil_options
         wsp.asldata = AslImage(options.asldata, **parser.filter(vars(wsp), "image"))
 
         oxasl(wsp)
-        wsp.report.generate_html(options.output)
-        # save command line to logfile
-        #log=$outdir/logfile
-        #echo $# > $log
+        report_build_dir = None
+        if wsp.debug:
+            report_build_dir = os.path.join(options.output, "report_build")
+        wsp.report.generate_html(os.path.join(options.output, "report"), report_build_dir)
 
     except Exception as e:
         sys.stderr.write("ERROR: " + str(e) + "\n")
@@ -135,6 +135,14 @@ def oxasl(wsp):
     corrections.apply_corrections(wsp)
     mask.generate_mask(wsp)
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
+
+    wsp.do_flirt, wsp.do_bbr = False, True # FIXME
+    wsp.regfrom = wsp.basil.main.finalstep.mean_ftiss
+    wsp.asl2struc_initial = wsp.asl2struc
+    wsp.struc2asl_initial = wsp.struc2asl
+    wsp.asl2struc = None
+    wsp.struc2asl = None
+    reg_asl2struc(wsp)
 
     do_output(wsp)
     if wsp.calib is not None:
