@@ -52,7 +52,6 @@ def reg_asl2struc(wsp):
         if wsp.do_flirt:
             wsp.regto, wsp.asl2struc = reg_flirt(wsp)
         if wsp.do_bbr:
-            wsp.initmat = wsp.asl2struc
             wsp.regto, wsp.asl2struc = reg_bbr(wsp)
     
     if wsp.asl2struc is not None and wsp.struc2asl is None:
@@ -136,6 +135,8 @@ def reg_bbr(wsp):
 
     :return Tuple of registered image, transform matrix
     """
+    struc.segment(wsp)
+
     wsp.log.write("  - BBR registration using epi_reg\n")
         
     # Refinement of the registration using perfusion and the white matter segmentation
@@ -159,7 +160,7 @@ def reg_bbr(wsp):
             "echospacing" : wsp.echospacing,
         })
     
-    result = epi_reg(epi=wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg, **epi_reg_opts)
+    result = epi_reg(epi=wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg_struc, **epi_reg_opts)
     return result["out"], result["out_init"]
 
     #OUTPUT
