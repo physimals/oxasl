@@ -18,6 +18,7 @@ from oxasl.workspace import Workspace
 from . import calib, preproc, struc
 from .options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from ._version import __version__
+from .wrappers import epi_reg
 
 def get_regfrom(wsp):
     """
@@ -158,8 +159,8 @@ def reg_bbr(wsp):
             "echospacing" : wsp.echospacing,
         })
     
-    trans = epi_reg(wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, wmseg=wsp.wm_seg, **epi_reg_opts)
-    return trans
+    result = epi_reg(epi=wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg, **epi_reg_opts)
+    return result["out"], result["out_init"]
 
     #OUTPUT
     #echo "Saving FINAL output"
