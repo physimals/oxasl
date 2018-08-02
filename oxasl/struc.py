@@ -85,7 +85,7 @@ def segment(wsp):
     """
     Segment the structural image
     """
-    if None in (wsp.wm_seg, wsp.gm_seg, wsp.csf_seg):
+    if None in (wsp.wm_seg_struc, wsp.gm_seg_struc, wsp.csf_seg_struc):
         preproc_struc(wsp)
         page = ReportPage()
         page.heading("Segmentation of structural image")
