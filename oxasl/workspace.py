@@ -50,6 +50,9 @@ class Workspace(object):
         else:
             self._savedir = None
 
+        # Used to record what workspace steps have been done
+        self._done = {}
+
         # Defaults - these can be overridden by kwargs
         self.log = sys.stdout
         self.debug = False
@@ -80,6 +83,25 @@ class Workspace(object):
         if ret is None:
             ret = alternative
         return ret
+
+    def done(self, proc_name, status=True):
+        """
+        Mark that a particular named process has been done and does not
+        need to be done again
+
+        :param proc_name: process name, should be unique
+        :param status: Done status. By default set process as done, passing
+                       ``False`` means process no longer considered done
+        """
+        self._done[proc_name] = status
+
+    def isdone(self, proc_name):
+        """
+        Has a process been done?
+
+        :return True if process has been flagged as done via the ``done`` method
+        """
+        return self._done.get(proc_name, False)
 
     def set_item(self, name, value, save=True, save_name=None):
         """
