@@ -19,15 +19,17 @@ Example usage:
     page.heading("Affine transformation standard->structural", level=2)
     page.maths()
     
-    report.add_rst("registration"< page)
+    report.add("registration", page)
     report.generate_html("my-report")
-
 """
 import sys
 import os
 import math
 import datetime
 import shutil
+import tempfile
+import warnings
+
 import six
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -35,7 +37,55 @@ from matplotlib.figure import Figure
 
 from fsl.data.image import Image
 
-class RstContent(object):
+class LightboxImage(object):
+    """
+    A .png image file showing a lightbox view of one or more Image instances
+    """
+
+    def __init__(self, *imgs):
+        """
+        :param *imgs: One or more ``fsl.data.Image`` instances. Later images will be 
+                      overlaid onto earlier images
+        """
+        if not imgs:
+            raise ValueError("At least one image required")
+        self._imgs = imgs
+        self.extension = ".png"
+
+    def tofile(self, fname):
+        """
+        Write image to a file
+        """
+        shape = None
+        for img in self._imgs:
+            if not isinstance(img, Image):
+                raise ValueError("Images must be instances of fsl.data.Image")
+            if shape is None:
+                shape = img.shape
+            if img.ndim != 3:
+                raise ValueError("Images must be 3D") 
+            if img.shape != shape:
+                raise ValueError("Images do not have consistent shapes")
+        
+        num_slices = min(9, shape[2])
+        grid_size = int(math.ceil(math.sqrt(num_slices)))
+
+        fig = Figure()
+        FigureCanvas(fig)
+        for nslice in range(num_slices):
+            axes = fig.add_subplot(grid_size, grid_size, nslice+1)
+            axes.set_yticklabels([])
+            axes.set_xticklabels([])
+            axes.set_xticks([])
+            axes.set_yticks([])
+            for img in self._imgs:
+                slice_idx = int(float(shape[2]*nslice)/num_slices)
+                axes.imshow(img.data[:, :, slice_idx].T)
+            
+        fig.subplots_adjust(wspace=0, hspace=0.05)
+        fig.savefig(fname)
+        
+class ReportPage(object):
     """
     Simple helper class for creating documents containing ReStructuredText
     """
@@ -43,7 +93,8 @@ class RstContent(object):
     def __init__(self):
         self._content = ""
         self._heading_chars = "=-~+"
-
+        self.extension = ".rst"
+        
     def image(self, fname):
         """
         Add a block-level image
@@ -62,10 +113,33 @@ class RstContent(object):
         """
         self.text(".. math::")
         if isinstance(content, six.string_types):
-            self.text("    " + content)
+            content = content.splitlines()
+
+        for line in content:
+            self._content += "    " + line + "\n"
+        self._content += "\n"
+
+    def _latex_float(self, f, sf=3):
+        """
+        Format float in format suitable for Latex - nicked off StackOverflow!
+        """
+        pyformat = "{0:.%ig}" % sf
+        float_str = pyformat.format(f)
+        if "e" in float_str:
+            base, exponent = float_str.split("e")
+            return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
         else:
-            for line in content:
-                self.text("    " + line)
+            return float_str
+
+    def matrix(self, mat, sf=3):
+        """
+        Add a matrix of numbers
+        """
+        matrix_latex = "\\begin{bmatrix}\n"
+        for row in mat:
+            matrix_latex += " & ".join([self._latex_float(v, sf) for v in row]) + " \\\\\n"
+        matrix_latex += "\\end{bmatrix}\n"
+        self.maths(matrix_latex)
 
     def heading(self, txt, level=0):
         """
@@ -77,6 +151,9 @@ class RstContent(object):
         self._content += self._heading_chars[level] * len(txt) + "\n\n"
         
     def table(self, name, tabdata):
+        """
+        Add a table
+        """
         self._content += ".. csv-table:: " + name + "\n\n"
         import io
         import csv
@@ -88,8 +165,87 @@ class RstContent(object):
             self._content += "    " + line + "\n"
         self._content += "\n"
 
+    def tofile(self, fname):
+        """
+        Write RST content to a file
+        """
+        with open(fname, "w") as rstfile:
+            rstfile.write(self._content)
+
     def __str__(self):
         return self._content
+
+class Report(object):
+    """
+    A report consisting of .rst documents and associated images
+    which can be turned into a document (HTML, PDF etc)
+    """
+
+    def __init__(self):
+        self._contents = []
+        self._files = {}
+        self._start_time = datetime.datetime.now()
+        self._end_time = None
+
+    def generate_html(self, dest_dir, build_dir=None):
+        """
+        Generate an HTML report
+        """
+        self._end_time = datetime.datetime.now()
+
+        if build_dir:
+            if not os.path.exists(build_dir):
+                os.makedirs(build_dir)
+            elif not os.path.isdir(build_dir):
+                raise ValueError("Report build directory %s exists but is not a directory" % build_dir)
+            else:
+                warnings.warn("Report build directory %s already exists" % build_dir)
+            is_temp = False
+        else:
+            build_dir = tempfile.mkdtemp("_report")
+            is_temp = True
+
+        try:
+            with open(os.path.join(build_dir, "conf.py"), "w") as conffile:
+                conffile.write(REPORT_CONF)
+
+            with open(os.path.join(build_dir, "index.rst"), "w") as indexfile:
+                rst_files = "\n".join(["  %s" % rst_file for rst_file in self._contents])
+                indexfile.write(INDEX_TEMPLATE % (self._start_time.strftime("%Y-%m-%d %H:%M:%S"), self._end_time.strftime("%Y-%m-%d %H:%M:%S"), rst_files))
+
+            for fname, content in self._files.items():
+                content.tofile(os.path.join(build_dir, fname))
+
+            os.system('sphinx-build -M html "%s" "%s"' % (build_dir, os.path.join(build_dir, "_build")))
+
+            if os.path.exists(dest_dir):
+                if not os.path.isdir(dest_dir):
+                    raise ValueError("Report destination directory %s exists but is not a directory" % dest_dir)
+                else:
+                    warnings.warn("Report destination directory %s already exists - removing" % dest_dir)
+                    shutil.rmtree(dest_dir)
+                
+            shutil.copytree(os.path.join(build_dir, "_build", "html"), dest_dir)
+        finally:
+            if is_temp:
+                shutil.rmtree(build_dir)
+
+    def add(self, name, content, overwrite=False):
+        """
+        Add content to a report
+
+        :param name: Name of the content.
+        :param content: Content object which has ``extension`` attribute and supports ``tofile()`` method
+        :param overwrite: If True, and content already exists with the same ``name`` and extension, 
+                          replace content. Otherwise an exception is thrown.
+        """
+        fname = name + content.extension
+        if not overwrite and fname in self._files:
+            raise ValueError("Content with file name '%s' already exists and overwrite=False" % fname)
+
+        self._files[fname] = content
+        if isinstance(content, ReportPage):
+            self._contents.append(name)
 
 REPORT_CONF = """
 # This file is execfile()d with the current directory set to its
@@ -111,7 +267,7 @@ todo_include_todos = False
 
 html_theme = 'alabaster'
 # html_theme_options = {}
-html_static_path = ['_static']
+html_static_path = []
 html_sidebars = {
     '**': [
         'relations.html',  # needs 'show_related': True theme option to display
@@ -144,110 +300,24 @@ Start time: %s
 End time: %s
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Contents:
+  :maxdepth: 1
+  :caption: Contents:
 
 %s
 """
-
-class Report(object):
-    """
-    A report consisting of .rst documents and associated images
-    which can be turned into a document (HTML, PDF etc)
-    """
-
-    def __init__(self, report_dir):
-        self._dir = report_dir
-        self._rst_files = []
-        self._start_time = datetime.datetime.now()
-        self._end_time = None
-
-        if not os.path.exists(report_dir):
-            os.makedirs(report_dir)
-        elif not os.path.isdir(report_dir):
-            raise ValueError("%s exists but is not a directory" % report_dir)
-
-    def generate_html(self, dest_dir):
-        """
-        Generate an HTML report
-        """
-        self._end_time = datetime.datetime.now()
-        with open(os.path.join(self._dir, "conf.py"), "w") as conffile:
-            conffile.write(REPORT_CONF)
-
-        with open(os.path.join(self._dir, "index.rst"), "w") as indexfile:
-            rst_files = "\n".join(["  %s" % rst_file for rst_file in self._rst_files])
-            indexfile.write(INDEX_TEMPLATE % (self._start_time.strftime("%Y-%m-%d %H:%M:%S"), self._end_time.strftime("%Y-%m-%d %H:%M:%S"), rst_files))
-
-        os.system('sphinx-build -M html "%s" "%s"' % (self._dir, os.path.join(self._dir, "_build")))
-        if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
-        elif not os.path.isdir(dest_dir):
-            raise ValueError("Report destination is not a directory: %s" % dest_dir)
-
-        shutil.copytree(os.path.join(self._dir, "_build", "html"), os.path.join(dest_dir, "report"))
-
-    def add_rst(self, fname, src):
-        """
-        Write a .rst text file
-
-        :param fname: File name to write to
-        :param src: Object whose string representation (``str(srouce)`` provides the text content
-                    Typically this will be an RstContent object but it does not have to be.
-        """
-        if not fname.endswith(".rst"):
-            fname += ".rst"
-        self._rst_files.append(fname[:-4])
-        with open(os.path.join(self._dir, fname), "w") as rstfile:
-            rstfile.write(str(src))
-
-    def add_lightbox_img(self, fname, *imgs, **kwargs):
-        """
-        Write a .png image file showing a lightbox view of one or more Image instances
-
-        :param fname: File name to write to
-        :param *imgs: One or more ``fsl.data.Image`` instances. Later images will be 
-                      overlaid onto earlier images
-        """
-        if not imgs:
-            raise ValueError("At least one image required")
-
-        shape = None
-        for img in imgs:
-            if not isinstance(img, Image):
-                raise ValueError("Images must be instances of fsl.data.Image")
-            if shape is None:
-                shape = img.shape
-            #print(img.axisMapping(img.worldToVoxMat))
-            if img.ndim != 3:
-                raise ValueError("Images must be 3D") 
-            if img.shape != shape:
-                raise ValueError("Images do not have consistent shapes")
-        
-        num_slices = min(9, shape[2])
-        grid_size = int(math.ceil(math.sqrt(num_slices)))
-
-        fig = Figure()
-        FigureCanvas(fig)
-        for nslice in range(num_slices):
-            axes = fig.add_subplot(grid_size, grid_size, nslice+1)
-            axes.set_yticklabels([])
-            axes.set_xticklabels([])
-            axes.set_xticks([])
-            axes.set_yticks([])
-            for img in imgs:
-                slice_idx = int(float(shape[2]*nslice)/num_slices)
-                axes.imshow(img.data[:, :, slice_idx].T)
-            
-        fig.subplots_adjust(wspace=0, hspace=0.05)
-        fig.savefig(os.path.join(self._dir, fname))
 
 def main():
     """
     Simple command line for testing
     """
-    report = Report(".")
-    report.lightbox_img("test.png", *[Image(fname) for fname in sys.argv[1:]])
+    report = Report()
+    report.add("lbox", LightboxImage(*[Image(fname) for fname in sys.argv[1:]]))
+
+    page = ReportPage()
+    page.image("lbox.png")
+    report.add("test", page)
+
+    report.generate_html("testreport")
 
 if __name__ == "__main__":
     main()

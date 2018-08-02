@@ -14,7 +14,7 @@ from .struc import StructuralImageOptions
 from .workspace import Workspace
 from . import reg, struc
 
-from .reporting import Report, RstContent
+from .reporting import ReportPage, LightboxImage
 from ._version import __version__
 
 def generate_mask(wsp):
@@ -66,17 +66,17 @@ def generate_mask(wsp):
     wsp.log.write("\nGenerated ASL data mask\n")
     wsp.log.write(" - Mask %s\n" % mask_source)
     
-    if wsp.report:
-        mask_report = RstContent()
-        mask_report.heading("Mask generation", level=0)
-        mask_report.text("Mask source: %s" % mask_source)
-        mask_report.heading("Masked brain image", level=1)
-        mask_report.image("mask.png")
-        wsp.report.add_rst("mask", mask_report)
+    # Reporting
+    page = ReportPage()
+    page.heading("Mask generation", level=0)
+    page.text("Mask source: %s" % mask_source)
+    page.heading("Masked brain image", level=1)
+    page.image("mask_img.png")
+    wsp.report.add("mask", page)
 
-        brain_img = np.copy(wsp.asldata_mean.data)
-        brain_img[wsp.mask.data == 0] = 0
-        wsp.report.add_lightbox_img("mask.png", Image(brain_img, header=wsp.asldata_mean.header))
+    brain_img = np.copy(wsp.asldata_mean.data)
+    brain_img[wsp.mask.data == 0] = 0
+    wsp.report.add("mask_img", LightboxImage(Image(brain_img, header=wsp.asldata_mean.header)))
 
 def main():
     """
@@ -92,7 +92,7 @@ def main():
 
         options, _ = parser.parse_args(sys.argv)
         options.mask = None # No point in using command line tool if you already have a mask!
-        wsp = Workspace(report=Report("mask_report"), **vars(options))
+        wsp = Workspace(**vars(options))
 
         if not options.asldata:
             sys.stderr.write("Input file not specified\n")

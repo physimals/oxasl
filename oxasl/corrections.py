@@ -32,7 +32,7 @@ import fsl.wrappers as fsl
 from fsl.data.image import Image
 
 from .options import OptionCategory, IgnorableOptionGroup
-from .reporting import RstContent
+from .reporting import ReportPage
 
 class DistcorrOptions(OptionCategory):
     """
@@ -174,10 +174,9 @@ def get_motion_correction(wsp):
      - ``calib2asl``       : Calibration->ASL image transformation
     """
     wsp.log.write("\nMotion Correction\n")
+    # If available, use the calibration image as reference since this will be most consistent if the data has a range 
+    # of different TIs and background suppression etc. This also removes motion effects between asldata and calibration image
     if wsp.calib:
-        # use supplied image as our reference for motion correction
-        # Normally the calibration image since this will be most consistent if the data has a range of different TIs and background suppression etc
-        # this also removes motion effects between asldata and calibration image
         wsp.log.write(" - Using calibration image as reference\n")
         ref_source = "calibration image: %s" % wsp.calib.name
         mcflirt_result = fsl.mcflirt(wsp.asldata, reffile=wsp.calib, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
@@ -191,7 +190,7 @@ def get_motion_correction(wsp):
         wsp.log.write("   Calib->ASL middle volume:\n%s\n" % str(wsp.calib2asl))
     else:
         wsp.log.write(" - Using ASL data middle volume as reference\n")
-        ref_source = "ASL data %s middle volume: %s" % wsp.asldata.name
+        ref_source = "ASL data %s middle volume: %i" % (wsp.asldata.name, int(float(wsp.asldata.shape[3])/2))
         mcflirt_result = fsl.mcflirt(wsp.asldata, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
         
@@ -199,18 +198,14 @@ def get_motion_correction(wsp):
     # to file, and same form that applywarp expects
     wsp.asldata_mc_mats = np.concatenate(mats, axis=0)
 
-    if wsp.report:
-        rst = RstContent()
-        rst.heading("Motion correction", level=0)
-        rst.text("Reference volume: %s" % ref_source)
-        rst.heading("Motion parameters", level=1)
-        for vol, mat in enumerate(mats):
-            rst_math = "\\begin{bmatrix}\n"
-            for row in mat:
-                rst_math += "    " + " & ".join([str(v) for v in row]) + " \\"
-            rst_math += "\\end{bmatrix}\n"
-            rst.maths(rst_math)
-        wsp.report.add_rst("moco", rst)
+    page = ReportPage()
+    page.heading("Motion correction", level=0)
+    page.text("Reference volume: %s" % ref_source)
+    page.heading("Motion parameters", level=1)
+    for vol, mat in enumerate(mats):
+        page.text("Volume %i" % vol)
+        page.matrix(mat)
+    wsp.report.add("moco", page)
 
 def apply_corrections(wsp):
     """

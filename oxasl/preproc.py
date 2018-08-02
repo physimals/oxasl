@@ -7,11 +7,10 @@ import numpy as np
 import scipy
 
 import fsl.wrappers as fsl
-from fsl.data.image import Image
 
 from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup
 from .image import AslImage, AslImageOptions
-from .reporting import RstContent
+from .reporting import ReportPage
 
 def motion_correct(wsp):
     """
@@ -69,20 +68,17 @@ def motion_correct(wsp):
         mcflirt_result = fsl.mcflirt(wsp.asldata, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         wsp.asldata_mc_mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
         
-    if wsp.report:
-        rst = RstContent()
-        rst.heading("Motion correction", level=0)
-        rst.text("Reference volume: %s" % ref_source)
-        rst.heading("Motion parameters", level=1)
-        for vol, mat in enumerate(wsp.asldata_mc_mats):
-            rst_math = "\\begin{bmatrix}\n"
-            for row in mat:
-                rst_math += "    " + " & ".join([str(v) for v in row]) + " \\"
-            rst_math += "\\end{bmatrix}\n"
-            rst.maths(rst_math)
-        wsp.report.add_rst("moco", rst)
-
-    #cat $tempdir/asldata.mat/MAT* > $tempdir/asldata.cat # save the motion matrices for distortion correction if reqd
+    page = ReportPage()
+    page.heading("Motion correction", level=0)
+    page.text("Reference volume: %s" % ref_source)
+    page.heading("Motion parameters", level=1)
+    for vol, mat in enumerate(wsp.asldata_mc_mats):
+        rst_math = "\\begin{bmatrix}\n"
+        for row in mat:
+            rst_math += "    " + " & ".join([str(v) for v in row]) + " \\"
+        rst_math += "\\end{bmatrix}\n"
+        page.maths(rst_math)
+    wsp.report.add("moco", page)
 
 def preproc_asl(wsp):
     """

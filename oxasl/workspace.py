@@ -11,6 +11,8 @@ import numpy as np
 
 from fsl.data.image import Image
 
+from .reporting import Report
+
 class Workspace(object):
     """
     A workspace for data processing
@@ -48,10 +50,12 @@ class Workspace(object):
         else:
             self._savedir = None
 
-        # Defaults might be overridden by kwargs
+        # Defaults - these can be overridden by kwargs
         self.log = sys.stdout
         self.debug = False
         self.fsllog = None
+        self.report = Report()
+
         for key, value in kwargs.items():
             setattr(self, key, value)
         
@@ -80,6 +84,10 @@ class Workspace(object):
     def set_item(self, name, value, save=True, save_name=None):
         """
         Add an item to the workspace
+
+        Normally this is achieved by assigning to an attribute
+        directly, however this function exists to allow greater control
+        where required.
 
         The item will be set as an attribute on the workspace
         If a save directory is configured and the value is a supported
@@ -110,9 +118,10 @@ class Workspace(object):
         This inherits the log configuration from the parent workspace. If
         a savedir is defined, it will be created with a savedir which is
         a subdirectory of the original workspace. Additional data may be 
-        set using keyword arguments.
+        set using keyword arguments. The child-workspace will be available 
+        as an attribute on the parent workspace.
         
-        :param name: Name of subdir
+        :param name: Name of sub workspace
         """
         if self._savedir:
             savedir = os.path.join(self._savedir, name)

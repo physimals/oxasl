@@ -5,10 +5,13 @@ Copyright (c) 2008-2018 University of Oxford
 """
 import os
 
+import numpy as np
+
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
 from .options import OptionCategory, IgnorableOptionGroup
+from .reporting import ReportPage, LightboxImage
 
 class StructuralImageOptions(OptionCategory):
     """
@@ -84,9 +87,13 @@ def segment(wsp):
     """
     if None in (wsp.wm_seg, wsp.gm_seg, wsp.csf_seg):
         preproc_struc(wsp)
+        page = ReportPage()
+        page.heading("Segmentation of structural image")
+
         wsp.log.write("\nGetting structural segmentation\n")
         if wsp.fslanat:
             wsp.log.write(" - Using FSL_ANAT output\n")
+            page.text("Segmentation taken from FSL_ANAT output at ``%s``" % wsp.fslanat)
             wsp.csf_pv_struc = Image(os.path.join(wsp.fslanat, "T1_fast_pve_0"))
             wsp.gm_pv_struc = Image(os.path.join(wsp.fslanat, "T1_fast_pve_1"))
             wsp.wm_pv_struc = Image(os.path.join(wsp.fslanat, "T1_fast_pve_2"))
@@ -100,8 +107,8 @@ def segment(wsp):
             raise NotImplementedError("Specifying FAST output directory")
         elif wsp.struc:
             wsp.log.write(" - Running FAST\n")
+            page.text("FAST run to segment structural image")
             fast_result = fsl.fast(wsp.struc_brain, out=fsl.LOAD, log=wsp.fsllog)
-            print(fast_result)
             wsp.csf_pv_struc = fast_result["out_pve_0"]
             wsp.gm_pv_struc = fast_result["out_pve_1"]
             wsp.wm_pv_struc = fast_result["out_pve_2"]
@@ -109,6 +116,19 @@ def segment(wsp):
         else:
             raise ValueError("No structural data provided - cannot segment")
 
-        wsp.csf_seg_struc = wsp.csf_pv_struc.data > 0.5
-        wsp.gm_seg_struc = wsp.gm_pv_struc.data > 0.5
-        wsp.wm_seg_struc = wsp.wm_pv_struc.data > 0.5
+        wsp.csf_seg_struc = Image((wsp.csf_pv_struc.data > 0.5).astype(np.int), header=wsp.struc.header)
+        wsp.gm_seg_struc = Image((wsp.gm_pv_struc.data > 0.5).astype(np.int), header=wsp.struc.header)
+        wsp.wm_seg_struc = Image((wsp.wm_pv_struc.data > 0.5).astype(np.int), header=wsp.struc.header)
+
+        wsp.report.add("csf_seg", LightboxImage(wsp.struc, wsp.csf_seg_struc))
+        wsp.report.add("gm_seg", LightboxImage(wsp.struc, wsp.gm_seg_struc))
+        wsp.report.add("wm_seg", LightboxImage(wsp.struc, wsp.wm_seg_struc))
+        
+        page.heading("Segmentation image", level=1)
+        page.text("CSF")
+        page.image("csf_seg.png")
+        page.text("GM")
+        page.image("gm_seg.png")
+        page.text("WM")
+        page.image("wm_seg.png")
+        wsp.report.add("seg", page)
