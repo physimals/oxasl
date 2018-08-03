@@ -150,11 +150,12 @@ class ReportPage(object):
         self._content += txt + "\n"
         self._content += self._heading_chars[level] * len(txt) + "\n\n"
         
-    def table(self, name, tabdata):
-        """
-        Add a table
-        """
-        self._content += ".. csv-table:: " + name + "\n\n"
+    def table(self, tabdata, name="", headers=None):
+        self._content += ".. csv-table:: " + name + "\n"
+        if headers:
+            self._content += "    :header: " + ",".join(['"%s"' % h for h in headers]) + "\n"
+        self._content += "\n"
+
         import io
         import csv
         csvtxt = io.BytesIO()
