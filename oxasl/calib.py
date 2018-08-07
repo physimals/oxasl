@@ -21,6 +21,7 @@ from fsl.data.image import Image
 from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 from .image import summary
 from .workspace import Workspace
+from .reporting import ReportPage
 from . import struc
 
 def preproc_calib(wsp):
@@ -112,6 +113,14 @@ def calibrate(wsp, perf_img, var=False):
         wsp.log.write(" - Using multiplier for physical units: %f\n" % multiplier)
         calibrated *= multiplier
 
+    # Reporting
+    page = ReportPage()
+    page.heading("Calibration")
+    page.heading("Perfusion Image: %s" % perf_img.name)
+    page.text("Multiplier for physical units: %f" % multiplier)
+    # FIXME link to detailed calibration report
+    wsp.report.add(page, "calib")
+
     return Image(image=calibrated, name=perf_img.name + "_calib", header=perf_img.header)
 
 def get_m0_voxelwise(wsp):
@@ -135,29 +144,57 @@ def get_m0_voxelwise(wsp):
      - ``calib_edgecorr`` : If True, and mask provided, apply edge correction
     """
     wsp.log.write(" - Doing voxelwise calibration\n")
-    alpha, gain = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1)
-    
+    alpha, gain, pct = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1), wsp.ifnone("pct", 0.9)
+
     # Calculate M0 value
     m0 = wsp.calib.data * alpha * gain
 
+    shorttr = 1
     if wsp.tr is not None and wsp.tr < 5:
         if wsp.t1t is not None:
-    	    # Correct the M0 image for short TR using the equation from the white paper
             wsp.log.write(" - Correcting the calibration (M0) image for short TR (TR=%f, using T1 of tissue %f)\n" % (wsp.tr, wsp.t1t))
-            m0 /= (1 - math.exp(-wsp.tr / wsp.t1t))
+            shorttr = (1 - math.exp(-wsp.tr / wsp.t1t))
+            m0 /= shorttr
         else:
             wsp.log.write("WARNING: tr < 5 (%f) but tissue T1 not provided so cannot apply short TR correction\n" % wsp.tr)
 
 	# Include partiition co-effcient in M0 image to convert from M0 tissue to M0 arterial
-    pct = wsp.ifnone("pct", 0.9)
     wsp.log.write(" - Using partition coefficient: %f\n" % pct)
     m0 /= pct
+
+    if wsp.mask is not None:
+        if wsp.edgecorr:
+            wsp.log.write(" - Doing edge correction\n")
+            m0 = _edge_correct(m0, wsp.brain_mask)
+        wsp.log.write(" - Masking M0 image")
+        m0[wsp.mask.data == 0] = 0
+
     wsp.log.write(" - Mean M0: %f\n" % np.mean(m0))
 
-    if wsp.edgecorr and wsp.mask is not None:
-        wsp.log.write(" - Doing edge correction\n")
-        m0 = _edge_correct(m0, wsp.brain_mask)
-        
+    # Reporting
+    page = ReportPage()
+    page.heading("Voxelwise M0 calculation")
+    page.text("Voxelwise calibration calculates an M0 value for each voxel from the calibration image")  
+    page.heading("Basic parameters", level=1)
+    page.text("- Inversion efficiency: %f" % alpha)  
+    page.text("- Calibration gain: %f" % gain)  
+    page.text("- Blood/tissue partition coefficient: %f" % pct)  
+    if shorttr != 1:
+        page.heading("Short TR correction", level=1)
+        page.text(" - TR: %f" % wsp.tr)
+        page.text(" - Tissue T1: %f" % wsp.t1t)
+        page.text(" - Correction factor: %f" % shorttr)
+
+    page.heading("M0", level=1)
+    page.text("M0 values obtained by multiplying calibration image by %f" % (alpha*gain/shorttr/pct))
+    page.text("Mean M0 value: %f" % np.mean(m0))
+    if wsp.mask is not None:
+        page.text("M0 image was masked using current mask")
+        if wsp.edgecorr:
+            page.text("Edge correction was used on mask")
+        page.text("Mean M0 value (within mask): %f" % np.mean(m0[wsp.mask.data > 0]))
+    wsp.report.add("m0", page)
+
     return m0
 
 def _edge_correct(m0, brain_mask):
@@ -365,13 +402,13 @@ def get_m0_refregion(wsp, mode="longtr"):
         calib_data[ref_mask == 0] = 0
         
         # calcualte T1 of reference region (if a T1 image has been supplied)
-        if t1r_img:
+        if t1r_img is not None:
             t1r_data = t1r_img.data
             t1r = np.mean(t1r_data[ref_mask != 0])
             wsp.log.write(" - Calculated T1 of reference tissue: %f\n" % t1r)
 
         # calcualte T2 of reference region (if a T2 image has been supplied)
-        if t2r_img:
+        if t2r_img is not None:
             t2r_data = t2r_img.data
             t2r = np.mean(t2r_data[ref_mask != 0])
             wsp.log.write(" - Calculated T1 of reference tissue: %f\n" % t2r)
@@ -471,6 +508,17 @@ def get_m0_refregion(wsp, mode="longtr"):
     if alpha != 1:
         wsp.log.write(" - Applying inversion efficiency of: %f\n")
         m0 = m0 * alpha
+
+    # Reporting
+    page = ReportPage()
+    page.heading("Reference region M0 calculation")
+    page.text("Reference region calibration calculates a single M0 value for a region of known tissue type")
+    page.heading("Basic parameters", level=1)
+    page.text("- Inversion efficiency: %f" % alpha)  
+    page.text("- Calibration gain: %f" % gain)  
+    page.heading("M0", level=1)
+    page.text("- M0 value: %f" % m0)
+    wsp.report.add("m0", page)
     
     return m0
 
