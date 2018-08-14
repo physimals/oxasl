@@ -40,7 +40,7 @@ class DistcorrOptions(OptionCategory):
     """
 
     def __init__(self, **kwargs):
-        OptionCategory.__init__(self, "oxford_asl", **kwargs)
+        OptionCategory.__init__(self, "distcorr", **kwargs)
 
     def groups(self, parser):
         ret = []
