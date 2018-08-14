@@ -182,11 +182,12 @@ class Report(object):
     which can be turned into a document (HTML, PDF etc)
     """
 
-    def __init__(self):
+    def __init__(self, title="OXASL processing report"):
         self._contents = []
         self._files = {}
         self._start_time = datetime.datetime.now()
         self._end_time = None
+        self.title = title
         self.extension = ""
 
     def generate_html(self, dest_dir, build_dir=None):
@@ -231,12 +232,11 @@ class Report(object):
             os.makedirs(build_dir)
 
         with open(os.path.join(build_dir, "index.rst"), "w") as indexfile:
-            rst_files = "\n".join(["  %s" % rst_file for rst_file in self._contents])
-            start_time = self._start_time.strftime("%Y-%m-%d %H:%M:%S")
-            if self._end_time: end_time = self._end_time.strftime("%Y-%m-%d %H:%M:%S")
-            else: end_time = ""
-            indexfile.write(INDEX_TEMPLATE % (start_time, end_time, rst_files))
-
+            indexfile.write(self.title + "\n")
+            indexfile.write("=" * len(self.title) + "\n\n")
+            self._timings(indexfile)
+            self._toc(indexfile)
+            
         for fname, content in self._files.items():
             content.tofile(os.path.join(build_dir, fname))
 
@@ -258,6 +258,19 @@ class Report(object):
             self._contents.append(name)
         if isinstance(content, Report):
             self._contents.append(name + "/index")
+
+    def _timings(self, indexfile):
+        if self._start_time:
+            indexfile.write("Start time: %s\n\n" % self._start_time.strftime("%Y-%m-%d %H:%M:%S"))
+        if self._end_time: 
+            indexfile.write("End time: %s\n\n" % self._end_time.strftime("%Y-%m-%d %H:%M:%S"))
+
+    def _toc(self, indexfile):
+        indexfile.write(".. toctree::\n")
+        indexfile.write("  :maxdepth: 1\n")
+        indexfile.write("  :caption: Contents:\n\n")
+        for rst_file in self._contents:
+            indexfile.write("  %s\n" % rst_file)
 
 REPORT_CONF = """
 # This file is execfile()d with the current directory set to its
@@ -301,21 +314,6 @@ latex_documents = [
     (master_doc, 'oxasl.tex', u'oxasl Documentation',
      u'oxasl', 'manual'),
 ]
-"""
-
-INDEX_TEMPLATE = """
-OXASL processing report
-=======================
-
-Start time: %s
-
-End time: %s
-
-.. toctree::
-  :maxdepth: 1
-  :caption: Contents:
-
-%s
 """
 
 def main():
