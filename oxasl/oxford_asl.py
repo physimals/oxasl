@@ -11,6 +11,8 @@ import sys
 import os
 import traceback
 
+from fsl.data.image import Image
+
 from ._version import __version__
 from .image import AslImage, AslImageOptions
 from . import calib, struc, basil, preproc, mask, corrections
@@ -73,6 +75,7 @@ def main():
         parser.add_category(OxfordAslOptions())
         parser.add_category(CalibOptions(ignore=["perf", "tis"]))
         parser.add_category(BasilOptions(ignore=["spatial"]))
+        parser.add_category(corrections.DistcorrOptions())
         parser.add_category(GenericOptions())
 
         options, _ = parser.parse_args(sys.argv)
@@ -124,6 +127,7 @@ def oxasl(wsp):
 
     # Create output workspace. Always output in native space
     wsp.sub("output").sub("native")
+    wsp.do_flirt, wsp.do_bbr = True, False # FIXME
 
     preproc.preproc_asl(wsp)
     calib.preproc_calib(wsp)
@@ -132,12 +136,17 @@ def oxasl(wsp):
     if wsp.mc: 
         corrections.get_motion_correction(wsp)
 
+    if wsp.fmap:
+        corrections.get_fieldmap_correction(wsp)
+
     corrections.apply_corrections(wsp)
     mask.generate_mask(wsp)
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
 
     wsp.do_flirt, wsp.do_bbr = False, True # FIXME
-    wsp.regfrom = wsp.basil.main.finalstep.mean_ftiss
+    new_regfrom = wsp.basil.main.finalstep.mean_ftiss.data
+    new_regfrom[new_regfrom < 0] = 0
+    wsp.regfrom = Image(new_regfrom, header=wsp.regfrom.header)
     wsp.asl2struc_initial = wsp.asl2struc
     wsp.struc2asl_initial = wsp.struc2asl
     wsp.asl2struc = None
