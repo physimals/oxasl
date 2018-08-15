@@ -144,14 +144,13 @@ def oxasl(wsp):
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
 
     wsp.do_flirt, wsp.do_bbr = False, True # FIXME
+
     new_regfrom = wsp.basil.main.finalstep.mean_ftiss.data
     new_regfrom[new_regfrom < 0] = 0
     wsp.regfrom = Image(new_regfrom, header=wsp.regfrom.header)
     wsp.asl2struc_initial = wsp.asl2struc
     wsp.struc2asl_initial = wsp.struc2asl
-    wsp.asl2struc = None
-    wsp.struc2asl = None
-    wsp.initmat = wsp.asl2struc_initial
+    wsp.done("reg_asl2struc", status=False)
     reg_asl2struc(wsp)
 
     do_output(wsp)
