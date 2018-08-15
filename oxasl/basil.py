@@ -184,6 +184,7 @@ def basil_steps(wsp, asldata, **kwargs):
     options_svb = {
         "method" : "spatialvb",
         "param-spatial-priors" : "N+",
+        "convergence" : "maxiters",
         "max-iterations": 20,
     }
 
@@ -311,7 +312,6 @@ def basil_steps(wsp, asldata, **kwargs):
     if wsp.spatial:
         step_desc = "Spatial VB - %s" % components
         options.update(options_svb)
-        options.pop("convergence") # FIXME
         del options["max-trials"]
 
         if not wsp.onestep:
