@@ -96,18 +96,18 @@ def calibrate(wsp, perf_img, var=False):
     else:
         raise ValueError("Unknown calibration method: %s" % wsp.calib_method)
 
+    multiplier = wsp.ifnone("multiplier", 1)
+    if var:
+        wsp.log.write(" - Treating data as variance - squaring M0 correction and multiplier\n")
+        m0 = m0**2
+        multiplier = multiplier**2
+
     if isinstance(m0, np.ndarray):
         # If M0 is zero, make calibrated data zero
         calibrated = np.zeros(perf_img.shape)
         calibrated[m0 > 0] = perf_img.data[m0 > 0] / m0[m0 > 0]
     else:
         calibrated = perf_img.data / m0
-
-    multiplier = wsp.ifnone("multipler", 1)
-    if var:
-        wsp.log.write(" - Treating data as variance - squaring M0 correction and multiplier\n")
-        m0 = m0**2
-        multiplier = multiplier**2
 
     if multiplier is not None:
         wsp.log.write(" - Using multiplier for physical units: %f\n" % multiplier)
