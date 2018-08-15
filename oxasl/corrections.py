@@ -105,7 +105,6 @@ def get_cblip_correction(wsp):
     # do topup
     wsp.calib_blipped = Image(np.stack((wsp.calib.data, wsp.cblip.data), axis=-1), header=wsp.calib.header)
     topup_result = fsl.topup(imain=wsp.calib_blipped, datain=params, config="b02b0.cnf", out=fsl.LOAD, fout=fsl.LOAD)
-    print(topup_result)
     wsp.done("get_cblip_correction")
 
 def get_fieldmap_correction(wsp):
@@ -276,7 +275,7 @@ def apply_corrections(wsp):
     warps = []
     if wsp.fmap_warp:
         wsp.log.write(" - Adding fieldmap based warp to correction\n")
-        warps.append(wsp.distcorr_warp)
+        warps.append(wsp.fmap_warp)
     
     if wsp.gdc_warp:
         wsp.log.write(" - Adding user-supplied GDC warp to correction\n")
@@ -285,10 +284,7 @@ def apply_corrections(wsp):
     if warps:
         kwargs = {}
         for idx, warp in enumerate(warps):
-            if idx == 0:
-                kwargs["warp"] = warp
-            else:
-                kwargs["warp%i" % (idx+1)] = warp
+            kwargs["warp%i" % (idx+1)] = warp
                 
         wsp.log.write(" - Converting all warps to single transform and extracting Jacobian\n")
         fsl.convertwarp(ref=wsp.asldata_mean, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, **kwargs)
