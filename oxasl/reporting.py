@@ -31,6 +31,7 @@ import tempfile
 import warnings
 
 import six
+import numpy as np
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -42,24 +43,36 @@ class LightboxImage(object):
     A .png image file showing a lightbox view of one or more Image instances
     """
 
-    def __init__(self, *imgs):
+    def __init__(self, img, bgimage=None, mask=None, **kwargs):
         """
         :param *imgs: One or more ``fsl.data.Image`` instances. Later images will be 
                       overlaid onto earlier images
+        :param zeromask: If True, treat zero values as transparent
         """
-        if not imgs:
-            raise ValueError("At least one image required")
-        self._imgs = imgs
+        self._img = img
+        self._bgimage = bgimage
+        self._mask = mask
+        self._zeromask = kwargs.get("zeromask", True)
         self.extension = ".png"
+
+    def _slicerange(self, img, shape):
+        if img is not None:
+            nonzero_slices = [idx for idx in range(shape[2]) if np.count_nonzero(img.data[:, :, idx]) > 0]
+            if nonzero_slices:
+               return min(nonzero_slices), max(nonzero_slices)
+        else:
+            return 0, shape[2]-1
 
     def tofile(self, fname):
         """
         Write image to a file
         """
         shape = None
-        for img in self._imgs:
+        for img in [self._img, self._bgimage, self._mask]:
+            if img is None:
+                continue
             if not isinstance(img, Image):
-                raise ValueError("Images must be instances of fsl.data.Image")
+                raise ValueError("Images must be instances of fsl.data.Image: %s" % img)
             if shape is None:
                 shape = img.shape
             if img.ndim != 3:
@@ -67,10 +80,11 @@ class LightboxImage(object):
             if img.shape != shape:
                 raise ValueError("Images do not have consistent shapes")
         
-        num_slices = min(9, shape[2])
+        min_slice, max_slice = self._slicerange(self._img, shape)
+        num_slices = min(16, max_slice - min_slice + 1)
         grid_size = int(math.ceil(math.sqrt(num_slices)))
 
-        fig = Figure()
+        fig = Figure(figsize=(5, 5), dpi=200)
         FigureCanvas(fig)
         for nslice in range(num_slices):
             axes = fig.add_subplot(grid_size, grid_size, nslice+1)
@@ -78,12 +92,28 @@ class LightboxImage(object):
             axes.set_xticklabels([])
             axes.set_xticks([])
             axes.set_yticks([])
-            for img in self._imgs:
-                slice_idx = int(float(shape[2]*nslice)/num_slices)
-                axes.imshow(img.data[:, :, slice_idx].T)
+            slice_idx = int(float((max_slice - min_slice + 1)*nslice)/num_slices) + min_slice
+
+            if self._bgimage:
+                data = self._bgimage.data[:, :, slice_idx].T
+                axes.imshow(data, cmap='gray')
+            
+            if self._img:
+                data = self._img.data[:, :, slice_idx].T
+                if issubclass(data.dtype.type, np.integer):
+                    cmap = "Set1"
+                else:
+                    cmap= "viridis"
+
+                if self._mask:
+                    data = np.ma.masked_array(data, self._mask.data[:, :, slice_idx].T == 0)
+                elif self._zeromask:
+                    data = np.ma.masked_array(data, data == 0)
+                
+                axes.imshow(data, cmap=cmap)
             
         fig.subplots_adjust(wspace=0, hspace=0.05)
-        fig.savefig(fname)
+        fig.savefig(fname, bbox_inches='tight')
         
 class ReportPage(object):
     """
@@ -193,6 +223,7 @@ class Report(object):
         Generate an HTML report
         """
         self._end_time = datetime.datetime.now()
+        duration = (self._end_time - self._start_time).total_seconds()
 
         if build_dir:
             if not os.path.exists(build_dir):
@@ -212,7 +243,7 @@ class Report(object):
 
             with open(os.path.join(build_dir, "index.rst"), "w") as indexfile:
                 rst_files = "\n".join(["  %s" % rst_file for rst_file in self._contents])
-                indexfile.write(INDEX_TEMPLATE % (self._start_time.strftime("%Y-%m-%d %H:%M:%S"), self._end_time.strftime("%Y-%m-%d %H:%M:%S"), rst_files))
+                indexfile.write(INDEX_TEMPLATE % (self._start_time.strftime("%Y-%m-%d %H:%M:%S"), self._end_time.strftime("%Y-%m-%d %H:%M:%S"), duration, rst_files))
 
             for fname, content in self._files.items():
                 content.tofile(os.path.join(build_dir, fname))
@@ -266,7 +297,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 pygments_style = 'sphinx'
 todo_include_todos = False
 
-html_theme = 'alabaster'
+html_theme = 'sphinxdoc'
 # html_theme_options = {}
 html_static_path = []
 html_sidebars = {
@@ -299,6 +330,8 @@ OXASL processing report
 Start time: %s
 
 End time: %s
+
+Duration: %f seconds
 
 .. toctree::
   :maxdepth: 1
