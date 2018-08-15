@@ -47,36 +47,39 @@ def generate_mask(wsp):
      - ``regfrom`` : ASL registration source image
     """
     reg.get_regfrom(wsp)
+
+    # Reporting
+    page = ReportPage()
+    wsp.report.add("mask", page)
+    page.heading("Mask generation", level=0)
+
     if wsp.mask is not None:
-        mask_source = "provided by user: %s" % wsp.mask.name
+        mask_source = "provided by user (assumed to be ASL space): %s" % wsp.mask.name
     elif wsp.struc is not None:
         # Preferred option is to use brain extracted structural
         struc.preproc_struc(wsp)
+        page.heading("Brain extracted structural image", level=1)
+        page.image("struc_brain.png")
+        wsp.report.add("struc_brain", LightboxImage(wsp.struc_brain, bgimage=wsp.struc))
         wsp.do_flirt, wsp.do_bbr = True, False # FIXME
         reg.reg_asl2struc(wsp)
         brain_mask_asl = fsl.applyxfm(wsp.struc_brain_mask, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
         wsp.mask = fsl.fslmaths(brain_mask_asl).thr(0.25).bin().fillh().run()
         #fslcpgeom(regfrom_img, mask) FIXME
-        mask_source = "generated from structural image: %s" % wsp.struc.name
+        mask_source = "generated from brain extracting structural image and registering to ASL space: %s" % wsp.struc.name
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
         wsp.mask = fsl.fslmaths(wsp.regfrom).bin().run()
-        mask_source = "generated from registration ASL image"
+        mask_source = "generated from brain extracted registration ASL image"
     
     wsp.log.write("\nGenerated ASL data mask\n")
     wsp.log.write(" - Mask %s\n" % mask_source)
     
-    # Reporting
-    page = ReportPage()
-    page.heading("Mask generation", level=0)
-    page.text("Mask source: %s" % mask_source)
-    page.heading("Masked brain image", level=1)
+    page.heading("Masked ASL brain image", level=1)
+    page.text("Mask was %s" % mask_source)
+    page.text("Mean ASL image masked by ASL-space mask")
     page.image("mask_img.png")
-    wsp.report.add("mask", page)
-
-    brain_img = np.copy(wsp.asldata_mean.data)
-    brain_img[wsp.mask.data == 0] = 0
-    wsp.report.add("mask_img", LightboxImage(Image(brain_img, header=wsp.asldata_mean.header)))
+    wsp.report.add("mask_img", LightboxImage(wsp.asldata_mean, mask=wsp.mask, bgimage=wsp.asldata_mean))
 
 def main():
     """

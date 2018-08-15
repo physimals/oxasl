@@ -21,7 +21,7 @@ from fsl.data.image import Image
 from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 from .image import summary
 from .workspace import Workspace
-from .reporting import ReportPage
+from .reporting import ReportPage, LightboxImage
 from . import struc
 
 def preproc_calib(wsp):
@@ -113,15 +113,20 @@ def calibrate(wsp, perf_img, var=False):
         wsp.log.write(" - Using multiplier for physical units: %f\n" % multiplier)
         calibrated *= multiplier
 
+    perf_calib = Image(calibrated, name=perf_img.name + "_calib", header=perf_img.header)
+    
     # Reporting
     page = ReportPage()
+    wsp.report.add("calib", page)
     page.heading("Calibration")
-    page.heading("Perfusion Image: %s" % perf_img.name)
-    page.text("Multiplier for physical units: %f" % multiplier)
-    # FIXME link to detailed calibration report
-    wsp.report.add(page, "calib")
 
-    return Image(image=calibrated, name=perf_img.name + "_calib", header=perf_img.header)
+    page.heading("Perfusion Image: %s" % perf_img.name, level=1)
+    page.text("Multiplier for physical units: %f" % multiplier)
+    page.image("perfusion_calib.png")
+    wsp.report.add("perfusion_calib", LightboxImage(perf_calib))
+    # FIXME link to detailed calibration report
+
+    return perf_calib
 
 def get_m0_voxelwise(wsp):
     """
@@ -334,7 +339,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     wsp.log.write(" - T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pcr))
 
     # Check the data and masks
-    calib_data = wsp.calib.data
+    calib_data = np.copy(wsp.calib.data)
     if calib_data.ndim == 4:
         wsp.log.write(" - Taking mean across calibration images\n")
         calib_data = np.mean(calib_data, -1)
@@ -402,16 +407,16 @@ def get_m0_refregion(wsp, mode="longtr"):
         calib_data[ref_mask == 0] = 0
         
         # calcualte T1 of reference region (if a T1 image has been supplied)
-        if t1r_img is not None:
-            t1r_data = t1r_img.data
+        if t1r_img:
+            t1r_data = t1r.data
             t1r = np.mean(t1r_data[ref_mask != 0])
             wsp.log.write(" - Calculated T1 of reference tissue: %f\n" % t1r)
 
         # calcualte T2 of reference region (if a T2 image has been supplied)
-        if t2r_img is not None:
-            t2r_data = t2r_img.data
+        if t2r_img:
+            t2r_data = t2r.data
             t2r = np.mean(t2r_data[ref_mask != 0])
-            wsp.log.write(" - Calculated T1 of reference tissue: %f\n" % t2r)
+            wsp.log.write(" - Calculated T2 of reference tissue: %f\n" % t2r)
 
         # calculate M0_ref value
         m0 = np.mean(calib_data[ref_mask != 0])
@@ -528,13 +533,20 @@ def get_csf_mask(wsp):
     """
     struc.segment(wsp)
     
-    # FIXME might not be csf?
-    wsp.refpve = wsp.csf_pv_struc
+    page = ReportPage()
+    wsp.report.add("auto_calib_mask", page)
+
+    page.heading("Automatic calibration reference region mask generation")
+    page.heading("Partial volume map for %s tissue (from structural segmentation)" % wsp.tissref.upper(), level=1)
+    page.image("refpve.png")
+    wsp.refpve = getattr(wsp, "%s_pv_struc" % wsp.tissref.lower())
+    wsp.report.add("refpve", LightboxImage(wsp.refpve, bgimage=wsp.struc_brain))
 
     if wsp.tissref == "csf" and not wsp.csfmaskingoff:
         wsp.log.write(" - Doing automatic ventricle selection using standard atlas\n")
+        page.heading("Automatic ventricle selection", level=1)
         # By deafult now we do FNRIT transformation of ventricle mask
-        # FIXME disabled
+        # FIXME disabled as not being used in ASL_CALIB at present
         #wsp.stdmaskfnirt = wsp.ifnone("stdmaskfnirt", True)
         
         # Select ventricles based on standard space atlas
@@ -544,45 +556,62 @@ def get_csf_mask(wsp):
         atlas = atlases.loadAtlas("harvardoxford-subcortical", loadSummary=False, resolution=2)
         ventricles = ((atlas.data[..., 2] + atlas.data[..., 13]) > 0.1).astype(np.int)
         wsp.ventricles = Image(scipy.ndimage.binary_erosion(ventricles, structure=np.ones([3, 3, 3]), border_value=1).astype(np.int), header=atlas.header)
+        page.text("Standard space ventricles mask (from Harvard-Oxford atlas) eroded by 1 pixel")
+        page.image("ventricles_std.png")
+        std_img = Image(os.path.join(os.environ["FSLDIR"], "data", "standard", 'MNI152_T1_2mm_brain'))
+        wsp.report.add("ventricles_std", LightboxImage(wsp.ventricles, bgimage=std_img))
 
         # Register structural image to std space using FLIRT
         #
         # FIXME should be in reg - what if warp provided ->std space
         if wsp.struc2std is None:
             wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
-            flirt_result = fsl.flirt(wsp.struc, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
+            flirt_result = fsl.flirt(wsp.struc_brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
             wsp.struc2std = flirt_result["omat"]
             wsp.std2struc = np.linalg.inv(wsp.struc2std)
 
         if not wsp.stdmaskfnirt:
             # FIXME use struc as ref?
             wsp.log.write(" - Registering standard space ventricle mask to structural using FLIRT\n")
-            flirt_result = fsl.applyxfm(wsp.ventricles, mat=wsp.std2struc, ref=wsp.refpve, out=fsl.LOAD, interp="nearestneighbour")
+            flirt_result = fsl.applyxfm(wsp.ventricles, mat=wsp.std2struc, ref=wsp.refpve, out=fsl.LOAD, interp="trilinear")
             wsp.ventricles_struc = flirt_result["out"]
         else:
             wsp.log.write(" - Registering standard space ventricle mask to structural using FNIRT\n")
-            fnirt_result = fsl.fnirt(wsp.struc, aff=wsp.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
+            fnirt_result = fsl.fnirt(wsp.struc_brain, aff=wsp.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
             wsp.struc2std_warp = fnirt_result["cout"]
         
             # Calculate the inverse warp using INVWARP and apply to standard space ventricle mask
             # Using refpve as reference for applywarp as this is the image we apply the mask to, not the structural
-            invwarp_result = fsl.invwarp(wsp.struc, wsp.struc2std_warp, out=fsl.LOAD)
+            invwarp_result = fsl.invwarp(wsp.struc2std_warp, wsp.struc_brain, out=fsl.LOAD)
             wsp.std2struc_warp = invwarp_result["out"]
-            warp_result = fsl.applywarp(wsp.refpve, wsp.ventricles, warp=wsp.std2struc_warp, out=fsl.LOAD, interp="nearestneighbour")
+            warp_result = fsl.applywarp(wsp.ventricles, wsp.refpve, warp=wsp.std2struc_warp, out=fsl.LOAD, interp="nn")
             wsp.ventricles_struc = warp_result["out"]
         
+        page.text("Structural space ventricles mask. This is the above image transformed into structural space. The transformation was obtained by registering the structural image to the standard brain image")
+        page.image("ventricles_struc.png")
+        wsp.report.add("ventricles_struc", LightboxImage(wsp.ventricles_struc, bgimage=wsp.struc_brain))
+
         wsp.log.write(" - Masking FAST output with standard space derrived ventricle mask\n")
         wsp.refpve_pre_mask = wsp.refpve
-        refpve_data = wsp.refpve.data
+        refpve_data = np.copy(wsp.refpve.data)
         refpve_data[wsp.ventricles_struc.data == 0] = 0
         wsp.refpve = Image(refpve_data, header=wsp.refpve.header)
         wsp.refpve_post = wsp.refpve
 
+        page.text("CSF partial volume masked by ventricles mask. This should select only the ventricles from the original partial volume image.")
+        page.image("refpve_post.png")
+        wsp.report.add("refpve_post", LightboxImage(wsp.refpve, bgimage=wsp.struc_brain))
+
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
     # new conversion using applywarp, supersmapling and integration
-    #result = fsl.applywarp(wsp.refpve, ref=wsp.asldata_mean, out=fsl.LOAD, premat=wsp.struc2asl, super=True, interp="spline", superlevel=4)
-    result = fsl.applyxfm(wsp.refpve, ref=wsp.asldata_mean, mat=wsp.struc2asl, out=fsl.LOAD)
+    result = fsl.applywarp(wsp.refpve, ref=wsp.asldata_mean, out=fsl.LOAD, premat=wsp.struc2asl, super=True, interp="spline", superlevel=4)
+    #result = fsl.applyxfm(wsp.refpve, ref=wsp.asldata_mean, mat=wsp.struc2asl, out=fsl.LOAD)
     wsp.refpve_calib = result["out"]
+    wsp.refpve_calib.data[wsp.refpve_calib.data < 0.001] = 0 # Better for display
+    page.heading("Reference tissue in ASL space", level=1)
+    page.text("Partial volume map")
+    page.image("refpve_calib.png")
+    wsp.report.add("refpve_calib", LightboxImage(wsp.refpve_calib, bgimage=wsp.calib))
     
     if wsp.sensitivity is None:
         # FIXME this should go in segment()
@@ -598,6 +627,10 @@ def get_csf_mask(wsp):
     # threshold reference mask if it is not already binary
     wsp.log.write(" - Thresholding reference mask\n")
     wsp.ref_mask = Image((wsp.refpve_calib.data > 0.9).astype(np.int), header=wsp.refpve_calib.header)
+
+    page.text("Reference Mask (thresholded at 0.9")
+    page.image("ref_mask.png")
+    wsp.report.add("ref_mask", LightboxImage(wsp.ref_mask, bgimage=wsp.calib))
 
 TISS_DEFAULTS = {
     "csf" : [4.3, 750, 400, 1.15],

@@ -43,6 +43,9 @@ def preproc_struc(wsp):
     """
     Do preprocessing on supplied structural data - copy relevant image and do brain extraction
     """
+    if wsp.isdone("preproc_struc"):
+        return
+
     wsp.log.write("\nPre-processing structural data\n")
     if wsp.fslanat:
         wsp.log.write(" - Using FSL_ANAT output directory for structural data: %s\n" % wsp.fslanat)
@@ -75,11 +78,14 @@ def preproc_struc(wsp):
         wsp.log.write(" - Brain-extracting structural image\n")
         bet_result = fsl.bet(wsp.struc, output=fsl.LOAD, seg=True, mask=True, log=wsp.fsllog)
         wsp.struc_brain = bet_result["output"]
-        wsp.struc_brain_mask = bet_result["output_mask"]
-    elif wsp.struc_brain is not None and wsp.struc_brain_mask is None:
+        #wsp.struc_brain_mask = bet_result["output_mask"]
+
+    if wsp.struc_brain is not None and wsp.struc_brain_mask is None:
+        # FIXME - for now get the mask by binarising the brain image but gives slightly
+        # different results compared to using the mask returned by BET
         wsp.struc_brain_mask = fsl.fslmaths(wsp.struc_brain).bin().run()
-    # FIXME
-    # wsp.preproc_struc = wsp._done
+
+    wsp.done("preproc_struc")
 
 def segment(wsp):
     """
@@ -120,15 +126,15 @@ def segment(wsp):
         wsp.gm_seg_struc = Image((wsp.gm_pv_struc.data > 0.5).astype(np.int), header=wsp.struc.header)
         wsp.wm_seg_struc = Image((wsp.wm_pv_struc.data > 0.5).astype(np.int), header=wsp.struc.header)
 
-        wsp.report.add("csf_seg", LightboxImage(wsp.struc, wsp.csf_seg_struc))
-        wsp.report.add("gm_seg", LightboxImage(wsp.struc, wsp.gm_seg_struc))
-        wsp.report.add("wm_seg", LightboxImage(wsp.struc, wsp.wm_seg_struc))
+        wsp.report.add("csf_pv", LightboxImage(wsp.csf_pv_struc, bgimage=wsp.struc_brain))
+        wsp.report.add("gm_pv", LightboxImage(wsp.gm_pv_struc, bgimage=wsp.struc_brain))
+        wsp.report.add("wm_pv", LightboxImage(wsp.wm_pv_struc, bgimage=wsp.struc_brain))
         
         page.heading("Segmentation image", level=1)
-        page.text("CSF")
-        page.image("csf_seg.png")
-        page.text("GM")
-        page.image("gm_seg.png")
-        page.text("WM")
-        page.image("wm_seg.png")
+        page.text("CSF partial volume")
+        page.image("csf_pv.png")
+        page.text("Grey matter partial volume")
+        page.image("gm_pv.png")
+        page.text("White matter partial volume")
+        page.image("wm_pv.png")
         wsp.report.add("seg", page)
