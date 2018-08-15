@@ -373,28 +373,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         wsp.log.write(" - Using sensitivity image: %s\n" % wsp.sens.name)
         sens_corr = True
         sens_data = wsp.sens.data
-    elif wsp.cref:
-        wsp.log.write(" - Calculate sensitivity image from reference image\n")
-        sens_corr = True
-
-        # Take the mean (and mask with the mask from the main calib image)
-        cref_data = wsp.cref.data
-        if cref_data.ndim == 4:
-            cref_data = np.mean(cref_data, -1)
-        cref_data[brain_mask == 0] = 0
-        
-        if wsp.cact:
-            cact_data = wsp.cact.data
-        elif mode == "longtr":
-            # If the cact image has not been supplied then use the mean of the calib image in longtr mode
-            cact_data = calib_data
-        else:
-            raise ValueError("You must supply an image from the actual coil used for ASL acquisition using --cact (unless you use longtr mode)")
-            
-        # Take the ratio to give the sensitivity image
-        sens_data = cact_data / cref_data
-        sens_data[brain_mask == 0] = 0
-
+    
     wsp.log.write(" - MODE: %s\n" % mode)
     wsp.log.write(" - Calibration gain: %f\n" % gain)
 
@@ -408,14 +387,12 @@ def get_m0_refregion(wsp, mode="longtr"):
         
         # calcualte T1 of reference region (if a T1 image has been supplied)
         if t1r_img:
-            t1r_data = t1r.data
-            t1r = np.mean(t1r_data[ref_mask != 0])
+            t1r = np.mean(t1r.data[ref_mask != 0])
             wsp.log.write(" - Calculated T1 of reference tissue: %f\n" % t1r)
 
         # calcualte T2 of reference region (if a T2 image has been supplied)
         if t2r_img:
-            t2r_data = t2r.data
-            t2r = np.mean(t2r_data[ref_mask != 0])
+            t2r = np.mean(t2r.data[ref_mask != 0])
             wsp.log.write(" - Calculated T2 of reference tissue: %f\n" % t2r)
 
         # calculate M0_ref value
@@ -523,6 +500,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     page.text("- Calibration gain: %f" % gain)  
     page.heading("M0", level=1)
     page.text("- M0 value: %f" % m0)
+    page.dicttable({"TR" : tr, "T1 reference tissue" : t1r})
     wsp.report.add("m0", page)
     
     return m0
@@ -536,7 +514,8 @@ def get_csf_mask(wsp):
     page = ReportPage()
     wsp.report.add("auto_calib_mask", page)
 
-    page.heading("Automatic calibration reference region mask generation")
+    page.heading("Calibration reference region")
+    page.text("Reference region was automatically generated for tissue type: %s" % wsp.tissref.upper())
     page.heading("Partial volume map for %s tissue (from structural segmentation)" % wsp.tissref.upper(), level=1)
     page.image("refpve.png")
     wsp.refpve = getattr(wsp, "%s_pv_struc" % wsp.tissref.lower())
@@ -587,7 +566,8 @@ def get_csf_mask(wsp):
             warp_result = fsl.applywarp(wsp.ventricles, wsp.refpve, warp=wsp.std2struc_warp, out=fsl.LOAD, interp="nn")
             wsp.ventricles_struc = warp_result["out"]
         
-        page.text("Structural space ventricles mask. This is the above image transformed into structural space. The transformation was obtained by registering the structural image to the standard brain image")
+        page.heading("Structural space ventricles mask", level=1)
+        page.text("This is the above image transformed into structural space. The transformation was obtained by registering the structural image to the standard brain image")
         page.image("ventricles_struc.png")
         wsp.report.add("ventricles_struc", LightboxImage(wsp.ventricles_struc, bgimage=wsp.struc_brain))
 
@@ -598,39 +578,30 @@ def get_csf_mask(wsp):
         wsp.refpve = Image(refpve_data, header=wsp.refpve.header)
         wsp.refpve_post = wsp.refpve
 
-        page.text("CSF partial volume masked by ventricles mask. This should select only the ventricles from the original partial volume image.")
+        page.heading("Structural space ventricles PVE", level=1)
+        page.text("This is the CSF partial volume masked by the ventricles mask. It should select only the ventricles from the original partial volume image.")
         page.image("refpve_post.png")
         wsp.report.add("refpve_post", LightboxImage(wsp.refpve, bgimage=wsp.struc_brain))
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
-    # new conversion using applywarp, supersmapling and integration
+    # New conversion using applywarp, supersmapling and integration
     result = fsl.applywarp(wsp.refpve, ref=wsp.asldata_mean, out=fsl.LOAD, premat=wsp.struc2asl, super=True, interp="spline", superlevel=4)
     #result = fsl.applyxfm(wsp.refpve, ref=wsp.asldata_mean, mat=wsp.struc2asl, out=fsl.LOAD)
     wsp.refpve_calib = result["out"]
     wsp.refpve_calib.data[wsp.refpve_calib.data < 0.001] = 0 # Better for display
-    page.heading("Reference tissue in ASL space", level=1)
+    page.heading("Reference region in ASL space", level=1)
     page.text("Partial volume map")
     page.image("refpve_calib.png")
     wsp.report.add("refpve_calib", LightboxImage(wsp.refpve_calib, bgimage=wsp.calib))
-    
-    if wsp.sensitivity is None:
-        # FIXME this should go in segment()
-        wsp.log.write(" - Using bias field from structural image for sensitivity correction\n")
-        # if [ ! -z $fasthasrun ] && [ -z $senson ]; then
-        #     # also extract the bias field and convert to sensitivity image (as long as we have already been supplied by a sensivity iamge or reference)
-        # applywarp --ref=$calib --in=$temp_calib/seg_bias --out=$temp_calib/biasfield --premat=$temp_calib/high2low.mat --super --interp=spline --superlevel=4
-        # fslmaths $temp_calib/biasfield -recip $temp_calib/sens
-        # senson=1
-        # echo "Using bias field from structural image for sensitivity correction" >> $log
-        # fi
 
-    # threshold reference mask if it is not already binary
+    # Threshold reference mask conservatively to select only reference tissue
     wsp.log.write(" - Thresholding reference mask\n")
     wsp.ref_mask = Image((wsp.refpve_calib.data > 0.9).astype(np.int), header=wsp.refpve_calib.header)
 
     page.text("Reference Mask (thresholded at 0.9")
     page.image("ref_mask.png")
     wsp.report.add("ref_mask", LightboxImage(wsp.ref_mask, bgimage=wsp.calib))
+    page.text("Number of voxels in reference region: %i" % np.count_nonzero(wsp.ref_mask.data))
 
 TISS_DEFAULTS = {
     "csf" : [4.3, 750, 400, 1.15],
