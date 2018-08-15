@@ -196,6 +196,10 @@ class ReportPage(object):
             self._content += "    " + line + "\n"
         self._content += "\n"
 
+    def dicttable(self, dictionary):
+        tabdata = dictionary.items()
+        self.table(tabdata, headers=("Key", "Value"))
+        
     def tofile(self, fname):
         """
         Write RST content to a file
@@ -347,7 +351,6 @@ latex_documents = [
 ]
 """
 
-=======
 def main():
     """
     Simple command line for testing
