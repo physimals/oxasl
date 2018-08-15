@@ -229,12 +229,9 @@ class AslImage(Image):
         idx = 0
         first = True
         for comp in order[::-1]:
-            #print("comp: %s" % comp)
             if not first:
                 idx *= self._get_ncomp(comp, ti)
-                #print("Multiplied by %i" % self._get_ncomp(comp, ti))
             idx += self._get_comp(comp, tag, ti, rpt)
-            #print("Added %i" % self._get_comp(comp, tag, ti, rpt))
             first = False
         return idx
 
@@ -272,7 +269,6 @@ class AslImage(Image):
         elif "m" in out_order and "m" not in self.order:
             raise RuntimeError("Output order contains multiphases but data does not")
 
-        #print("reordering from %s to %s" % (self.order, out_order))
         input_data = self.data
         output_data = np.zeros(self.shape, dtype=input_data.dtype)
         if input_data.ndim == 3:
@@ -281,13 +277,9 @@ class AslImage(Image):
         for ti in range(self.ntis):
             for rpt in range(self.rpts[ti]):
                 for tag in tags:
-                    #print("ti=%i, rpt=%i, tag=%i" % (ti, rpt, tag))
                     in_idx = self._get_order_idx(self.order, tag, ti, rpt)
-                    #print("Input (%s) index %i" % (self.order, in_idx))
                     out_idx = self._get_order_idx(out_order, tag, ti, rpt)
-                    #print("Output (%s) index %i" % (out_order, out_idx))
                     output_data[:, :, :, out_idx] = input_data[:, :, :, in_idx]
-                    #print("")
 
         if not name:
             name = self.name + "_reorder"
