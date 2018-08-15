@@ -212,11 +212,13 @@ class Report(object):
     which can be turned into a document (HTML, PDF etc)
     """
 
-    def __init__(self):
+    def __init__(self, title="OXASL processing report"):
         self._contents = []
         self._files = {}
         self._start_time = datetime.datetime.now()
         self._end_time = None
+        self.title = title
+        self.extension = ""
 
     def generate_html(self, dest_dir, build_dir=None):
         """
@@ -226,27 +228,21 @@ class Report(object):
         duration = (self._end_time - self._start_time).total_seconds()
 
         if build_dir:
-            if not os.path.exists(build_dir):
-                os.makedirs(build_dir)
-            elif not os.path.isdir(build_dir):
-                raise ValueError("Report build directory %s exists but is not a directory" % build_dir)
-            else:
-                warnings.warn("Report build directory %s already exists" % build_dir)
+            if os.path.exists(build_dir):
+                if not os.path.isdir(build_dir):
+                    raise ValueError("Report build directory %s exists but is not a directory" % build_dir)
+                else:
+                    warnings.warn("Report build directory %s already exists" % build_dir)
             is_temp = False
         else:
             build_dir = tempfile.mkdtemp("_report")
             is_temp = True
 
         try:
+            self.tofile(build_dir)
+
             with open(os.path.join(build_dir, "conf.py"), "w") as conffile:
                 conffile.write(REPORT_CONF)
-
-            with open(os.path.join(build_dir, "index.rst"), "w") as indexfile:
-                rst_files = "\n".join(["  %s" % rst_file for rst_file in self._contents])
-                indexfile.write(INDEX_TEMPLATE % (self._start_time.strftime("%Y-%m-%d %H:%M:%S"), self._end_time.strftime("%Y-%m-%d %H:%M:%S"), duration, rst_files))
-
-            for fname, content in self._files.items():
-                content.tofile(os.path.join(build_dir, fname))
 
             os.system('sphinx-build -M html "%s" "%s"' % (build_dir, os.path.join(build_dir, "_build")))
 
@@ -261,6 +257,19 @@ class Report(object):
         finally:
             if is_temp:
                 shutil.rmtree(build_dir)
+
+    def tofile(self, build_dir):
+        if not os.path.exists(build_dir):
+            os.makedirs(build_dir)
+
+        with open(os.path.join(build_dir, "index.rst"), "w") as indexfile:
+            indexfile.write(self.title + "\n")
+            indexfile.write("=" * len(self.title) + "\n\n")
+            self._timings(indexfile)
+            self._toc(indexfile)
+            
+        for fname, content in self._files.items():
+            content.tofile(os.path.join(build_dir, fname))
 
     def add(self, name, content, overwrite=False):
         """
@@ -278,6 +287,21 @@ class Report(object):
         self._files[fname] = content
         if isinstance(content, ReportPage):
             self._contents.append(name)
+        if isinstance(content, Report):
+            self._contents.append(name + "/index")
+
+    def _timings(self, indexfile):
+        if self._start_time:
+            indexfile.write("Start time: %s\n\n" % self._start_time.strftime("%Y-%m-%d %H:%M:%S"))
+        if self._end_time: 
+            indexfile.write("End time: %s\n\n" % self._end_time.strftime("%Y-%m-%d %H:%M:%S"))
+
+    def _toc(self, indexfile):
+        indexfile.write(".. toctree::\n")
+        indexfile.write("  :maxdepth: 1\n")
+        indexfile.write("  :caption: Contents:\n\n")
+        for rst_file in self._contents:
+            indexfile.write("  %s\n" % rst_file)
 
 REPORT_CONF = """
 # This file is execfile()d with the current directory set to its
@@ -323,23 +347,7 @@ latex_documents = [
 ]
 """
 
-INDEX_TEMPLATE = """
-OXASL processing report
-=======================
-
-Start time: %s
-
-End time: %s
-
-Duration: %f seconds
-
-.. toctree::
-  :maxdepth: 1
-  :caption: Contents:
-
-%s
-"""
-
+=======
 def main():
     """
     Simple command line for testing
