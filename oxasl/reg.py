@@ -174,7 +174,7 @@ def reg_flirt(wsp):
     # Step 1: 3D translation only
     flirt_opts = {
         "schedule" : os.path.join(os.environ["FSLDIR"], "etc", "flirtsch", "xyztrans.sch"),
-        "init" : wsp.initmat,
+        "init" : wsp.asl2struc,
         "inweight" : wsp.inweight,
         "log" : wsp.fsllog,
     }
@@ -216,7 +216,7 @@ def reg_bbr(wsp):
     struc.segment(wsp)
 
     wsp.log.write("  - BBR registration using epi_reg\n")
-    result = epi_reg(epi=wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg_struc, init=wsp.initmat, inweight=wsp.inweight)
+    result = epi_reg(epi=wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg_struc, init=wsp.asl2struc, inweight=wsp.inweight)
     return result["out.nii.gz"], result["out"]
 
     #OUTPUT
