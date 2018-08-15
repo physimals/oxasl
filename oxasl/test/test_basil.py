@@ -11,7 +11,8 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from oxasl import basil, AslImage
+from oxasl import AslImage, Workspace
+import oxasl.basil as basil
 
 DEFAULTS = {
     "method" : "vb",
@@ -36,28 +37,22 @@ def _get_defaults(img):
         options["rpt%i" % (idx+1)] = img.rpts[idx]
     return options
 
-
-def _check_step(step, step_num=None, desc_text=None, data_name=None, options=None, prev_step=None):
-    if step_num:
-        assert(step[0] == step_num)
+def _check_step(step, desc_text=None, options=None):
+    print(step.options)
     if desc_text:
-        assert(desc_text.lower().strip() in step[1].lower())
-    if data_name:
-        assert(step[2]["data"].name == data_name)
+        assert(desc_text.lower().strip() in step.desc.lower())
     if options:
         for k, v in options.items():
-            assert(step[2][k] == v)
-    if prev_step:
-        assert(step[3] == prev_step)
+            assert(step.options[k] == v)
 
 def test_nodata():
     """
-    Check we get an error if there is nothing to infer
+    Check we get an error if there is no data
     """
-    log = StringIO.StringIO()
+    wsp = Workspace()
 
     with pytest.raises(ValueError):
-        steps = basil.get_steps(None, log=log)
+        steps = basil.basil_steps(wsp, None)
 
 def test_infer_nothing():
     """
@@ -65,10 +60,10 @@ def test_infer_nothing():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace()
 
     with pytest.raises(ValueError):
-        steps = basil.get_steps(img, infertiss=False, inferbat=False, log=log)
+        steps = basil.basil_steps(wsp, img)
 
 def test_defaults():
     """
@@ -76,14 +71,15 @@ def test_defaults():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace()
+    wsp.infertiss = True
+    wsp.inferbat = True
 
-    options = _get_defaults(img)
-    steps = basil.get_steps(img, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 1)
 
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
-                options=options)
+    options = _get_defaults(img)
+    _check_step(steps[0], desc_text="tissue", options=options)
                 
 def test_fix_bat():
     """
@@ -91,16 +87,15 @@ def test_fix_bat():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=False)
 
-    options = _get_defaults(img)
-    steps = basil.get_steps(img, infer_bat=False, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 1)
 
+    options = _get_defaults(img)
     options.pop("incbat")
     options.pop("inferbat")
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
-                options=options)
+    _check_step(steps[0], desc_text="tissue", options=options)
  
 def test_inferart():
     """
@@ -108,18 +103,18 @@ def test_inferart():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True, inferart=True)
 
     options = _get_defaults(img)
-    steps = basil.get_steps(img, inferart=True, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 2)
 
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
+    _check_step(steps[0], desc_text="tissue", 
                 options=dict(options, **{
                     "incart" : True,
                 }))
 
-    _check_step(steps[1], step_num=2, desc_text="arterial", 
+    _check_step(steps[1], desc_text="arterial", 
                 options=dict(options, **{
                     "incart" : True,
                     "inferart" : True,
@@ -131,18 +126,18 @@ def test_infertau():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True, infertau=True)
 
-    options = _get_defaults(img)
-    steps = basil.get_steps(img, infertau=True, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 2)
 
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
+    options = _get_defaults(img)
+    _check_step(steps[0], desc_text="tissue", 
                 options=dict(options, **{
                     "inctau" : True,
                 }))
 
-    _check_step(steps[1], step_num=2, desc_text="bolus", 
+    _check_step(steps[1], desc_text="bolus", 
                 options=dict(options, **{
                     "inctau" : True,
                     "infertau" : True,
@@ -154,26 +149,26 @@ def test_inferarttau():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True, infertau=True, inferart=True)
 
-    options = _get_defaults(img)
-    steps = basil.get_steps(img, infertau=True, inferart=True, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 3)
 
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
+    options = _get_defaults(img)
+    _check_step(steps[0], desc_text="tissue", 
                 options=dict(options, **{
                     "inctau" : True,
                     "incart" : True,
                 }))
 
-    _check_step(steps[1], step_num=2, desc_text="arterial", 
+    _check_step(steps[1], desc_text="arterial", 
                 options=dict(options, **{
                     "inctau" : True,
                     "incart" : True,
                     "inferart" : True,
                 }))
 
-    _check_step(steps[2], step_num=3, desc_text="bolus", 
+    _check_step(steps[2], desc_text="bolus", 
                 options=dict(options, **{
                     "inctau" : True,
                     "incart" : True,
@@ -187,18 +182,18 @@ def test_infert1():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True, infert1=True)
 
-    options = _get_defaults(img)
-    steps = basil.get_steps(img, infert1=True, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 2)
 
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
+    options = _get_defaults(img)
+    _check_step(steps[0], desc_text="tissue", 
                 options=dict(options, **{
                     "inct1" : True,
                 }))
 
-    _check_step(steps[1], step_num=2, desc_text="T1", 
+    _check_step(steps[1], desc_text="T1", 
                 options=dict(options, **{
                     "inct1" : True,
                     "infert1" : True,
@@ -210,20 +205,19 @@ def test_t1im():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True, infert1=True)
 
-    t1d = np.random.rand(5, 5, 5)
-    t1im = Image(name="t1file", image=t1d)
-    steps = basil.get_steps(img, infert1=True, t1im=t1im, log=log)
+    wsp.t1im = Image(np.random.rand(5, 5, 5))
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 2)
 
     options = _get_defaults(img)
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
+    _check_step(steps[0], desc_text="tissue", 
                 options=dict(options, **{
                     "inct1" : True,
                 }))
 
-    _check_step(steps[1], step_num=2, desc_text="T1", 
+    _check_step(steps[1], desc_text="T1", 
                 options=dict(options, **{
                     "inct1" : True,
                     "infert1" : True,
@@ -238,18 +232,18 @@ def test_inferpc():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True, inferpc=True)
 
-    options = _get_defaults(img)
-    steps = basil.get_steps(img, inferpc=True, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 2)
 
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
+    options = _get_defaults(img)
+    _check_step(steps[0], desc_text="tissue", 
                 options=dict(options, **{
                     "incpc" : True,
                 }))
 
-    _check_step(steps[1], step_num=2, desc_text="pre-capiliary", 
+    _check_step(steps[1], desc_text="pre-capiliary", 
                 options=dict(options, **{
                     "incpc" : True,
                     "inferpc" : True,
@@ -261,9 +255,9 @@ def test_artonly():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=False, inferbat=True, inferart=True)
 
-    steps = basil.get_steps(img, infertiss=False, inferart=True, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 1)
 
     options = _get_defaults(img)
@@ -273,8 +267,7 @@ def test_artonly():
     })
     options.pop("inctiss")
     options.pop("infertiss")
-    _check_step(steps[0], step_num=1, desc_text="arterial", 
-                options=options)
+    _check_step(steps[0], desc_text="arterial", options=options)
 
 def test_initmvn():
     """
@@ -282,19 +275,17 @@ def test_initmvn():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True)
 
-    mvnd = np.random.rand(5, 5, 5, 6)
-    initmvn = Image(name="mvnfile", image=mvnd)
-    steps = basil.get_steps(img, initmvn=initmvn, log=log)
+    wsp.initmvn = Image(np.random.rand(5, 5, 5, 6))
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 1)
 
     options = _get_defaults(img)
     options.update({
-        "continue-from-mvn" : "mvnfile"
+        "continue-from-mvn" : wsp.initmvn
     })
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
-                options=options)
+    _check_step(steps[0], desc_text="tissue", options=options)
 
 def test_spatial():
     """
@@ -302,24 +293,23 @@ def test_spatial():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True, spatial=True)
 
-    options = _get_defaults(img)
-    steps = basil.get_steps(img, spatial=True, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 2)
-
-    _check_step(steps[0], step_num=1, desc_text="tissue", 
-                options=options)
+    
+    options = _get_defaults(img)
+    _check_step(steps[0], desc_text="tissue", options=options)
 
     options.update({
         "method" : "spatialvb",
         "param-spatial-priors" : "N+",
         "PSP_byname1" : "ftiss",
         "PSP_byname1_type" : "M",
-#        "convergence" : "maxiters", FIXME
+        "convergence" : "maxiters",
     })
     options.pop("max-trials")
-    _check_step(steps[1], step_num=2, desc_text="spatial", options=options)
+    _check_step(steps[1], desc_text="spatial", options=options)
     
 def test_onestep():
     """
@@ -327,9 +317,9 @@ def test_onestep():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True, infertau=True, inferart=True, spatial=True, onestep=True)
 
-    steps = basil.get_steps(img, infertau=True, inferart=True, spatial=True, onestep=True, log=log)
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 1)
 
     options = _get_defaults(img)
@@ -342,10 +332,10 @@ def test_onestep():
         "incart" : True,
         "inferart" : True,
         "infertau" : True,
-#        "convergence" : "maxiters", FIXME
+        "convergence" : "maxiters",
     })
     options.pop("max-trials")
-    _check_step(steps[0], step_num=1, desc_text="spatial", options=options)
+    _check_step(steps[0], desc_text="spatial", options=options)
 
 def test_max_iterations():
     """
@@ -353,19 +343,19 @@ def test_max_iterations():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True)
 
     kwargs = {
         "max-iterations" : 123,
     }
-    steps = basil.get_steps(img, log=log, **kwargs)
+    steps = basil.basil_steps(wsp, img, **kwargs)
     assert(len(steps) == 1)
 
     options = _get_defaults(img)
     options.update({
         "max-iterations" : 123,
     })
-    _check_step(steps[0], step_num=1, desc_text="tissue", options=options)
+    _check_step(steps[0], desc_text="tissue", options=options)
 
 def test_random_extra_options():
     """
@@ -373,18 +363,18 @@ def test_random_extra_options():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True)
 
     kwargs = {
         "phase-of-moon-correction-factor" : 7,
         "random-output-proportion-percent" : 36,
     }
-    steps = basil.get_steps(img, log=log, **kwargs)
+    steps = basil.basil_steps(wsp, img, **kwargs)
     assert(len(steps) == 1)
 
     options = _get_defaults(img)
     options.update(kwargs)
-    _check_step(steps[0], step_num=1, desc_text="tissue", options=options)
+    _check_step(steps[0], desc_text="tissue", options=options)
 
 def test_pvc_only_one_map_given1():
     """
@@ -392,12 +382,11 @@ def test_pvc_only_one_map_given1():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True)
 
-    pgmd = np.random.rand(5, 5, 5)
-    pgm = Image(name="pgm_map", image=pgmd)
+    wsp.pgm = Image(np.random.rand(5, 5, 5))
     with pytest.raises(ValueError):
-        basil.get_steps(img, pgm=pgm, log=log)
+        basil.basil_steps(wsp, img)
     
 def test_pvc_only_one_map_given2():
     """
@@ -405,12 +394,11 @@ def test_pvc_only_one_map_given2():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True)
 
-    pwmd = np.random.rand(5, 5, 5)
-    pwm = Image(name="pwm_map", image=pwmd)
+    wsp.pwm = Image(np.random.rand(5, 5, 5))
     with pytest.raises(ValueError):
-        basil.get_steps(img, pwm=pwm, log=log)
+        basil.basil_steps(wsp, img)
     
 def test_pvc_no_tissue():
     """
@@ -418,16 +406,13 @@ def test_pvc_no_tissue():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=False, inferbat=True)
 
-    pgmd = np.random.rand(5, 5, 5)
-    pgm = Image(name="pgm_map", image=pgmd)
-
-    pwmd = np.random.rand(5, 5, 5)
-    pwm = Image(name="pwm_map", image=pwmd)
+    wsp.pgm = Image(np.random.rand(5, 5, 5))
+    wsp.pwm = Image(np.random.rand(5, 5, 5))
 
     with pytest.raises(ValueError):
-        basil.get_steps(img, pgm=pgm, pwm=pwm, infertiss=False, log=log)
+        basil.basil_steps(wsp, img)
     
 def test_pvc():
     """
@@ -436,22 +421,20 @@ def test_pvc():
     """
     d = np.random.rand(5, 5, 5, 6)
     img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
-    log = StringIO.StringIO()
+    wsp = Workspace(infertiss=True, inferbat=True)
 
-    pgmd = np.random.rand(5, 5, 5)
-    pgm = Image(name="pgm_map", image=pgmd)
-
-    pwmd = np.random.rand(5, 5, 5)
-    pwm = Image(name="pwm_map", image=pwmd)
-
-    steps = basil.get_steps(img, pgm=pgm, pwm=pwm, log=log)
+    wsp.pgm = Image(np.random.rand(5, 5, 5))
+    wsp.pwm = Image(np.random.rand(5, 5, 5))
+    
+    steps = basil.basil_steps(wsp, img)
     assert(len(steps) == 3)
 
     options = _get_defaults(img)
-    options.update({
-        "incpve" : True,
-    })
-    _check_step(steps[0], step_num=1, desc_text="tissue", options=options)
+#    options.update({
+#        "incpve" : True,
+#    })
+    _check_step(steps[0], desc_text="tissue", options=options)
+#    _check_step(steps[1], desc_text="PVE", options=options)
 
     options.update({
         "method" : "spatialvb",
@@ -459,9 +442,8 @@ def test_pvc():
         "PSP_byname1" : "ftiss",
         "PSP_byname1_type" : "M",
         "max-iterations" : 200,
-#        "convergence" : "maxiters", FIXME
+        "convergence" : "maxiters",
     })
     options.pop("max-trials")
-    _check_step(steps[2], step_num=3, desc_text="PVE", options=options)
-    _check_step(steps[2], step_num=3, desc_text="spatial")
+    _check_step(steps[2], desc_text="spatial")
 

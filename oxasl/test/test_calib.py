@@ -13,7 +13,7 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from oxasl import calib, AslImage
+from oxasl import Workspace, calib, AslImage
 
 def _get_imgs(shape=(5, 5, 5)):
     """
@@ -49,9 +49,9 @@ def test_nodata():
     d = np.random.rand(5, 5, 5, 6)
     calib_img = Image(name="calib", image=d)
 
-    log = StringIO.StringIO()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise")
     with pytest.raises(ValueError):
-        calib(None, calib_img, "voxelwise", log=log)
+        calib.calibrate(wsp, None)
 
 def test_nocalib():
     """
@@ -60,9 +60,9 @@ def test_nocalib():
     d = np.random.rand(5, 5, 5, 6)
     perf_img = Image(name="perfusion", image=d)
 
-    log = StringIO.StringIO()
+    wsp = Workspace(calib_method="voxelwise")
     with pytest.raises(ValueError):
-        calib(perf_img, None, "voxelwise", log=log)
+        calib.calibrate(wsp, perf_img)
 
 def test_bad_method():
     """
@@ -74,9 +74,9 @@ def test_bad_method():
     d = np.random.rand(5, 5, 5, 6)
     calib_img = Image(name="calib", image=d)
 
-    log = StringIO.StringIO()
+    wsp = Workspace(calib=calib_img, calib_method="random")
     with pytest.raises(ValueError):
-        calib(perf_img, calib_img, "random", log=log)
+        calib.calibrate(wsp, perf_img)
 
 def test_defaults():
     """
@@ -88,9 +88,9 @@ def test_defaults():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise")
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -108,9 +108,9 @@ def test_cgain():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", gain=GAIN, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", calib_gain=GAIN)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -128,9 +128,9 @@ def test_alpha():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", alpha=ALPHA, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", calib_alpha=ALPHA)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -148,9 +148,9 @@ def test_multiplier():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", multiplier=MULTIPLIER, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", multiplier=MULTIPLIER)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -168,9 +168,9 @@ def test_partition_coeff():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", pct=PC, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", pct=PC)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -188,9 +188,9 @@ def test_shorttr_corr():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", tr=TR, t1t=T1, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", tr=TR, t1t=T1)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -210,8 +210,9 @@ def test_shorttr_corr_not1():
     calib_img = Image(name="calib", image=calib_d)
 
     log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", tr=TR, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", tr=TR, log=log)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
     assert("WARNING" in log.getvalue())
@@ -229,14 +230,14 @@ def test_defaults_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", var=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise")
+    perf_calib = calib.calibrate(wsp, perf_img, var=True)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
     # Default partition coefficient is 0.9
-    np.testing.assert_allclose(calibrated_d, 0.9 * 0.9 * perf_d / calib_d / calib_d)
+    np.testing.assert_allclose(calibrated_d, 0.9 * 0.9 * perf_d / np.square(calib_d))
 
 def test_cgain_var():
     """
@@ -249,9 +250,9 @@ def test_cgain_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", gain=GAIN, var=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", calib_gain=GAIN)
+    perf_calib = calib.calibrate(wsp, perf_img, var=True)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -269,9 +270,9 @@ def test_alpha_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", alpha=ALPHA, var=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", calib_alpha=ALPHA)
+    perf_calib = calib.calibrate(wsp, perf_img, var=True)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -289,9 +290,9 @@ def test_multiplier_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", multiplier=MULTIPLIER, var=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", multiplier=MULTIPLIER)
+    perf_calib = calib.calibrate(wsp, perf_img, var=True)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -309,9 +310,9 @@ def test_partition_coeff_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", pct=PC, var=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", pct=PC)
+    perf_calib = calib.calibrate(wsp, perf_img, var=True)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -329,9 +330,9 @@ def test_shorttr_corr_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "voxelwise", tr=TR, t1t=T1, var=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", tr=TR, t1t=T1)
+    perf_calib = calib.calibrate(wsp, perf_img, var=True)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
@@ -348,15 +349,15 @@ def test_refregion_defaults():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
 
     # CSF defaults
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 4.3, 750, 1.15)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 4.3, 750, 1.15)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_unknown():
     """
@@ -367,9 +368,9 @@ def test_refregion_unknown():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="kryptonite")
     with pytest.raises(ValueError):
-        calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="kryptonite", log=log)
+        calib.calibrate(wsp, perf_img)
     
 def test_refregion_csf_all():
     """
@@ -380,13 +381,13 @@ def test_refregion_csf_all():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="csf", log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="csf")
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
     # CSF defaults
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 4.3, 750, 1.15)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 4.3, 750, 1.15)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_wm_all():
     """
@@ -397,13 +398,13 @@ def test_refregion_wm_all():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm")
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
     # WM defaults
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, 50, 0.82)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, 0.82)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_gm_all():
     """
@@ -414,13 +415,13 @@ def test_refregion_gm_all():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="gm", log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="gm")
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
     # GM defaults
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.3, 100, 0.98)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.3, 100, 0.98)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_tr():
     """
@@ -432,13 +433,13 @@ def test_refregion_tr():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", tr=TR, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", tr=TR)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
     # WM defaults
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, 50, 0.82, tr=TR)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, 0.82, tr=TR)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_te():
     """
@@ -450,12 +451,12 @@ def test_refregion_te():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", te=TE, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", te=TE)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, 50, 0.82, te=TE)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, 0.82, te=TE)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_t2b():
     """
@@ -467,12 +468,12 @@ def test_refregion_t2b():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", t2b=T2b, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", t2b=T2b)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, 50, 0.82, t2b=T2b)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, 0.82, t2b=T2b)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_t1r():
     """
@@ -484,12 +485,12 @@ def test_refregion_t1r():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", t1r=T1, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", t1r=T1)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), T1, 50, 0.82)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), T1, 50, 0.82)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_t2r():
     """
@@ -501,12 +502,12 @@ def test_refregion_t2r():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", t2r=T2, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", t2r=T2)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, T2, 0.82)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, T2, 0.82)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_pc():
     """
@@ -518,12 +519,12 @@ def test_refregion_pc():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", pcr=PC, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", pcr=PC)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, 50, PC)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, PC)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_csf_t2star():
     """
@@ -534,12 +535,12 @@ def test_refregion_csf_t2star():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="csf", t2star=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="csf", t2star=True)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 4.3, 400, 1.15)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 4.3, 400, 1.15)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_wm_t2star():
     """
@@ -550,13 +551,13 @@ def test_refregion_wm_t2star():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", t2star=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", t2star=True)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
     # WM defaults
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, 50, 0.82)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, 0.82)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_gm_t2star():
     """
@@ -567,13 +568,13 @@ def test_refregion_gm_t2star():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="gm", t2star=True, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="gm", t2star=True)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
     # GM defaults
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.3, 60, 0.98)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.3, 60, 0.98)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_gain():
     """
@@ -585,12 +586,12 @@ def test_refregion_gain():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", gain=GAIN, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", calib_gain=GAIN)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, 50, 0.82, gain=GAIN)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, 0.82, gain=GAIN)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
 
 def test_refregion_alpha():
     """
@@ -602,9 +603,9 @@ def test_refregion_alpha():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="ref_mask", image=ref_d)
 
-    log = StringIO.StringIO()
-    perf_calib = calib(perf_img, calib_img, "refregion", ref_mask=ref_img, tissref="wm", alpha=ALPHA, log=log)
-    calibrated_d = perf_calib.nibImage.get_data()
+    wsp = Workspace(calib=calib_img, calib_method="refregion", ref_mask=ref_img, tissref="wm", calib_alpha=ALPHA)
+    perf_calib = calib.calibrate(wsp, perf_img)
+    calibrated_d = perf_calib.data
 
-    m0_expected =  _expected_m0(np.mean(calib_img.nibImage.get_data()), 1.0, 50, 0.82, alpha=ALPHA)
-    np.testing.assert_allclose(calibrated_d, perf_img.nibImage.get_data() / m0_expected)
+    m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, 0.82, alpha=ALPHA)
+    np.testing.assert_allclose(calibrated_d, perf_img.data / m0_expected)
