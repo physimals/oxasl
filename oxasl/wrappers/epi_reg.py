@@ -6,7 +6,7 @@ import fsl.utils.assertions as asrt
 from fsl.wrappers import wrapperutils  as wutils
 
 @wutils.fileOrImage('epi', 't1', 't1brain', 'fmap', 'fmapmag', 'fmapmagbrain', 'gdc', 'wmseg', 'weight', outprefix='out')
-@wutils.fileOrArray('init')
+@wutils.fileOrArray('init', 'out.mat')
 @wutils.fslwrapper
 def epi_reg(**kwargs):
     """Wrapper for the ``epi_reg`` command.
@@ -37,5 +37,5 @@ def epi_reg(**kwargs):
 
     cmd = ['epi_reg', ]
     cmd += wutils.applyArgStyle('--=', valmap=valmap, singlechar_args=True, **kwargs)
-
+    
     return cmd
