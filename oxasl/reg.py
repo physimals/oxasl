@@ -23,46 +23,124 @@ from .wrappers import epi_reg
 def get_regfrom(wsp):
     """
     Set the 3D image to be used as the ASL registration target for structural->ASL registration
+    
+    Optional workspace attributes
+    -----------------------------
+
+     - ``regfrom`` : User-supplied registration reference image
+     - ``asldata`` : Raw ASL data
+     - ``calib``   : Calibration image
+
+    Updated workspace attributes
+    ----------------------------
+
+     - ``regfrom``    : Registration reference image in ASL space
     """
+    if wsp.isdone("get_regfrom"):
+        return
+
     wsp.log.write("\nGetting image to use for ASL->structural registration)\n")
     calib.preproc_calib(wsp)
     preproc.preproc_asl(wsp)
-    if wsp.regfrom is None:
-        if wsp.asldata_mean_brain:
-            wsp.log.write(" - Registration source is mean raw ASL image (brain extracted)\n")
-            wsp.regfrom = wsp.asldata_mean_brain
-        elif wsp.calib_brain is not None:
-            wsp.log.write(" - Registration source is calibration image (brain extracted)\n")
-            wsp.regfrom = wsp.calib_brain
-        elif wsp.diffasl_mean_brain:
-            wsp.log.write(" - Registration source is mean subtracted ASL image (brain extracted)\n")
-            wsp.regfrom = wsp.diffasl_mean_brain
-        elif wsp.pwi_brain:
-            wsp.log.write(" - Registration source is perfusion weighted image (brain extracted)\n")
-            wsp.regfrom = wsp.pwi_brain
+    if wsp.regfrom is not None:
+        wsp.log.write(" - Registration reference image supplied by user\n")
+    elif wsp.asldata_mean_brain:
+        wsp.log.write(" - Registration reference is mean raw ASL image (brain extracted)\n")
+        wsp.regfrom = wsp.asldata_mean_brain
+    elif wsp.calib_brain is not None:
+        wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
+        wsp.regfrom = wsp.calib_brain
+    elif wsp.diffasl_mean_brain:
+        wsp.log.write(" - Registration reference is mean subtracted ASL image (brain extracted)\n")
+        wsp.regfrom = wsp.diffasl_mean_brain
+    elif wsp.pwi_brain:
+        wsp.log.write(" - Registration reference is perfusion weighted image (brain extracted)\n")
+        wsp.regfrom = wsp.pwi_brain
+
+    wsp.done("get_regfrom")
 
 def reg_asl2struc(wsp):
     """
     Registration of ASL images to structural image
-    """
-    if wsp.asl2struc is None:
-        wsp.struc2asl = None
-        struc.preproc_struc(wsp)
-        wsp.log.write("\nRegistering ASL data to structural data\n")
-        if wsp.do_flirt:
-            wsp.regto, wsp.asl2struc = reg_flirt(wsp)
-        if wsp.do_bbr:
-            wsp.regto, wsp.asl2struc = reg_bbr(wsp)
     
-    if wsp.asl2struc is not None and wsp.struc2asl is None:
-        wsp.struc2asl = np.linalg.inv(wsp.asl2struc)
+    Required workspace attributes
+    -----------------------------
 
-    if wsp.asl2struc is not None:
-        wsp.log.write(" - ASL->Structural transform\n")
-        wsp.log.write(str(wsp.asl2struc) + "\n")
-    if wsp.struc2asl is not None:
-        wsp.log.write(" - Structural->ASL transform\n")
-        wsp.log.write(str(wsp.struc2asl) + "\n")
+     - ``regfrom``            : Registration reference image in ASL space
+     - ``struc``              : Structural image
+
+    Updated workspace attributes
+    ----------------------------
+
+     - ``asl2struc``    : ASL->structural transformation matrix
+     - ``struc2asl``    : Structural->ASL transformation matrix
+     - ``regto``        : ``regfrom`` image transformed to structural space
+    """
+    if wsp.isdone("reg_asl2struc"):
+        return
+
+    get_regfrom(wsp)
+    struc.preproc_struc(wsp)
+    wsp.log.write("\nRegistering ASL data to structural data\n")
+    if wsp.do_flirt:
+        wsp.regto, wsp.asl2struc = reg_flirt(wsp)
+    if wsp.do_bbr:
+        wsp.regto, wsp.asl2struc = reg_bbr(wsp)
+    
+    wsp.struc2asl = np.linalg.inv(wsp.asl2struc)
+
+    wsp.log.write(" - ASL->Structural transform\n")
+    wsp.log.write(str(wsp.asl2struc) + "\n")
+    wsp.log.write(" - Structural->ASL transform\n")
+    wsp.log.write(str(wsp.struc2asl) + "\n")
+
+    wsp.done("reg_asl2struc")
+
+def reg_struc2std(wsp, flirt=True):
+    """
+    Determine structural -> standard space registration
+    
+    Required workspace attributes
+    -----------------------------
+
+     - ``struc``              : Structural image
+
+    Updated workspace attributes
+    ----------------------------
+
+     - ``std2struc``    : MNI->structural transformation - either warp image or FLIRT matrix
+     - ``struc2std``    : Structural->MNI transformation matrix - either warp image or FLIRT matrix
+    """
+    if wsp.isdone("reg_struc2std"):
+        return
+
+    if flirt:
+        wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
+        flirt_result = fsl.flirt(wsp.struc, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
+        wsp.struc2std = flirt_result["omat"]
+        wsp.std2struc = np.linalg.inv(wsp.struc2std)
+    else:
+        # FIXME expecting flirt already run?
+        wsp.log.write(" - Registering structural image to standard space using FNIRT\n")
+        fnirt_result = fsl.fnirt(wsp.struc, aff=wsp.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
+        wsp.struc2std = fnirt_result["cout"]
+    
+        # Calculate the inverse warp using INVWARP
+        invwarp_result = fsl.invwarp(wsp.struc, wsp.struc2std_warp, out=fsl.LOAD)
+        wsp.std2struc = invwarp_result["out"]
+
+    wsp.done("reg_struc2std")
+
+def struc2asl(wsp, img):
+    """
+    Convert an image from structural to ASL space
+
+    :param img: Image object in structural space
+    :return: Transformed Image object
+    """
+    get_regfrom(wsp)
+    reg_asl2struc(wsp)
+    return fsl.applyxfm(img, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
 
 def reg_flirt(wsp):
     """ 
@@ -138,30 +216,8 @@ def reg_bbr(wsp):
     struc.segment(wsp)
 
     wsp.log.write("  - BBR registration using epi_reg\n")
-        
-    # Refinement of the registration using perfusion and the white matter segmentation
-    # using epi_reg to get BBR (and allow for fielmap correction in future)
-    epi_reg_opts = {
-        "inweight" : wsp.inweight,
-        "init" : wsp.initmat,
-    }
-    #if fmap:
-    if False:
-    	# With fieldmap
-        # FIXME
-	    #fmapregstr=""
-        #if [ ! -z $nofmapreg ]; then
-	    #    fmapregstr="--nofmapreg"
-        epi_reg_opts.update({
-            "fmap" : wsp.fmap,
-            "fmapmag" : wsp.fmapmag,
-            "fmapmagbrain" : wsp.fmapmagbrain,
-            "pedir" : wsp.pedir,
-            "echospacing" : wsp.echospacing,
-        })
-    
-    result = epi_reg(epi=wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg_struc, **epi_reg_opts)
-    return result["out"], result["out_init"]
+    result = epi_reg(epi=wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg_struc, init=wsp.initmat, inweight=wsp.inweight)
+    return result["out.nii.gz"], result["out"]
 
     #OUTPUT
     #echo "Saving FINAL output"
