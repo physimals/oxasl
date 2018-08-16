@@ -118,7 +118,7 @@ class Workspace(object):
         :param name: Name, must be a valid Python identifier
         :param value: Value to set
         :param save: If False, do not save item even if savedir defined
-        :param save: If specified, alternative name to use for saving this item
+        :param save_name: If specified, alternative name to use for saving this item
         """
         if value is not None and save and self._savedir:
             if not save_name:
@@ -199,16 +199,3 @@ def mkdir(dirname, fail_if_exists=False, warn_if_exists=True, log=sys.stdout):
             if fail_if_exists: raise
             elif warn_if_exists: log.write("WARNING: mkdir - Directory %s already exists\n" % dirname)
     return os.path.abspath(dirname)
-
-def tempdir(suffix, debug=False, log=sys.stdout):
-    """
-    Create a temporary directory
-
-    :param debug: If True, creates directory in current working directory
-    """
-    if debug:
-        tmpdir = os.path.join(os.getcwd(), "tmp_%s" % suffix)
-        mkdir(tmpdir, log=log)
-    else:
-        tmpdir = tempfile.mkdtemp("_%s" % suffix)
-    return tmpdir
