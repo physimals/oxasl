@@ -64,6 +64,12 @@ class DistcorrOptions(OptionCategory):
         g.add_option("--gdcwarp", help="Additional warp image for gradient distortion correction - will be combined with fieldmap or TOPUP distortion correction", type="image")
         ret.append(g)
 
+        g = IgnorableOptionGroup(parser, "Sensitivity correction")
+        g.add_option("--isen", help="User-supplied sensitivity correction in ASL space")
+        g.add_option("--senscorr-auto", help="Apply automatic sensitivity correction using bias field from FAST")
+        g.add_option("--senscorr-off", help="Do not apply any sensitivity correction")
+        ret.append(g)
+
         return ret
 
 def get_cblip_correction(wsp):
@@ -239,6 +245,48 @@ def get_motion_correction(wsp):
 
     wsp.done("get_motion_correction")
 
+def get_sensitivity_correction(wsp):
+    """
+    Get sensitivity correction image
+    
+    Required workspace attributes
+    -----------------------------
+
+     - ``asldata`` : ASL data
+
+    Optional workspace attributes
+    -----------------------------
+
+     - ``isen`` : User supplied sensitivity image
+     - ``calib`` : Calibration image. Used in conjunction with ``cref`` to calculate sensitivity map
+     - ``cref`` : Calibration reference image 
+     - ``senscorr_auto`` : If True, automatically calculate sensitivity correction using FAST
+     - ``senscorr_off`` If True, do not apply sensitivity correction
+
+    Updated workspace attributes
+    ----------------------------
+
+     - ``sensitivity``    : Sensitivity correction image in ASL space
+    """
+    if wsp.sensitivity is None:
+        wsp.log.write("Sensitivity correction\n")
+        if wsp.senscorr_off:
+            wsp.log.write(" - Sensitivity correction disabled\n")
+        elif wsp.isen is not None:
+            wsp.log.write(" - Sensitivity image supplied by user\n")
+        elif wsp.calib is not None and wsp.cref is not None:
+            wsp.log.write(" - Sensitivity image calculated from calibration reference image\n")
+            wsp.sensitivity = Image(wsp.calib.data / wsp.cref.data, header=wsp.calib.header)
+        elif wsp.senscorr_auto and wsp.bias is not None:
+            struc.segment(wsp)
+            wsp.log.write(" - Sensitivity image calculated from bias field\n")
+            sens = Image(np.reciprocal(wsp.bias.data), header=wsp.bias.header)           
+            reg.reg_asl2struc(wsp)
+            wsp.sensitivity = fsl.applyxfm(sens, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
+        else:
+            wsp.log.write(" - No source of sensitivity correction was found\n")
+        wsp.log.write("\n")
+
 def apply_corrections(wsp):
     """
     Apply distortion and motion corrections to ASL and calibration data
@@ -341,3 +389,29 @@ def correct_img(wsp, img, linear_mat):
         wsp.log.write(" - Correcting for local volume scaling using Jacobian\n")
         img = Image(img.data * wsp.jacobian)
     return img
+
+def apply_sensitivity_correction(wsp, *imgs):
+    """
+    Apply sensitivity correction
+
+    :param imgs: Sequence of Image objects
+
+    :return: Tuple of corrected Image objects corresponding to input.
+             If no sensitivity correction is defined, returns the same
+             images as input.
+
+    Optional workspace attributes
+    -----------------------------
+
+     - ``sensitivity``  : Sensitivity correction image
+     - ``senscorr_off`` : If True, no correction will be applied even if ``sensitivity`` image exists
+    """
+    if wsp.sensitivity is not None and not wsp.senscorr_off:
+        wsp.log.write("Applying sensitivity correction\n")
+        ret = []
+        for img in imgs:
+            corrected = img.data / wsp.sensitivity.data
+            ret.append(Image(corrected, header=img.header))
+        return tuple(ret)
+    else:
+        return tuple(imgs)
