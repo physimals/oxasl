@@ -152,7 +152,7 @@ def get_m0_voxelwise(wsp):
     alpha, gain, pct = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1), wsp.ifnone("pct", 0.9)
 
     # Calculate M0 value
-    m0 = wsp.calib.data * alpha * gain
+    m0 = np.copy(wsp.calib.data).astype(np.float) * alpha * gain
 
     shorttr = 1
     if wsp.tr is not None and wsp.tr < 5:
@@ -339,7 +339,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     wsp.log.write(" - T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pcr))
 
     # Check the data and masks
-    calib_data = np.copy(wsp.calib.data)
+    calib_data = np.copy(wsp.calib.data).astype(np.float)
     if calib_data.ndim == 4:
         wsp.log.write(" - Taking mean across calibration images\n")
         calib_data = np.mean(calib_data, -1)
