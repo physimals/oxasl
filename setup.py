@@ -59,8 +59,10 @@ setup(
             "oxasl_calib=oxasl.calib:main",
             "oxasl_mask=oxasl.mask:main",
             "oxasl_reg=oxasl.reg:main",
-            "oxasl_gui=oxasl.gui:main",
             "oxasl=oxasl.oxford_asl:main",
+        ],
+        'gui_scripts' : [
+            "oxasl_gui=oxasl.gui:main",
         ],
     },
     classifiers=[
