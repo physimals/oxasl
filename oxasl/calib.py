@@ -168,7 +168,7 @@ def get_m0_voxelwise(wsp):
     m0 /= pct
 
     if wsp.mask is not None:
-        if wsp.edgecorr:
+        if wsp.calib_edgecorr:
             wsp.log.write(" - Doing edge correction\n")
             m0 = _edge_correct(m0, wsp.brain_mask)
         wsp.log.write(" - Masking M0 image")
