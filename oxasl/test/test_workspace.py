@@ -197,7 +197,7 @@ def test_matrix_nosave():
     finally:
         shutil.rmtree(tempdir)
 
-def test_image_save_name():
+def test_matrix_save_name():
     """ 
     Test matrices are saved in the savedir with the specified name
     """

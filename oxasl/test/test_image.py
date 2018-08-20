@@ -1,6 +1,8 @@
 import pytest
 import numpy as np
 
+from fsl.data.image import Image
+
 from oxasl import AslImage
 
 def test_create_data_singleti():
@@ -256,6 +258,16 @@ def test_mean_across_repeats_tr():
     assert list(data.shape) == [5, 5, 5, 2] 
     for znew, zold in enumerate([3, 4]):
         assert np.all(data[..., znew] == zold)
+
+def test_perf_weighted_tr():
+    d = np.zeros([5, 5, 5, 8])
+    for z in range(8): d[..., z] = z
+    img = AslImage(name="asldata", image=d, tis=[1, 2], order='tr')
+    pwi = img.perf_weighted()
+    assert(isinstance(pwi, Image))
+    data = pwi.data
+    assert list(data.shape) == [5, 5, 5] 
+    assert np.all(np.mean(d, -1) == data)
 
 def test_split_epochs():
     d = np.zeros([5, 5, 5, 8])
