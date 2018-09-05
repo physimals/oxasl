@@ -23,6 +23,7 @@ from .basil import BasilOptions
 from .workspace import Workspace
 from .options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from .reg import reg_asl2struc
+import oxasl.reg as reg
 
 class OxfordAslOptions(OptionCategory):
     """
@@ -141,6 +142,7 @@ def oxasl(wsp):
 
     corrections.apply_corrections(wsp)
     mask.generate_mask(wsp)
+
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
 
     wsp.do_flirt, wsp.do_bbr = False, True # FIXME
@@ -152,6 +154,13 @@ def oxasl(wsp):
     wsp.struc2asl_initial = wsp.struc2asl
     wsp.done("reg_asl2struc", status=False)
     reg_asl2struc(wsp)
+
+    if wsp.pvcorr:
+        struc.segment(wsp)
+        wsp.wm_pv_asl = reg.struc2asl(wsp, wsp.wm_pv_struc)
+        wsp.gm_pv_asl = reg.struc2asl(wsp, wsp.gm_pv_struc)
+        wsp.basil_options = {"pwm" : wsp.wm_pv_asl, "pgm" : wsp.gm_pv_asl}
+        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"))
 
     do_output(wsp)
     if wsp.calib is not None:
