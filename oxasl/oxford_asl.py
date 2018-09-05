@@ -1,10 +1,54 @@
 #!/bin/env python
 """
-OXFORD_ASL: Converts ASL images in to perfusion maps
+OXFORD_ASL: Converts ASL images into perfusion maps
+===================================================
 
 Michael Chappell, FMRIB Image Analysis Group & IBME
 
 Copyright (c) 2008-2013 Univerisity of Oxford
+
+Overview
+--------
+
+This module (and the associated command line tool) provide a 'one stop shop'
+for analysing ASL data. They call the various other modules to preprocess,
+correct, register, model and calibrate the data, outputting the perfusion
+data, and also other estimated parameters.
+
+The processing sequence is approximately:
+
+1. Preprocess ASL data. This involves generation of mean and subtracted images
+   and brain extracted versions. Not all of these images will be used later, but
+   some might be.
+
+2. Preprocess calibration data. This involves internal motion correction (for
+   multi-volume calibration images), and the generation of mean and brain extracted
+   versions of the calibration data.
+
+3. Preprocess structural data. This involves generating brain extracted version of
+   the structural data, and extracting any existing structural->standard space transformations
+   (e.g. if an FSL_ANAT directory is the source of structural information)
+
+4. If requested, the motion correction transformations for the ASL data are determined. 
+   This is always done so that the middle volume of the
+   ASL data is unchanged, although this volume is not always used as the reference.
+   If applicable, the calibration->ASL registration is also determined.
+
+5. If requested, the fieldmap distortion correction is determined from the fieldmap
+   images
+
+6. All available corrections are applied simultaneously to minimise interpolation
+
+7. If required, a mask is generated from the corrected data
+
+8. Model fitting is carried out to determine native space perfusion and other parameter maps
+
+9. The ASL->structural registration is re-done using the perfusion image as the ASL reference.
+
+10. If applicable, calibration is applied to the raw perfusion images
+
+11. Raw and calibrated output images are generated in all output spaces (native, structural standard)
+    
 """
 
 import sys
@@ -145,8 +189,8 @@ def oxasl(wsp):
 
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
 
+    # Re-do ASL->structural registration using perfusion image
     wsp.do_flirt, wsp.do_bbr = False, True # FIXME
-
     new_regfrom = wsp.basil.main.finalstep.mean_ftiss.data
     new_regfrom[new_regfrom < 0] = 0
     wsp.regfrom = Image(new_regfrom, header=wsp.regfrom.header)
@@ -160,6 +204,7 @@ def oxasl(wsp):
         wsp.wm_pv_asl = reg.struc2asl(wsp, wsp.wm_pv_struc)
         wsp.gm_pv_asl = reg.struc2asl(wsp, wsp.gm_pv_struc)
         wsp.basil_options = {"pwm" : wsp.wm_pv_asl, "pgm" : wsp.gm_pv_asl}
+        wsp.initmvn = None
         basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"))
 
     do_output(wsp)
@@ -177,25 +222,3 @@ def do_output(wsp):
             img = wsp.basil.main.finalstep.mean_ftiss
             img.data[img.data < 0] = 0
             output_wsp.perfusion = img
-
-def set_output_spaces(wsp):
-    """
-    Determine the output spaces we should be using and the transformations into them
-    """
-    if not wsp.output_spaces:
-        
-
-        if wsp.struc2std_warp:
-            wsp.output_spaces["std"] = {"warp" : wsp.struc2std_warp}
-        elif wsp.struc2std_mat:
-            wsp.output_spaces["std"] = {"mat" : wsp.struc2std_mat}
-
-        if "std" in wsp.output_spaces:
-            if wsp.std_brain:
-                wsp.output_spaces["std"]["brain"] = wsp.std_brain
-            else:
-                wsp.output_spaces["std"]["brain"] = os.path.join(os.environ["FSLDIR"], "data", "standard", "MNI152_T1_2mm")
-
-            wsp.log.write("Standard brain is: %s" % wsp.output_spaces["std"]["brain"])
-        else:
-            wsp.log.write("No standard space transform found - output will be in native/structural space only\n")
