@@ -8,6 +8,7 @@ Copyright (c) 2008-2018 University of Oxford
 import sys
 
 from fsl.wrappers import LOAD
+from fsl.data.image import Image
 
 from ._version import __version__, __timestamp__
 from .image import AslImage, AslImageOptions
@@ -92,7 +93,6 @@ def basil(wsp, output_wsp=None, prefit=True):
     extra_options = wsp.basil_options
     if extra_options is None:
         extra_options = {}
-
     if prefit and max(wsp.asldata.rpts) > 1:
         # Initial BASIL run on mean data
         wsp.log.write(" - Doing initial fit on mean at each TI\n\n")
@@ -197,9 +197,9 @@ def basil_steps(wsp, asldata, **kwargs):
     inferexch = options["exch"] != "mix"
 
     # Partial volume correction
-    pvcorr = wsp.pgm is not None or wsp.pwm is not None
+    pvcorr = "pgm" in options or "pgm" in options
     if pvcorr:
-        if wsp.pgm is None or wsp.pwm is None:
+        if "pgm" not in options or "pwm" not in options:
             raise ValueError("Only one partial volume map (GM / WM) was supplied for PV correctioN")
         # Need a spatial step with more iterations for the PV correction
         wsp.spatial = True
@@ -302,13 +302,13 @@ def basil_steps(wsp, asldata, **kwargs):
         options["pvcorr"] = True
 
         # set the image priors for the PV maps
-        spriors = _add_prior(options, spriors, "pvgm", type="I", image=wsp.pgm)
-        spriors = _add_prior(options, spriors, "pvwm", type="I", image=wsp.pwm)
+        spriors = _add_prior(options, spriors, "pvgm", type="I", image=options["pgm"])
+        spriors = _add_prior(options, spriors, "pvwm", type="I", image=options["pwm"])
         spriors = _add_prior(options, spriors, "fwm", type="M")
 
         if steps:
             # Add initialisaiton step for PV correction - ONLY if we have something to init from
-            steps.append(PvcInitStep({"data" : asldata, "mask" : wsp.mask, "pgm" : wsp.pgm, "pwm" : wsp.pwm}, "PVC initialisation"))
+            steps.append(PvcInitStep({"data" : asldata, "mask" : wsp.mask, "pgm" : options["pgm"], "pwm" : options["pwm"]}, "PVC initialisation"))
 
     ### --- SPATIAL MODULE ---
     if wsp.spatial:
@@ -391,11 +391,12 @@ class PvcInitStep(Step):
         gmcbf_init = (prev_ftiss - wm_cbf_term) / temp_pgm
         wmcbf_init = gmcbf_init * wm_cbf_ratio
 
-        # load these into the MVN, GM cbf is always param 1
+        # load these into the MVN
         mvn = prev_output["finalMVN"]
         from .wrappers import mvntool
-        mvn = mvntool(mvn, "ftiss", output=LOAD, mask=mask, param_list="FIXME", write=True, valim=gmcbf_init, var=0.1)
-        mvn = mvntool(mvn, "fwm", output=LOAD, mask=mask, param_list="FIXME", write=True, valim=wmcbf_init, var=0.1)
+        params = prev_output["paramnames"]
+        mvn = mvntool(mvn, params.index("ftiss")+1, output=LOAD, mask=mask, write=True, valim=Image(gmcbf_init, header=mvn.header), var=0.1)["output"]
+        mvn = mvntool(mvn, params.index("fwm")+1, output=LOAD, mask=mask, write=True, valim=Image(wmcbf_init, header=mvn.header), var=0.1)["output"]
         log.write("DONE\n")
         return {"finalMVN" : mvn}
 
