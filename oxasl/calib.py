@@ -673,11 +673,11 @@ class CalibOptions(OptionCategory):
         group.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
         groups.append(group)
 
-        group = IgnorableOptionGroup(parser, "Coil sensitivity correction, either using existing sensitivity image or reference images collected using same parameters", ignore=self.ignore)
-        group.add_option("--isen", help="Input coil sensitivity image", type="image")
-        group.add_option("--cref", help="Reference image from coil with minimal variation e.group. body.", type="image")
-        group.add_option("--cact", help="Image from coil used for actual ASL acquisition (default: calibration image - only in longtr mode)", type="image")
-        groups.append(group)
+        #group = IgnorableOptionGroup(parser, "Coil sensitivity correction, either using existing sensitivity image or reference images collected using same parameters", ignore=self.ignore)
+        #group.add_option("--isen", help="Input coil sensitivity image", type="image")
+        #group.add_option("--cref", help="Reference image from coil with minimal variation e.group. body.", type="image")
+        #group.add_option("--cact", help="Image from coil used for actual ASL acquisition (default: calibration image - only in longtr mode)", type="image")
+        #groups.append(group)
 
         #group = IgnorableOptionGroup(parser, "CSF masking options (only for --tissref csf)", ignore=self.ignore)
         #group.add_option("-s", dest="struc", help="Structural image")
