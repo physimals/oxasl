@@ -200,8 +200,6 @@ def get_motion_correction(wsp):
     -----------------------------
 
      - ``calib``    : Calibration image
-     - ``cref``     : Calibration reference image
-     - ``cblip``     : Calibration BLIP image
 
     Updated workspace attributes
     ----------------------------
