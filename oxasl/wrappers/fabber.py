@@ -155,6 +155,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
     ret = _Results(cmd_output)
     try:
         fab = Fabber()
+        ret["paramnames"] = fab.get_model_params(options)
         if log.get("cmd", None):
             log["cmd"].write("fabber <options>\n")
 
@@ -191,7 +192,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
 
     return ret
 
-@wutils.fileOrImage('input', 'output', 'valim', 'varim')
+@wutils.fileOrImage('mvn', 'output', 'valim', 'varim', 'mask')
 @wutils.fslwrapper
 def mvntool(mvn, param, **kwargs):
     """
@@ -202,9 +203,14 @@ def mvntool(mvn, param, **kwargs):
 
     For other arguments, see command line tool for now
     """
-    asrt.assertIsNifti(input)
+    asrt.assertIsNifti(mvn)
+
+    valmap = {
+        'write' : wutils.SHOW_IF_TRUE,
+        'new' : wutils.SHOW_IF_TRUE,
+    }
 
     cmd = ['mvntool', '--input={}'.format(mvn), '--param={}'.format(param)]
-    cmd += wutils.applyArgStyle('--=', **kwargs)
+    cmd += wutils.applyArgStyle('--=', valmap=valmap, **kwargs)
 
     return cmd
