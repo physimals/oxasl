@@ -66,8 +66,12 @@ class DistcorrOptions(OptionCategory):
 
         g = IgnorableOptionGroup(parser, "Sensitivity correction")
         g.add_option("--isen", help="User-supplied sensitivity correction in ASL space")
-        g.add_option("--senscorr-auto", help="Apply automatic sensitivity correction using bias field from FAST")
-        g.add_option("--senscorr-off", help="Do not apply any sensitivity correction")
+        g.add_option("--senscorr-auto", help="Apply automatic sensitivity correction using bias field from FAST", action="store_true", default=False)
+        g.add_option("--senscorr-off", help="Do not apply any sensitivity correction", action="store_true", default=False)
+        ret.append(g)
+
+        g = IgnorableOptionGroup(parser, "Partial volume correction")
+        g.add_option("--pvcorr", help="Apply partial volume correction", action="store_true", default=False)
         ret.append(g)
 
         return ret
