@@ -13,6 +13,7 @@ from ._version import __version__, __timestamp__
 from .image import AslImage, AslImageOptions
 from .workspace import Workspace
 from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
+import oxasl.preproc as preproc
 
 def basil(wsp, output_wsp=None, prefit=True):
     """
@@ -51,6 +52,7 @@ def basil(wsp, output_wsp=None, prefit=True):
      - ``tau`` : Assumed/initial estimate for bolus duration  (default: 1.8) 
      - ``basil_options`` : Optional dictionary of additional options for underlying model
     """
+    preproc.preproc_asl(wsp)
     wsp.log.write("\nRunning BASIL Bayesian modelling on ASL data\n")
     if output_wsp is None:
         output_wsp = wsp
@@ -142,7 +144,7 @@ def basil_steps(wsp, asldata, **kwargs):
 
     Arguments are the same as the ``basil`` function. No workspace is required.
     """
-    if not asldata:
+    if asldata is None:
         raise ValueError("Input ASL data is None")
 
     wsp.log.write("BASIL v%s\n" % __version__)
@@ -184,7 +186,7 @@ def basil_steps(wsp, asldata, **kwargs):
     options_svb = {
         "method" : "spatialvb",
         "param-spatial-priors" : "N+",
-        "convergence" : "maxiters",
+        "convergence" : "maxits",
         "max-iterations": 20,
     }
 
@@ -220,7 +222,7 @@ def basil_steps(wsp, asldata, **kwargs):
         options["inctau"] = True
     if wsp.infert1:
         options["inct1"] = True
-    if wsp.pvcorr:
+    if pvcorr:
         options["incpve"] = True
 
     # Keep track of the number of spatial priors specified by name
