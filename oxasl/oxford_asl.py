@@ -55,6 +55,9 @@ import sys
 import os
 import traceback
 
+import numpy as np
+
+import fsl.wrappers as fsl
 from fsl.data.image import Image
 
 from ._version import __version__
@@ -82,34 +85,14 @@ class OxfordAslOptions(OptionCategory):
         g = IgnorableOptionGroup(parser, "Main Options")
         g.add_option("--wp", dest="wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
         g.add_option("--mc", dest="mc", help="Motion correct data", action="store_true", default=False)
+        g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
         ret.append(g)
         g = IgnorableOptionGroup(parser, "Acquisition/Data specific")
-        g.add_option("--casl", dest="casl", help="ASL acquisition is  pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
-        g.add_option("--bolus", dest="bolus", help="Bolus duration", type=float, default=1.8)
         g.add_option("--bat", dest="bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
         g.add_option("--t1", dest="t1", help="Tissue T1 value", type=float, default=1.3)
         g.add_option("--t1b", dest="t1b", help="Blood T1 value", type=float, default=1.65)
-        g.add_option("--slicedt", dest="slicedt", help="Timing difference between slices", type=float, default=0.0)
-        g.add_option("--sliceband", dest="sliceband", help="Number of slices per pand in multi-band setup", type=int)
-        g.add_option("--artsupp", dest="artsupp", help="Arterial suppression (vascular crushing) was used", action="store_true", default=False)
         ret.append(g)
         return ret
-
-"""
-    echo "Partial volume correction"
-    echo " --pvcorr    : Do partial volume correction"
-    echo "  PV estimates will be taken from:"
-    echo "   fsl_anat dir (--fslanat), if supplied"
-    echo "   exising fast segmentation (--fastsrc), if supplied"
-    echo "   FAST segmenation of structural (if using -s and --sbet)"
-    echo "   User supplied PV estimates (--pvgm, --pvwm)"   
-    echo "   --pvgm    : Partial volume estimates for GM"
-    echo "   --pvwm    : Partial volume estimates for WM"
-
-    echo " Epochs "
-    echo " --elen      : Length of each epoch in TIs"
-    echo " --eol       : Overlap of each epoch in TIs- {deafult: 0}"
-"""
 
 def main():
     debug = True
@@ -119,7 +102,6 @@ def main():
         parser.add_category(StructuralImageOptions())
         parser.add_category(OxfordAslOptions())
         parser.add_category(CalibOptions(ignore=["perf", "tis"]))
-        parser.add_category(BasilOptions(ignore=["spatial"]))
         parser.add_category(corrections.DistcorrOptions())
         parser.add_category(GenericOptions())
 
@@ -140,9 +122,7 @@ def main():
             else:
                 options.calib_method = "voxelwise"
 
-        #basil_options = parser.filter(vars(options), "basil", consume=True)
         wsp = Workspace(savedir=options.output, **vars(options))
-        #wsp.basil_options = basil_options
         wsp.asldata = AslImage(options.asldata, **parser.filter(vars(wsp), "image"))
 
         oxasl(wsp)
@@ -200,12 +180,27 @@ def oxasl(wsp):
     reg_asl2struc(wsp)
 
     if wsp.pvcorr:
+        # Re-calculate mask as registration has changed (if it came from struct)
+        # FIXME how to check it came from struc
+        brain_mask_asl = fsl.applyxfm(wsp.struc_brain_mask, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
+        wsp.mask = fsl.fslmaths(brain_mask_asl).thr(0.25).bin().fillh().run()
+
         struc.segment(wsp)
-        wsp.wm_pv_asl = reg.struc2asl(wsp, wsp.wm_pv_struc)
-        wsp.gm_pv_asl = reg.struc2asl(wsp, wsp.gm_pv_struc)
-        wsp.basil_options = {"pwm" : wsp.wm_pv_asl, "pgm" : wsp.gm_pv_asl}
+        #wsp.wm_pv_asl = reg.struc2asl(wsp, wsp.wm_pv_struc)
+        #wsp.gm_pv_asl = reg.struc2asl(wsp, wsp.gm_pv_struc)
+        wsp.wm_pv_asl = fsl.applywarp(wsp.wm_pv_struc, wsp.regfrom, premat=wsp.struc2asl, out=fsl.LOAD, interp="spline", super=True, superlevel=4)["out"]
+        wsp.gm_pv_asl = fsl.applywarp(wsp.gm_pv_struc, wsp.regfrom, premat=wsp.struc2asl, out=fsl.LOAD, interp="spline", super=True, superlevel=4)["out"]
+        pwm = np.copy(wsp.wm_pv_asl.data)
+        pgm = np.copy(wsp.gm_pv_asl.data)
+        pwm[pwm < 0.1] = 0
+        pwm[pwm > 1] = 1
+        pgm[pgm < 0.1] = 0
+        pgm[pgm > 1] = 1
+        wsp.pwm = Image(pwm, header=wsp.wm_pv_asl.header)
+        wsp.pgm = Image(pgm, header=wsp.gm_pv_asl.header)
+        wsp.basil_options = {"pwm" : wsp.pwm, "pgm" : wsp.pgm}
         wsp.initmvn = None
-        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"))
+        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
 
     do_output(wsp)
     if wsp.calib is not None:
