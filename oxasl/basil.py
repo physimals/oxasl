@@ -6,8 +6,12 @@ Copyright (c) 2008-2018 University of Oxford
 """
 
 import sys
+import math
+import os
 
-from fsl.wrappers import LOAD
+import numpy as np
+
+from fsl.wrappers import fslmaths, LOAD
 from fsl.data.image import Image
 
 from ._version import __version__, __timestamp__
@@ -41,16 +45,16 @@ def basil(wsp, output_wsp=None, prefit=True):
      - ``inferart`` : If True, infer arterial component (default: False)
      - ``infert1`` : If True, infer T1 (default: False)
      - ``inferpc`` : If True, infer PC (default: False)
-     - ``spatial`` : If True, include final spatial VB step (default: False)
-     - ``onestep`` : If True, do all inference in a single step (default: False)
-     - ``t1im`` : T1 map as Image
-     - ``pgm`` :  Grey matter partial volume map as Image
-     - ``pwm`` : White matter partial volume map as Image
-     - ``initmvn`` : MVN structure to use as initialization as Image   
      - ``t1``: Assumed/initial estimate for tissue T1 (default: 1.65 in white paper mode, 1.3 otherwise)
      - ``t1b``: Assumed/initial estimate for blood T1 (default: 1.65)
      - ``bat``: Assumed/initial estimate for bolus arrival time (s) (default 0 in white paper mode, 1.3 for CASL, 0.7 otherwise)
      - ``tau`` : Assumed/initial estimate for bolus duration  (default: 1.8) 
+     - ``t1im`` : T1 map as Image
+     - ``pgm`` :  Grey matter partial volume map as Image
+     - ``pwm`` : White matter partial volume map as Image
+     - ``initmvn`` : MVN structure to use as initialization as Image   
+     - ``spatial`` : If True, include final spatial VB step (default: False)
+     - ``onestep`` : If True, do all inference in a single step (default: False)
      - ``basil_options`` : Optional dictionary of additional options for underlying model
     """
     preproc.preproc_asl(wsp)
@@ -71,10 +75,9 @@ def basil(wsp, output_wsp=None, prefit=True):
         wsp.log.write(" - Analysis in white paper mode: T1 default=1.65, BAT default=0, voxelwise calibration\n")
         t1_default = 1.65
         bat_default = 0.0
-        #wsp.calib_method = "voxel"
     else:
         t1_default = 1.3
-        if wsp.casl:
+        if wsp.asldata.casl:
             bat_default = 1.3
         else:
             bat_default = 0.7
@@ -85,24 +88,25 @@ def basil(wsp, output_wsp=None, prefit=True):
     if wsp.tau is None: wsp.tau = 1.8
     if wsp.infertiss is None: wsp.infertiss = True
         
-    # if we are doing CASL then fix the bolus duration, except where the user has 
-    # explicitly told us otherwise
-    if wsp.infertau is None: wsp.infertau = not wsp.casl
+    # if we are doing CASL then fix the bolus duration, unless explicitly told us otherwise
+    if wsp.infertau is None: 
+        wsp.infertau = not wsp.asldata.casl
 
     # Pick up extra BASIL options
-    extra_options = wsp.basil_options
-    if extra_options is None:
-        extra_options = {}
+    extra_options = wsp.ifnone("basil_options", {})
+
     if prefit and max(wsp.asldata.rpts) > 1:
         # Initial BASIL run on mean data
         wsp.log.write(" - Doing initial fit on mean at each TI\n\n")
         init_wsp = output_wsp.sub("init")
+        main_wsp = output_wsp.sub("main")
         basil_fit(wsp, wsp.asldata_mean_across_repeats, output_wsp=init_wsp, **extra_options)
         wsp.initmvn = output_wsp.init.finalstep.finalMVN
+    else:
+        main_wsp = output_wsp
 
     # Main run on full ASL data
-    wsp.log.write("\n - Doing main fit on full ASL data\n\n")
-    main_wsp = output_wsp.sub("main")
+    wsp.log.write("\n - Doing fit on full ASL data\n\n")
     basil_fit(wsp, wsp.asldata, output_wsp=main_wsp, **extra_options)
 
 def basil_fit(wsp, asldata, output_wsp=None, **kwargs):
@@ -121,15 +125,23 @@ def basil_fit(wsp, asldata, output_wsp=None, **kwargs):
         output_wsp = wsp
 
     prev_result = None
+    output_wsp.diffdata_basil = asldata.diff()
+
     for idx, step in enumerate(steps):
         step_wsp = output_wsp.sub("step%i" % (idx+1))
         desc = "Step %i of %i: %s" % (idx+1, len(steps), step.desc)
-        if prev_result:
+        if prev_result is not None:
             desc += " - Initialise with step %i" % idx
         step_wsp.log.write(desc + "\n")
         result = step.run(prev_result, log=wsp.log)
         for key, value in result.items():
             setattr(step_wsp, key, value)
+
+        # FIXME hack to write logfile
+        if step_wsp.logfile is not None and step_wsp._savedir is not None:
+            with open(os.path.join(step_wsp._savedir, "logfile"), "w") as tfile:
+                tfile.write(step_wsp.logfile)
+
         prev_result = result
     output_wsp.finalstep = step_wsp
     wsp.log.write("\nEnd\n")
@@ -151,7 +163,8 @@ def basil_steps(wsp, asldata, **kwargs):
     asldata.summary(log=wsp.log)
     asldata = asldata.diff()
 
-    # Default Fabber options for VB runs and spatial steps
+    # Default Fabber options for VB runs and spatial steps. Note that attributes
+    # which are None (e.g. sliceband) are not passed to Fabber
     options = {
         "data" : asldata,
         "model" : "aslrest",
@@ -166,13 +179,32 @@ def basil_steps(wsp, asldata, **kwargs):
         "save-mean" : True,
         "save-mvn" : True,
         "save-std" : True,
+        "casl" : asldata.casl,
+        "slicedt" : asldata.slicedt,
+        "sliceband" : asldata.sliceband,
     }
     for idx, ti in enumerate(asldata.tis):
         options["ti%i" % (idx+1)] = ti
         options["rpt%i" % (idx+1)] = asldata.rpts[idx]
 
+    if wsp.noiseprior:
+        # Use an informative noise prior
+        if wsp.noisesd is None:
+            snr = wsp.ifnone("snr", 10)
+            wsp.log.write(" - Using SNR of %f to set noise std dev\n" % snr)
+
+            # Estimate signal magntiude
+            datamax = fslmaths(wsp.diffdata_mean).Tmax().run()
+            brain_mag=np.mean(datamax.data[wsp.mask.data != 0])
+            # this will correspond to whole brain CBF (roughly) - about 0.5 of GM
+            noisesd=math.sqrt(brain_mag * 2 / snr)
+        else:
+            noisesd = wsp.noisesd
+        wsp.log.write(" - Using a prior noise sd of: %f\n" % noisesd)
+        options["prior-noise-stddev"] = noisesd
+        
     # Additional optional workspace arguments
-    for attr in ("t1", "t1b", "bat", "tau", "casl", "slicedt", "sliceband", "FA", "mask"):
+    for attr in ("t1", "t1b", "bat", "tau", "FA", "mask"):
         value = getattr(wsp, attr)
         if value is not None:
             options[attr] = value
@@ -197,13 +229,15 @@ def basil_steps(wsp, asldata, **kwargs):
     inferexch = options["exch"] != "mix"
 
     # Partial volume correction
-    pvcorr = "pgm" in options or "pgm" in options
+    pvcorr = "pgm" in options or "pwm" in options
     if pvcorr:
         if "pgm" not in options or "pwm" not in options:
             raise ValueError("Only one partial volume map (GM / WM) was supplied for PV correctioN")
         # Need a spatial step with more iterations for the PV correction
         wsp.spatial = True
         options_svb["max-iterations"] = 200
+        pgm = options.pop("pgm")
+        pwm = options.pop("pwm")
         
     if pvcorr and not wsp.infertiss:
         raise ValueError("ERROR: PV correction is not compatible with --artonly option (there is no tissue component)")
@@ -302,13 +336,13 @@ def basil_steps(wsp, asldata, **kwargs):
         options["pvcorr"] = True
 
         # set the image priors for the PV maps
-        spriors = _add_prior(options, spriors, "pvgm", type="I", image=options["pgm"])
-        spriors = _add_prior(options, spriors, "pvwm", type="I", image=options["pwm"])
+        spriors = _add_prior(options, spriors, "pvgm", type="I", image=pgm)
+        spriors = _add_prior(options, spriors, "pvwm", type="I", image=pwm)
         spriors = _add_prior(options, spriors, "fwm", type="M")
 
         if steps:
             # Add initialisaiton step for PV correction - ONLY if we have something to init from
-            steps.append(PvcInitStep({"data" : asldata, "mask" : wsp.mask, "pgm" : options["pgm"], "pwm" : options["pwm"]}, "PVC initialisation"))
+            steps.append(PvcInitStep({"data" : asldata, "mask" : wsp.mask, "pgm" : pgm, "pwm" : pwm}, "PVC initialisation"))
 
     ### --- SPATIAL MODULE ---
     if wsp.spatial:
@@ -338,7 +372,6 @@ class Step(object):
     """
     A step in the Basil modelling process
     """
-
     def __init__(self, options, desc):
         self.options = dict(options)
         self.desc = desc
@@ -347,7 +380,6 @@ class FabberStep(Step):
     """
     A Basil step which involves running Fabber
     """
-
     def run(self, prev_output, log=sys.stdout):
         """
         Run Fabber, initialising it from the output of a previous step
@@ -364,7 +396,6 @@ class PvcInitStep(Step):
     """
     A Basil step which initialises partial volume correction
     """
-
     def run(self, prev_output, log=sys.stdout):
         """
         Update the MVN from a previous step to include initial estimates
@@ -377,7 +408,7 @@ class PvcInitStep(Step):
 
         # Modified pvgm map
         #fsl.maths(pgm, " -sub 0.2 -thr 0 -add 0.2 temp_pgm")
-        temp_pgm = self.options["pgm"].data
+        temp_pgm = np.copy(self.options["pgm"].data)
         temp_pgm[temp_pgm < 0.2] = 0.2
 
         # First part of correction psuedo WM CBF term
@@ -391,14 +422,18 @@ class PvcInitStep(Step):
         gmcbf_init = (prev_ftiss - wm_cbf_term) / temp_pgm
         wmcbf_init = gmcbf_init * wm_cbf_ratio
 
+        mvn = prev_output["finalMVN"]
+        gmcbf_init = Image(gmcbf_init, header=mvn.header)
+        wmcbf_init = Image(wmcbf_init, header=mvn.header)
+
         # load these into the MVN
         mvn = prev_output["finalMVN"]
         from .wrappers import mvntool
         params = prev_output["paramnames"]
-        mvn = mvntool(mvn, params.index("ftiss")+1, output=LOAD, mask=mask, write=True, valim=Image(gmcbf_init, header=mvn.header), var=0.1)["output"]
-        mvn = mvntool(mvn, params.index("fwm")+1, output=LOAD, mask=mask, write=True, valim=Image(wmcbf_init, header=mvn.header), var=0.1)["output"]
+        mvn = mvntool(mvn, params.index("ftiss")+1, output=LOAD, mask=mask, write=True, valim=gmcbf_init, var=0.1)["output"]
+        mvn = mvntool(mvn, params.index("fwm")+1, output=LOAD, mask=mask, write=True, valim=wmcbf_init, var=0.1)["output"]
         log.write("DONE\n")
-        return {"finalMVN" : mvn}
+        return {"finalMVN" : mvn, "gmcbf_init" : gmcbf_init, "wmcbf_init" : wmcbf_init}
 
 class BasilOptions(OptionCategory):
     """
