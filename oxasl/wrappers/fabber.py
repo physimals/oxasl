@@ -158,11 +158,11 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
         ret["paramnames"] = fab.get_model_params(options)
         if log.get("cmd", None):
             log["cmd"].write("fabber <options>\n")
-
         if progress:
             progress = percent_progress(progress)
         run = fab.run(options, progress)
         stdout.write(run.log)
+        ret["logfile"] = run.log
 
         # Write output data or save it as required
         for data_name, data in run.data.items():
