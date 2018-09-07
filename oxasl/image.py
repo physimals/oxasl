@@ -33,6 +33,11 @@ class AslImageOptions(OptionCategory):
         group.add_option("--rpts", help="Variable repeats as comma-separated list, one per TI", default=None)
         group.add_option("--iaf", help="input ASl format: diff,tc,ct")
         group.add_option("--ibf", help="input block format (for multi-TI): rpt,tis")
+        group.add_option("--casl", help="Acquisition was pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
+        group.add_option("--bolus", help="Bolus duration", type=float, default=1.8)
+        group.add_option("--slicedt", help="Timing difference between slices (ms) for 2D readpit", type=float, default=0.0)
+        group.add_option("--sliceband", help="Number of slices per pand in multi-band setup", type=int)
+        group.add_option("--artsupp", help="Arterial suppression (vascular crushing) was used", action="store_true", default=False)
         return [group, ]
 
 def summary(img, log=sys.stdout):
@@ -225,6 +230,13 @@ class AslImage(Image):
                 raise RuntimeError("Data contains %i volumes, inconsistent with %i tag/control images and total of %i variable repeats" % (self.nvols, self.ntc, sum(rpts)))        
         self.rpts = rpts
         
+        # Other acquisition parameters
+        self.casl = kwargs.pop("casl", False)
+        self.bolusdur = kwargs.pop("bolus", 1.8)
+        self.slicedt = kwargs.pop("slicedt", 0)
+        self.sliceband = kwargs.pop("sliceband", None)
+        self.artsupp = kwargs.pop("artsupp", False)
+
     def _get_order_idx(self, order, tag, ti, rpt):
         idx = 0
         first = True
