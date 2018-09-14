@@ -170,14 +170,15 @@ def oxasl(wsp):
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
 
     # Re-do ASL->structural registration using perfusion image
-    wsp.do_flirt, wsp.do_bbr = False, True # FIXME
-    new_regfrom = wsp.basil.main.finalstep.mean_ftiss.data
-    new_regfrom[new_regfrom < 0] = 0
-    wsp.regfrom = Image(new_regfrom, header=wsp.regfrom.header)
-    wsp.asl2struc_initial = wsp.asl2struc
-    wsp.struc2asl_initial = wsp.struc2asl
-    wsp.done("reg_asl2struc", status=False)
-    reg_asl2struc(wsp)
+    if wsp.struc is not None:
+        wsp.do_flirt, wsp.do_bbr = False, True # FIXME
+        new_regfrom = wsp.basil.main.finalstep.mean_ftiss.data
+        new_regfrom[new_regfrom < 0] = 0
+        wsp.regfrom = Image(new_regfrom, header=wsp.regfrom.header)
+        wsp.asl2struc_initial = wsp.asl2struc
+        wsp.struc2asl_initial = wsp.struc2asl
+        wsp.done("reg_asl2struc", status=False)
+        reg_asl2struc(wsp)
 
     if wsp.pvcorr:
         # Re-calculate mask as registration has changed (if it came from struct)
