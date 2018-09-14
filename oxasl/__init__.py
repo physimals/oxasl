@@ -19,7 +19,7 @@ ordering of label/control image etc). It also has methods which act directly
 on the data, for example performing tag-control subtraction, or generation of
 a perfusion-weighted image.
 
-    img = AslImage("mpld.nii.gz", plds=[0.25, 0.5, 0.75, 1.0], order='prt')
+    img = AslImage("mpld.nii.gz", plds=[0.25, 0.5, 0.75, 1.0], iaf="tc", order='lrt')
     diffdata = img.diff()
     pwi = img.perf_weighted()
 

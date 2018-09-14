@@ -133,8 +133,8 @@ def preprocess(asldata, diff=False, reorder=None, mc=False, smooth=False, fwhm=N
         
     if reorder:
         log.write("  - Re-ordering to %s\n" % reorder)
-        if "p" in reorder.lower() and diff:
-            reorder = reorder.replace("p", "").replace("P", "") 
+        if "l" in reorder.lower() and diff:
+            reorder = reorder.replace("l", "")
         asldata = asldata.reorder(reorder)
 
     if mc: 

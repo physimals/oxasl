@@ -7,81 +7,151 @@ from oxasl import AslImage
 
 def test_create_data_singleti():
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage(name="asldata", image=d, tis=[1.5], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5], iaf="tc", order="lrt")
     assert img.ntis == 1
     assert img.tis == [1.5]
     assert not img.have_plds
     assert img.rpts == [3]
-    assert img.order == "prt"
+    assert img.order == "lrt"
 
 def test_create_data_numtis_single():
     d = np.random.rand(5, 5, 5, 6)
-    img = AslImage(name="asldata", image=d, ntis=1, order="prt")
+    img = AslImage(name="asldata", image=d, ntis=1, iaf="tc", order="lrt")
     assert img.ntis == 1
     assert not img.tis
     assert not img.have_plds
     assert img.rpts == [3]
-    assert img.order == "prt"
+    assert img.order == "lrt"
 
 def test_create_data_multiti():
     d = np.random.rand(5, 5, 5, 8)
-    img = AslImage(name="asldata", image=d, tis=[1.5, 2.0], order="prt")
+    img = AslImage(name="asldata", image=d, tis=[1.5, 2.0], iaf="tc", order="lrt")
     assert img.ntis == 2
     assert img.tis == [1.5, 2.0]
     assert not img.have_plds
     assert img.rpts == [2, 2]
-    assert img.order == "prt"
+    assert img.order == "lrt"
 
 def test_create_data_numtis_multi():
     d = np.random.rand(5, 5, 5, 8)
-    img = AslImage(name="asldata", image=d, ntis=2, order="prt")
+    img = AslImage(name="asldata", image=d, ntis=2, iaf="tc", order="lrt")
     assert img.ntis == 2
     assert not img.tis
     assert not img.have_plds
     assert img.rpts == [2, 2]
-    assert img.order == "prt"
+    assert img.order == "lrt"
 
 def test_create_data_multiti_var_repeats():
     d = np.random.rand(5, 5, 5, 8)
-    img = AslImage(name="asldata", image=d, tis=[1.5, 2.0], order="prt", rpts=[1, 3])
+    img = AslImage(name="asldata", image=d, tis=[1.5, 2.0], iaf="tc", order="lrt", rpts=[1, 3])
     assert img.ntis == 2
     assert img.tis == [1.5, 2.0]
     assert not img.have_plds
     assert img.rpts == [1, 3]
-    assert img.order == "prt"
-
-def test_create_data_plds():
-    d = np.random.rand(5, 5, 5, 8)
-    img = AslImage(name="asldata", image=d, plds=[1.5, 2.5], order="prt")
-    assert img.ntis == 2
-    assert img.tis == [1.5, 2.5]
-    assert img.have_plds
-    assert img.rpts == [2, 2]
-    assert img.order == "prt"
+    assert img.order == "lrt"
 
 def test_create_data_multiphase():
     d = np.random.rand(5, 5, 5, 8)
-    img = AslImage(name="asldata", image=d, tis=[1.5], order='mrt', phases=[0, 45, 90, 135, 180, 225, 270, 360])
+    img = AslImage(name="asldata", image=d, tis=[1.5], iaf='mp', order='lrt', phases=[0, 45, 90, 135, 180, 225, 270, 315])
     assert img.ntis == 1
     assert img.tis == [1.5]
     assert not img.have_plds
     assert img.rpts == [1]
     assert img.ntc == 8
-    assert img.order == "mrt"
+    assert img.phases == [0, 45, 90, 135, 180, 225, 270, 315]
+    assert img.order == "lrt"
 
 def test_create_data_multiphase_nphases():
     d = np.random.rand(5, 5, 5, 8)
-    img = AslImage(name="asldata", image=d, tis=[1.5], order='mrt', nphases=8)
+    img = AslImage(name="asldata", image=d, tis=[1.5], iaf="mp", order='lrt', nphases=8)
     assert img.ntis == 1
     assert img.tis == [1.5]
     assert not img.have_plds
     assert img.rpts == [1]
     assert img.ntc == 8
-    assert img.order == "mrt"
+    assert img.phases == [0, 45, 90, 135, 180, 225, 270, 315]
+    assert img.order == "lrt"
+
+def test_create_data_plds():
+    d = np.random.rand(5, 5, 5, 6)
+    img = AslImage(name="asldata", image=d, plds=[1.5], tau=1.8, iaf="tc", order="lrt")
+    assert img.ntis == 1
+    assert img.plds == [1.5]
+    assert img.tis == [pytest.approx(3.3)]
+    assert img.have_plds
+    assert img.casl
+    assert img.rpts == [3]
+    assert img.order == "lrt"
+
+def test_create_data_multiplds():
+    d = np.random.rand(5, 5, 5, 8)
+    img = AslImage(name="asldata", image=d, plds=[1.5, 1.6], tau=1.8, iaf="tc", order="lrt")
+    assert img.ntis == 2
+    assert img.plds == [1.5, 1.6]
+    assert img.tis == [pytest.approx(3.3), pytest.approx(3.4)]
+    assert img.have_plds
+    assert img.casl
+    assert img.rpts == [2, 2]
+    assert img.order == "lrt"
+
+def test_create_data_multitaus():
+    d = np.random.rand(5, 5, 5, 8)
+    img = AslImage(name="asldata", image=d, plds=[1.5, 1.6], taus=[1.8, 2.0], iaf="tc", order="lrt")
+    assert img.ntis == 2
+    assert img.plds == [1.5, 1.6]
+    assert img.tis == [pytest.approx(3.3), pytest.approx(3.6)]
+    assert img.have_plds
+    assert img.casl
+    assert img.rpts == [2, 2]
+    assert img.order == "lrt"
+
+def test_create_data_strtaus():
+    d = np.random.rand(5, 5, 5, 8)
+    img = AslImage(name="asldata", image=d, plds=[1.5, 1.6], taus="1.8, 2.0", iaf="tc", order="lrt")
+    assert img.ntis == 2
+    assert img.plds == [1.5, 1.6]
+    assert img.tis == [pytest.approx(3.3), pytest.approx(3.6)]
+    assert img.have_plds
+    assert img.casl
+    assert img.rpts == [2, 2]
+    assert img.order == "lrt"
+
+def test_create_data_floattaus():
+    d = np.random.rand(5, 5, 5, 8)
+    img = AslImage(name="asldata", image=d, plds=[1.5, 1.6], tau=1.8, iaf="tc", order="lrt")
+    assert img.ntis == 2
+    assert img.plds == [1.5, 1.6]
+    assert img.tis == [pytest.approx(3.3), pytest.approx(3.4)]
+    assert img.have_plds
+    assert img.casl
+    assert img.rpts == [2, 2]
+    assert img.order == "lrt"
+
+def test_create_data_inttaus():
+    d = np.random.rand(5, 5, 5, 8)
+    img = AslImage(name="asldata", image=d, plds=[1.5, 1.6], tau=1, iaf="tc", order="lrt")
+    assert img.ntis == 2
+    assert img.plds == [1.5, 1.6]
+    assert img.tis == [pytest.approx(2.5), pytest.approx(2.6)]
+    assert img.have_plds
+    assert img.casl
+    assert img.rpts == [2, 2]
+    assert img.order == "lrt"
+
+def test_create_data_plds_pasl():
+    """ Odd usage, PLDs treated as TIs in non-CASL acquisitions """
+    d = np.random.rand(5, 5, 5, 8)
+    img = AslImage(name="asldata", image=d, plds=[1.5, 2.5], tau=1.8, casl=False, iaf="tc", order="lrt")
+    assert img.ntis == 2
+    assert img.tis == [1.5, 2.5]
+    assert img.plds == [1.5, 2.5]
+    assert img.have_plds
+    assert img.rpts == [2, 2]
+    assert img.order == "lrt"
 
 def test_create_data_diff():
     d = np.random.rand(5, 5, 5, 8)
-    img = AslImage(name="asldata", image=d, tis=[1.5], order='rt')
+    img = AslImage(name="asldata", image=d, tis=[1.5], iaf="diff", order='rt')
     assert img.ntis == 1
     assert img.tis == [1.5]
     assert not img.have_plds
@@ -92,7 +162,7 @@ def test_create_data_diff():
 def test_diff_tc():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
-    img = AslImage(name="asldata", image=d, tis=[1], order='prt')
+    img = AslImage(name="asldata", image=d, tis=[1], iaf="tc", order='lrt')
     img = img.diff()
     assert img.ntis == 1
     assert img.tis == [1]
@@ -107,7 +177,7 @@ def test_diff_tc():
 def test_diff_ct():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
-    img = AslImage(name="asldata", image=d, tis=[1], order='Prt')
+    img = AslImage(name="asldata", image=d, tis=[1], iaf="ct", order='lrt')
     img = img.diff()
     assert img.ntis == 1
     assert img.tis == [1]
@@ -119,17 +189,18 @@ def test_diff_ct():
     assert list(data.shape) == [5, 5, 5, 4] 
     assert np.all(data == -1)
 
-def test_reorder_prt_Prt():
+def test_reorder_tc_ct():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
-    img = AslImage(name="asldata", image=d, tis=[1], order='prt')
-    img = img.reorder("Prt")
+    img = AslImage(name="asldata", image=d, tis=[1], iaf="tc", order='lrt')
+    img = img.reorder(iaf="ct")
     assert img.ntis == 1
     assert img.tis == [1]
     assert not img.have_plds
     assert img.rpts == [4]
     assert img.ntc == 2
-    assert img.order == "Prt"
+    assert img.order == "lrt"
+    assert img.iaf == "ct"
     data = img.nibImage.get_data()
     assert list(data.shape) == [5, 5, 5, 8] 
     for z in range(8):
@@ -138,17 +209,17 @@ def test_reorder_prt_Prt():
         else:
             assert np.all(data[..., z] == z-1)
 
-def test_reorder_prt_rtp():
+def test_reorder_lrt_rtl():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
-    img = AslImage(name="asldata", image=d, tis=[1], order='prt')
-    img = img.reorder("rtp")
+    img = AslImage(name="asldata", image=d, tis=[1], iaf="tc", order='lrt')
+    img = img.reorder("rtl")
     assert img.ntis == 1
     assert img.tis == [1]
     assert not img.have_plds
     assert img.rpts == [4]
     assert img.ntc == 2
-    assert img.order == "rtp"
+    assert img.order == "rtl"
     data = img.nibImage.get_data()
     assert list(data.shape) == [5, 5, 5, 8] 
     for z in range(8):
@@ -157,23 +228,23 @@ def test_reorder_prt_rtp():
         else:
             assert np.all(data[..., z] == (z-4)*2+1)
 
-def test_reorder_prt_ptr():
+def test_reorder_lrt_ltr():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
-    img = AslImage(name="asldata", image=d, tis=[1, 2], order='prt')
-    img = img.reorder("ptr")
+    img = AslImage(name="asldata", image=d, tis=[1, 2], iaf="tc", order='lrt')
+    img = img.reorder("ltr")
     assert img.ntis == 2
     assert img.tis == [1, 2]
     assert not img.have_plds
     assert img.rpts == [2, 2]
     assert img.ntc == 2
-    assert img.order == "ptr"
+    assert img.order == "ltr"
     data = img.nibImage.get_data()
     assert list(data.shape) == [5, 5, 5, 8] 
     for znew, zold in enumerate([0, 1, 4, 5, 2, 3, 6, 7]):
         assert np.all(data[..., znew] == zold)
 
-def test_reorder_prt_ptr_var_rpts():
+def test_reorder_lrt_ltr_var_rpts():
     """ 
     This reordering with variable repeats is not supported. In priciple
     it is possible (TI1_R1, TI2_R1, TI2_R2, TI2_R3) but this seems unlikely
@@ -181,47 +252,47 @@ def test_reorder_prt_ptr_var_rpts():
     """
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
-    img = AslImage(name="asldata", image=d, tis=[1, 2], rpts = [1, 3], order='prt')
+    img = AslImage(name="asldata", image=d, tis=[1, 2], rpts = [1, 3], iaf="tc", order='lrt')
     with pytest.raises(Exception):
-         img.reorder("ptr")
+        img.reorder("ltr")
     #assert img.ntis == 2
     #assert img.tis == [1, 2]
     #assert not img.have_plds
     #assert img.rpts == [1, 3]
     #assert img.ntc == 2
-    #assert img.order == "ptr"
+    #assert img.order == "ltr"
     #data = img.nibImage.get_data()
     #assert list(data.shape) == [5, 5, 5, 8] 
     #for znew, zold in enumerate([0, 1, 2, 3, 4, 5, 6, 7]):
     #    assert np.all(data[..., znew] == zold)
 
-def test_reorder_prt_rpt():
+def test_reorder_lrt_rlt():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
-    img = AslImage(name="asldata", image=d, tis=[1, 2], order='prt')
-    img = img.reorder("rpt")
+    img = AslImage(name="asldata", image=d, tis=[1, 2], iaf="tc", order='lrt')
+    img = img.reorder("rlt")
     assert img.ntis == 2
     assert img.tis == [1, 2]
     assert not img.have_plds
     assert img.rpts == [2, 2]
     assert img.ntc == 2
-    assert img.order == "rpt"
+    assert img.order == "rlt"
     data = img.nibImage.get_data()
     assert list(data.shape) == [5, 5, 5, 8] 
     for znew, zold in enumerate([0, 2, 1, 3, 4, 6, 5, 7]):
         assert np.all(data[..., znew] == zold)
 
-def test_reorder_prt_tpr():
+def test_reorder_lrt_tlr():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
-    img = AslImage(name="asldata", image=d, tis=[1, 2], order='prt')
-    img = img.reorder("tpr")
+    img = AslImage(name="asldata", image=d, tis=[1, 2], iaf="tc", order='lrt')
+    img = img.reorder("tlr")
     assert img.ntis == 2
     assert img.tis == [1, 2]
     assert not img.have_plds
     assert img.rpts == [2, 2]
     assert img.ntc == 2
-    assert img.order == "tpr"
+    assert img.order == "tlr"
     data = img.nibImage.get_data()
     assert list(data.shape) == [5, 5, 5, 8] 
     for znew, zold in enumerate([0, 4, 1, 5, 2, 6, 3, 7]):
