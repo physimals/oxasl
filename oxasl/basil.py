@@ -2,6 +2,32 @@
 """
 BASIL - Bayesian model fitting for ASL
 
+The BASIL module is a little more complex than the other Workspace based
+modules because of the number of options available and the need for flexibility
+in how the modelling steps are run.
+
+The main function is ``basil`` which performs model fitting on ASL data 
+in the Workspace ``asldata`` attribute. 
+
+    wsp = Workspace()
+    wsp.asldata = AslImage("asldata.nii.gz", tis=[1.6,])
+    wsp.infertiss = True
+    basil(wsp, output_wsp=wsp.sub("basil"))
+    basil.finalstep.mean_ftiss.save("mean_ftiss.nii.gz")
+
+Because of the number of options possible for the modelling process, the 
+workspace attribute ``basil_options`` can be set as a dictionary of extra
+options relevant only to Basil:
+
+    wsp = Workspace()
+    wsp.asldata = AslImage("asldata.nii.gz", tis=[1.6,])
+    wsp.basil_options = {"infertiss" : True, "spatial" : True}
+    basil(wsp, output_wsp=wsp.sub("basil"))
+    basil.finalstep.mean_ftiss.save("mean_ftiss.nii.gz")
+
+All options specified in basil_options are either consumed by Basil, or
+if not passed directly to the model.
+
 Copyright (c) 2008-2018 University of Oxford
 """
 
@@ -14,11 +40,11 @@ import numpy as np
 from fsl.wrappers import fslmaths, LOAD
 from fsl.data.image import Image
 
+import oxasl.preproc as preproc
 from ._version import __version__, __timestamp__
 from .image import AslImage, AslImageOptions
 from .workspace import Workspace
 from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
-import oxasl.preproc as preproc
 
 def basil(wsp, output_wsp=None, prefit=True):
     """
@@ -48,7 +74,6 @@ def basil(wsp, output_wsp=None, prefit=True):
      - ``t1``: Assumed/initial estimate for tissue T1 (default: 1.65 in white paper mode, 1.3 otherwise)
      - ``t1b``: Assumed/initial estimate for blood T1 (default: 1.65)
      - ``bat``: Assumed/initial estimate for bolus arrival time (s) (default 0 in white paper mode, 1.3 for CASL, 0.7 otherwise)
-     - ``tau`` : Assumed/initial estimate for bolus duration  (default: 1.8) 
      - ``t1im`` : T1 map as Image
      - ``pgm`` :  Grey matter partial volume map as Image
      - ``pwm`` : White matter partial volume map as Image
@@ -85,7 +110,6 @@ def basil(wsp, output_wsp=None, prefit=True):
     if wsp.t1 is None: wsp.t1 = t1_default
     if wsp.t1b is None: wsp.t1b = 1.65
     if wsp.bat is None: wsp.bat = bat_default
-    if wsp.tau is None: wsp.tau = 1.8
     if wsp.infertiss is None: wsp.infertiss = True
         
     # if we are doing CASL then fix the bolus duration, unless explicitly told us otherwise
@@ -179,13 +203,27 @@ def basil_steps(wsp, asldata, **kwargs):
         "save-mean" : True,
         "save-mvn" : True,
         "save-std" : True,
-        "casl" : asldata.casl,
-        "slicedt" : asldata.slicedt,
-        "sliceband" : asldata.sliceband,
     }
+
+    # We choose to pass TIs (not PLDs). The asldata object ensures that
+    # TIs are correctly derived from PLDs, when these are specified, by adding
+    # the bolus duration.
     for idx, ti in enumerate(asldata.tis):
         options["ti%i" % (idx+1)] = ti
         options["rpt%i" % (idx+1)] = asldata.rpts[idx]
+
+    # Bolus duration - use a single value where possible as cannot infer otherwise
+    taus = getattr(asldata, "taus", [1.8,])
+    if min(taus) == max(taus):
+        options["tau"] = taus[0]
+    else:
+        for idx, tau in enumerate(taus):
+            options["tau%i" % (idx+1)] = tau
+
+    # Other asl data parameters
+    for attr in ("casl", "slicedt", "sliceband"):
+        if getattr(asldata, attr, None) is not None:
+            options[attr] = getattr(asldata, attr)
 
     if wsp.noiseprior:
         # Use an informative noise prior
@@ -195,22 +233,22 @@ def basil_steps(wsp, asldata, **kwargs):
 
             # Estimate signal magntiude
             datamax = fslmaths(wsp.diffdata_mean).Tmax().run()
-            brain_mag=np.mean(datamax.data[wsp.mask.data != 0])
+            brain_mag = np.mean(datamax.data[wsp.mask.data != 0])
             # this will correspond to whole brain CBF (roughly) - about 0.5 of GM
-            noisesd=math.sqrt(brain_mag * 2 / snr)
+            noisesd = math.sqrt(brain_mag * 2 / snr)
         else:
             noisesd = wsp.noisesd
         wsp.log.write(" - Using a prior noise sd of: %f\n" % noisesd)
         options["prior-noise-stddev"] = noisesd
-        
+     
+    # Keyword arguments override options
+    options.update(kwargs)
+   
     # Additional optional workspace arguments
-    for attr in ("t1", "t1b", "bat", "tau", "FA", "mask"):
+    for attr in ("t1", "t1b", "bat", "tau", "taus", "bolus", "FA", "mask", "pwm", "pgm"):
         value = getattr(wsp, attr)
         if value is not None:
             options[attr] = value
-
-    # Any additional keyword arguments override options
-    options.update(kwargs)
 
     # Options for final spatial step
     prior_type_spatial = "M"
