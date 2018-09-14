@@ -5,7 +5,6 @@ Workspace for executing FSL commands
 import os
 import sys
 import errno
-import tempfile
 
 import numpy as np
 
