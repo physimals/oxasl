@@ -306,7 +306,7 @@ def test_spatial():
         "param-spatial-priors" : "N+",
         "PSP_byname1" : "ftiss",
         "PSP_byname1_type" : "M",
-        "convergence" : "maxiters",
+        "convergence" : "maxits",
     })
     options.pop("max-trials")
     _check_step(steps[1], desc_text="spatial", options=options)
@@ -332,7 +332,7 @@ def test_onestep():
         "incart" : True,
         "inferart" : True,
         "infertau" : True,
-        "convergence" : "maxiters",
+        "convergence" : "maxits",
     })
     options.pop("max-trials")
     _check_step(steps[0], desc_text="spatial", options=options)
@@ -442,7 +442,7 @@ def test_pvc():
         "PSP_byname1" : "ftiss",
         "PSP_byname1_type" : "M",
         "max-iterations" : 200,
-        "convergence" : "maxiters",
+        "convergence" : "maxits",
     })
     options.pop("max-trials")
     _check_step(steps[2], desc_text="spatial")
