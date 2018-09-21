@@ -37,14 +37,11 @@ import os
 
 import numpy as np
 
-from fsl.wrappers import fslmaths, LOAD
+from fsl.wrappers import LOAD
 from fsl.data.image import Image
 
-import oxasl.preproc as preproc
-from ._version import __version__, __timestamp__
-from .image import AslImage, AslImageOptions
-from .workspace import Workspace
-from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
+from oxasl import __version__, __timestamp__, AslImage, Workspace, image, preproc
+from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 
 def basil(wsp, output_wsp=None, prefit=True):
     """
@@ -231,8 +228,12 @@ def basil_steps(wsp, asldata, **kwargs):
             snr = wsp.ifnone("snr", 10)
             wsp.log.write(" - Using SNR of %f to set noise std dev\n" % snr)
 
-            # Estimate signal magntiude
-            datamax = fslmaths(wsp.diffdata_mean).Tmax().run()
+            # Estimate signal magntiude FIXME diffdata_mean is always 3D?
+            if wsp.diffdata_mean.ndim > 3:
+                datamax = np.amax(wsp.diffdata_mean.data, 3)
+            else:
+                datamax = wsp.diffdata_mean.data
+            #datamax = fslmaths(wsp.diffdata_mean).Tmax().run()
             brain_mag = np.mean(datamax.data[wsp.mask.data != 0])
             # this will correspond to whole brain CBF (roughly) - about 0.5 of GM
             noisesd = math.sqrt(brain_mag * 2 / snr)
@@ -274,8 +275,17 @@ def basil_steps(wsp, asldata, **kwargs):
         # Need a spatial step with more iterations for the PV correction
         wsp.spatial = True
         options_svb["max-iterations"] = 200
-        pgm = options.pop("pgm")
-        pwm = options.pop("pwm")
+        # Ignore partial volumes below 0.1
+        pgm_img = options.pop("pgm")
+        pwm_img = options.pop("pwm")
+        pgm = np.copy(pgm_img.data)
+        pwm = np.copy(pwm_img.data)
+        pgm[pgm < 0.1] = 0
+        pgm[pgm > 1] = 1
+        pwm[pwm < 0.1] = 0
+        pwm[pwm > 1] = 1
+        pgm = Image(pgm, header=pgm_img.header)
+        pwm = Image(pwm, header=pwm_img.header)
         
     if pvcorr and not wsp.infertiss:
         raise ValueError("ERROR: PV correction is not compatible with --artonly option (there is no tissue component)")
@@ -524,7 +534,7 @@ def main():
     """
     try:
         parser = AslOptionParser(usage="basil -i <ASL input file> [options...]", version=__version__)
-        parser.add_category(AslImageOptions())
+        parser.add_category(image.AslImageOptions())
         parser.add_category(BasilOptions())
         parser.add_category(GenericOptions())
         
