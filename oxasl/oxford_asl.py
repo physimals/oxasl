@@ -50,27 +50,19 @@ The processing sequence is approximately:
 11. Raw and calibrated output images are generated in all output spaces (native, structural standard)
     
 """
+from __future__ import print_function
 
 import sys
 import os
 import traceback
+import collections
 
 import numpy as np
 
-import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from ._version import __version__
-from .image import AslImage, AslImageOptions
-from . import calib, struc, basil, preproc, mask, corrections
-
-from .calib import CalibOptions
-from .struc import StructuralImageOptions
-from .basil import BasilOptions
-from .workspace import Workspace
-from .options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
-from .reg import reg_asl2struc
-import oxasl.reg as reg
+from oxasl import Workspace, AslImage, __version__, image, calib, struc, basil, preproc, mask, corrections, reg
+from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 
 class OxfordAslOptions(OptionCategory):
     """
@@ -95,13 +87,16 @@ class OxfordAslOptions(OptionCategory):
         return ret
 
 def main():
+    """
+    Entry point for oxasl command line tool
+    """
     debug = True
     try:
         parser = AslOptionParser(usage="oxford_asl -i <asl_image> [options]", version=__version__)
-        parser.add_category(AslImageOptions())
-        parser.add_category(StructuralImageOptions())
+        parser.add_category(image.AslImageOptions())
+        parser.add_category(struc.StructuralImageOptions())
         parser.add_category(OxfordAslOptions())
-        parser.add_category(CalibOptions(ignore=["perf", "tis"]))
+        parser.add_category(calib.CalibOptions(ignore=["perf", "tis"]))
         parser.add_category(corrections.DistcorrOptions())
         parser.add_category(GenericOptions())
 
@@ -150,8 +145,8 @@ def oxasl(wsp):
     wsp.log.write("Input ASL data: %s\n" % wsp.asldata.name)
     wsp.asldata.summary(wsp.log)
 
-    # Create output workspace. Always output in native space
-    wsp.sub("output").sub("native")
+    # Always output in native space
+    wsp.output_spaces = ["native", ]
     wsp.do_flirt, wsp.do_bbr = True, False # FIXME
 
     preproc.preproc_asl(wsp)
@@ -178,43 +173,53 @@ def oxasl(wsp):
         wsp.asl2struc_initial = wsp.asl2struc
         wsp.struc2asl_initial = wsp.struc2asl
         wsp.done("reg_asl2struc", status=False)
-        reg_asl2struc(wsp)
+        reg.reg_asl2struc(wsp)
 
     if wsp.pvcorr:
-        # Re-calculate mask as registration has changed (if it came from struct)
-        # FIXME how to check it came from struc
-        brain_mask_asl = fsl.applyxfm(wsp.struc_brain_mask, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
-        wsp.mask = fsl.fslmaths(brain_mask_asl).thr(0.25).bin().fillh().run()
+        if wsp.mask_src == "struc":
+            # Re-calculate mask as registration has changed
+            wsp.mask = None
+            mask.generate_mask(wsp)
 
+        # Generate PVM and PWM maps for Basil
         struc.segment(wsp)
-        #wsp.wm_pv_asl = reg.struc2asl(wsp, wsp.wm_pv_struc)
-        #wsp.gm_pv_asl = reg.struc2asl(wsp, wsp.gm_pv_struc)
-        wsp.wm_pv_asl = fsl.applywarp(wsp.wm_pv_struc, wsp.regfrom, premat=wsp.struc2asl, out=fsl.LOAD, interp="spline", super=True, superlevel=4)["out"]
-        wsp.gm_pv_asl = fsl.applywarp(wsp.gm_pv_struc, wsp.regfrom, premat=wsp.struc2asl, out=fsl.LOAD, interp="spline", super=True, superlevel=4)["out"]
-        pwm = np.copy(wsp.wm_pv_asl.data)
-        pgm = np.copy(wsp.gm_pv_asl.data)
-        pwm[pwm < 0.1] = 0
-        pwm[pwm > 1] = 1
-        pgm[pgm < 0.1] = 0
-        pgm[pgm > 1] = 1
-        wsp.pwm = Image(pwm, header=wsp.wm_pv_asl.header)
-        wsp.pgm = Image(pgm, header=wsp.gm_pv_asl.header)
-        wsp.basil_options = {"pwm" : wsp.pwm, "pgm" : wsp.pgm}
+        wsp.wm_pv_asl = reg.struc2asl(wsp, wsp.wm_pv_struc, use_applywarp=True)
+        wsp.gm_pv_asl = reg.struc2asl(wsp, wsp.gm_pv_struc, use_applywarp=True)
+        wsp.basil_options = {"pwm" : wsp.wm_pv_asl, "pgm" : wsp.gm_pv_asl}
         wsp.initmvn = None
         basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
 
     do_output(wsp)
-    if wsp.calib is not None:
-        wsp.output.native.perfusion_calib = calib.calibrate(wsp, wsp.output.native.perfusion)
+    if not wsp.debug:
+        cleanup(wsp)
 
     wsp.log.write("\nOutput is %s\n" % wsp.savedir)
     wsp.log.write("OXFORD_ASL - done\n")
 
 def do_output(wsp):
-    for space in dir(wsp.output):
-        output_wsp = getattr(wsp.output, space)
-        if isinstance(output_wsp, Workspace):
-            # Make negative values = 0
-            img = wsp.basil.main.finalstep.mean_ftiss
-            img.data[img.data < 0] = 0
-            output_wsp.perfusion = img
+    for space in wsp.output_spaces:
+        output_wsp = wsp.sub(space)
+        # Make negative values = 0
+        img = wsp.basil.main.finalstep.mean_ftiss
+        img.data[img.data < 0] = 0
+        output_wsp.perfusion = img
+        if wsp.calib is not None:
+            output_wsp.perfusion_calib = calib.calibrate(wsp, output_wsp.perfusion)
+
+def _deletable(value):
+    return isinstance(value, (Image, np.ndarray)) or isinstance(value, collections.Sequence) or isinstance(value, collections.Mapping) 
+
+def cleanup(wsp):
+    output_spaces = wsp.output_spaces
+    if output_spaces is None: output_spaces = []
+    for attr in dir(wsp):
+        value = getattr(wsp, attr)
+        if not attr.startswith("__") and attr not in output_spaces:
+            if isinstance(value, Workspace):
+                print("Deleting workspace %s" % attr)
+                cleanup(value)
+            elif _deletable(value):
+                print("Deleting %s" % attr)
+                delattr(wsp, attr)
+            else:
+                print("Keeping %s (%s)" % (attr, value))
