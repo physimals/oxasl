@@ -74,18 +74,32 @@ label-control subtraction:
 
     oxasl_preproc -i asldata.nii.gz --nplds=5 --diff -o asldata_diff.nii.gz
 
+Current ASL processing modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ - :mod:`basil` - ASL Bayesian Model fitting using the Fabber code
+ - :mod:`calib` - Calibration of perfusion data using voxelwise or reference region methods
+ - :mod:`corrections` - Calculate and apply corrections (motion, distortion)
+ - :mod:`mask` - Calculation of a suitable mask for brain data
+ - :mod:`oxford_asl` - Unified processing pipeline for ASL brain data
+ - :mod:`preproc` - Basic ASL preprocessing (label-control subtraction, etc)
+ - :mod:`reg` - Registration between ASL, structural and standard spaces
+
+Other modules
+~~~~~~~~~~~~~
+
+ - :mod:`image` - Definition of the main AslImage class
+ - :mod:`reporting` - Generation of HTML reports from processing operations
+ - :mod:`workspace` - Definition of the Workspace class
 """
 
 from ._version import __version__, __timestamp__
 
-from .image import AslImage, AslImageOptions
-from .preproc import AslPreprocOptions, preprocess
+from .image import AslImage
 from .workspace import Workspace
 
 __all__ = [
     "__version__",
     "AslImage",
-    "AslImageOptions", 
-    "AslPreprocOptions",
     "Workspace",
 ]
