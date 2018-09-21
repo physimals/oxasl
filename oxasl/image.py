@@ -55,7 +55,7 @@ class AslImage(Image):
     Subclass of fsl.data.image.Image which adds ASL structure information
 
     An AslImage contains information about the structure of the data enabling it to perform
-    operations such as reordering and tag/control differencing.
+    operations such as reordering and label/control differencing.
 
     As a minimum you must provide a means of determining the number of TIs/PLDs in the data. 
 
@@ -65,7 +65,7 @@ class AslImage(Image):
     Ordering can be defined in two ways: 
     
     1. Setting the ``order`` parameters to a sequence of characters (case insensitive):
-      - ``l`` - Labelling images (e.g. tag/control pairs, sequence of multi-phases, vessel encoding cycles)
+      - ``l`` - Labelling images (e.g. label/control pairs, sequence of multi-phases, vessel encoding cycles)
       - ``t`` - TIs/PLDs
       - ``r`` - Repeats
 
@@ -75,7 +75,7 @@ class AslImage(Image):
     2. Specifying the ``ibf`` option
       - ``ibf`` - ``rpt`` Blocked by repeats, i.e. first repeat of all TIs, followed by second repeat of all TIs...
                   ``tis`` Blocked by TIs/PLDs, i.e. all repeats of first TI, followed by all repeats of second TI...
-                  When using --ibf, the labelling images (e.g. tag/control pairs) are always adjacent
+                  When using --ibf, the labelling images (e.g. label/control pairs) are always adjacent
     
     The data format is defined using the ``iaf`` parameter:
 
@@ -149,6 +149,7 @@ class AslImage(Image):
 
         if not order:
             if not ibf:
+                # FIXME this might not be a warning in single-TI data, should defer until we have figured out TIs
                 warnings.warn("Data order was not specified - assuming blocks of repeats")
                 ibf = "rpt"
 
@@ -169,7 +170,7 @@ class AslImage(Image):
         self.order = order.lower()
         self.iaf = iaf.lower()
 
-        # Determine the number of labelling images present. This may be tag/control
+        # Determine the number of labelling images present. This may be label/control
         # pairs, a set of multiple phases, vessel encoding cycles or already differenced data
         #
         # Sets the attributes: ntc (int), phases (list or None)
@@ -235,25 +236,27 @@ class AslImage(Image):
         elif nrpts is None and rpts is None:
             # Calculate fixed number of repeats 
             if self.nvols % (self.ntc * self.ntis) != 0:
-                raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs and %i tag/control images" % (self.nvols, self.ntis, self.ntc))        
+                raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs and %i labelling images" % (self.nvols, self.ntis, self.ntc))        
             rpts = [int(self.nvols / (self.ntc * self.ntis))] * self.ntis
         elif nrpts is not None:
             nrpts = int(nrpts)
             if nrpts * self.ntis * self.ntc != self.nvols:
-                raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs, %i tag/control images (%s) and %i repeats" % (self.nvols, self.ntis, self.ntc, self.iaf, nrpts))
+                raise RuntimeError("Data contains %i volumes, inconsistent with %i TIs, %i labelling images (%s) and %i repeats" % (self.nvols, self.ntis, self.ntc, self.iaf, nrpts))
             rpts = [nrpts] * self.ntis
         else:
             if isinstance(rpts, str): rpts = [int(rpt) for rpt in rpts.split(",")]
             if len(rpts) != self.ntis:
                 raise RuntimeError("%i TIs specified, inconsistent with %i variable repeats" % (self.ntis, len(rpts)))        
             elif sum(rpts) * self.ntc != self.nvols:
-                raise RuntimeError("Data contains %i volumes, inconsistent with %i tag/control images and total of %i variable repeats" % (self.nvols, self.ntc, sum(rpts)))        
+                raise RuntimeError("Data contains %i volumes, inconsistent with %i labelling images and total of %i variable repeats" % (self.nvols, self.ntc, sum(rpts)))        
         self.rpts = rpts
 
         # Bolus durations should be a sequence same length as TIs/PLDs
         #
         # Sets the attributes taus (list)
-        self.taus = kwargs.pop("bolus", kwargs.pop("taus", kwargs.pop("tau", 1.8)))
+        self.taus = kwargs.pop("bolus", kwargs.pop("taus", kwargs.pop("tau", None)))
+        if self.taus is None:
+            self.taus = 1.8
         if isinstance(self.taus, str): self.taus = [float(tau) for tau in self.taus.split(",")]
         elif isinstance(self.taus, (float, int)): self.taus = [float(self.taus),] * self.ntis
         if len(self.taus) != self.ntis:
@@ -308,10 +311,10 @@ class AslImage(Image):
         Re-order ASL data 
 
         The order is defined by a string in which
-        r=repeats, p=tag-control pairs, P=control-tag pairs and t=tis/plds.
+        r=repeats, l=labelling images, and t=tis/plds.
         The first character is the fastest varying
 
-        So for a data set with 3 TIs and 2 repeats an order of "ptr" would be:
+        So for a tag-control data set with 3 TIs and 2 repeats an order of "ltr" would be:
         TC (TI1), TC (TI2), TC (TI3), TC(TI1, repeat 2), TC(TI2 repeat 2), etc.
         """
         if out_order is None:
@@ -386,7 +389,7 @@ class AslImage(Image):
 
     def diff(self, name=None):
         """
-        Perform tag-control differencing. 
+        Perform tag-control subtraction. 
         
         Data will be reordered so the tag/control pairs are together
         """
