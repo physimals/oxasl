@@ -6,7 +6,6 @@ Michael Chappell, IBME QuBIc & FMRIB Image Analysis Groups
 
 Copyright (c) 2008-2018 University of Oxford
 """
-
 import os
 import sys
 
@@ -14,11 +13,9 @@ import numpy as np
 
 import fsl.wrappers as fsl
 
-from oxasl.workspace import Workspace
-from . import calib, preproc, struc
-from .options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
-from ._version import __version__
-from .wrappers import epi_reg
+from oxasl import __version__, Workspace, calib, preproc, struc
+from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
+from oxasl.wrappers import epi_reg
 
 def get_regfrom(wsp):
     """
@@ -131,7 +128,7 @@ def reg_struc2std(wsp, flirt=True):
 
     wsp.done("reg_struc2std")
 
-def struc2asl(wsp, img):
+def struc2asl(wsp, img, use_applywarp=False, interp="trilinear"):
     """
     Convert an image from structural to ASL space
 
@@ -140,8 +137,11 @@ def struc2asl(wsp, img):
     """
     get_regfrom(wsp)
     reg_asl2struc(wsp)
-    return fsl.applyxfm(img, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
-
+    if not use_applywarp:
+        return fsl.applyxfm(img, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp=interp, log=wsp.fsllog)["out"]
+    else:
+        return fsl.applywarp(img, wsp.regfrom, premat=wsp.struc2asl, out=fsl.LOAD, interp="spline", super=True, superlevel=4, log=wsp.fsllog)["out"]
+        
 def reg_flirt(wsp):
     """ 
     Register low resolution ASL or calibration data to a high resolution
