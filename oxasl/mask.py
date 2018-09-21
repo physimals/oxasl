@@ -3,19 +3,11 @@ Functions for generating a suitable mask for ASL data
 """
 import sys
 
-import numpy as np
-
 import fsl.wrappers as fsl
-from fsl.data.image import Image
 
-from .options import AslOptionParser, GenericOptions
-from .image import AslImage, AslImageOptions
-from .struc import StructuralImageOptions
-from .workspace import Workspace
-from . import reg, struc
-
-from .reporting import ReportPage, LightboxImage
-from ._version import __version__
+from oxasl import __version__, AslImage, Workspace, image, reg, struc
+from oxasl.options import AslOptionParser, GenericOptions
+from oxasl.reporting import ReportPage, LightboxImage
 
 def generate_mask(wsp):
     """
@@ -54,9 +46,11 @@ def generate_mask(wsp):
     page.heading("Mask generation", level=0)
 
     if wsp.mask is not None:
+        wsp.mask_src = "user"
         mask_source = "provided by user (assumed to be ASL space): %s" % wsp.mask.name
     elif wsp.struc is not None:
         # Preferred option is to use brain extracted structural
+        wsp.mask_src = "struc"
         struc.preproc_struc(wsp)
         page.heading("Brain extracted structural image", level=1)
         page.image("struc_brain.png")
@@ -65,10 +59,10 @@ def generate_mask(wsp):
         reg.reg_asl2struc(wsp)
         brain_mask_asl = fsl.applyxfm(wsp.struc_brain_mask, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
         wsp.mask = fsl.fslmaths(brain_mask_asl).thr(0.25).bin().fillh().run()
-        #fslcpgeom(regfrom_img, mask) FIXME
         mask_source = "generated from brain extracting structural image and registering to ASL space: %s" % wsp.struc.name
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
+        wsp.mask_src = "regfrom"
         wsp.mask = fsl.fslmaths(wsp.regfrom).bin().run()
         mask_source = "generated from brain extracted registration ASL image"
     
@@ -89,8 +83,8 @@ def main():
         parser = AslOptionParser(usage="asl_mask -i <asl_image> [options...]", version=__version__)
         parser.add_option("-c", "--calib", dest="calib", help="Calibration image", default=None)
         parser.add_option("--use-pwi", help="Use the perfusion weighted average rather than the timeseries mean", action="store_true", default=False)
-        parser.add_category(AslImageOptions())
-        parser.add_category(StructuralImageOptions())
+        parser.add_category(image.AslImageOptions())
+        parser.add_category(struc.StructuralImageOptions())
         parser.add_category(GenericOptions())
 
         options, _ = parser.parse_args(sys.argv)

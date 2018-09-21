@@ -9,9 +9,10 @@ import numpy as np
 
 import fsl.wrappers as fsl
 from fsl.data.image import Image
+from fsl.utils.path import PathError
 
-from .options import OptionCategory, IgnorableOptionGroup
-from .reporting import ReportPage, LightboxImage
+from oxasl.options import OptionCategory, IgnorableOptionGroup
+from oxasl.reporting import ReportPage, LightboxImage
 
 class StructuralImageOptions(OptionCategory):
     """
@@ -107,7 +108,7 @@ def segment(wsp):
             try:
                 wsp.bias_struc = Image(os.path.join(wsp.fslanat, "T1_fast_bias"))
                 wsp.log.write(" - Bias field extracted sucessfully")
-            except:
+            except PathError:
                 wsp.log.write(" - No bias field found")
         elif wsp.fastdir:
             raise NotImplementedError("Specifying FAST output directory")

@@ -18,11 +18,10 @@ import scipy.ndimage
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
-from .image import summary
-from .workspace import Workspace
-from .reporting import ReportPage, LightboxImage
-from . import struc
+from oxasl import Workspace, struc
+from oxasl.image import summary
+from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
+from oxasl.reporting import ReportPage, LightboxImage
 
 def preproc_calib(wsp):
     """
