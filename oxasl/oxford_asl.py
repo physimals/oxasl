@@ -78,6 +78,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--wp", dest="wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
         g.add_option("--mc", dest="mc", help="Motion correct data", action="store_true", default=False)
         g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
+        g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
         ret.append(g)
         g = IgnorableOptionGroup(parser, "Acquisition/Data specific")
         g.add_option("--bat", dest="bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
@@ -147,46 +148,58 @@ def oxasl(wsp):
 
     # Always output in native space
     wsp.output_spaces = ["native", ]
-    wsp.do_flirt, wsp.do_bbr = True, False # FIXME
 
-    preproc.preproc_asl(wsp)
-    calib.preproc_calib(wsp)
-    struc.preproc_struc(wsp)
+    calib.init(wsp)
+    struc.init(wsp)
+    preproc.init(wsp)
 
     if wsp.mc: 
         corrections.get_motion_correction(wsp)
+    corrections.apply_corrections(wsp)
+
+    reg.reg_asl2calib(wsp)
+    reg.reg_asl2struc(wsp, True, False)
 
     if wsp.fmap:
         corrections.get_fieldmap_correction(wsp)
-
+    if wsp.cblip:
+        corrections.get_cblip_correction(wsp)
     corrections.apply_corrections(wsp)
+
     mask.generate_mask(wsp)
+
+    if wsp.asldata.ntis > 1:
+        # For multi TI/PLD data, set a more liberal prior for tissue ATT since we should be able to 
+        # determine this from the data. NB this leaves the arterial BAT alone.
+        wsp.batsd = 1
 
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
 
-    # Re-do ASL->structural registration using perfusion image
-    if wsp.struc is not None:
-        wsp.do_flirt, wsp.do_bbr = False, True # FIXME
+    # Re-do ASL->structural registration using BBR and perfusion image
+    if wsp.structural.struc is not None:
+        wsp.reg.regfrom_orig = wsp.reg.regfrom
         new_regfrom = wsp.basil.main.finalstep.mean_ftiss.data
         new_regfrom[new_regfrom < 0] = 0
-        wsp.regfrom = Image(new_regfrom, header=wsp.regfrom.header)
-        wsp.asl2struc_initial = wsp.asl2struc
-        wsp.struc2asl_initial = wsp.struc2asl
+        wsp.reg.regfrom = Image(new_regfrom, header=wsp.reg.regfrom.header)
+        wsp.reg.asl2struc_initial = wsp.reg.asl2struc
+        wsp.reg.struc2asl_initial = wsp.reg.struc2asl
         wsp.done("reg_asl2struc", status=False)
-        reg.reg_asl2struc(wsp)
+        reg.reg_asl2struc(wsp, False, True)
+
+    # We could at this point re-apply corrections derived from structural space
 
     if wsp.pvcorr:
-        if wsp.mask_src == "struc":
-            # Re-calculate mask as registration has changed
-            wsp.mask = None
+        if wsp.struc is not None:
+            # If mask was generated from structural image update it from new registration
+            wsp.rois.mask_orig = wsp.rois.mask
+            wsp.done("generate_mask", status=False)
             mask.generate_mask(wsp)
 
         # Generate PVM and PWM maps for Basil
         struc.segment(wsp)
-        wsp.wm_pv_asl = reg.struc2asl(wsp, wsp.wm_pv_struc, use_applywarp=True)
-        wsp.gm_pv_asl = reg.struc2asl(wsp, wsp.gm_pv_struc, use_applywarp=True)
-        wsp.basil_options = {"pwm" : wsp.wm_pv_asl, "pgm" : wsp.gm_pv_asl}
-        wsp.initmvn = None
+        wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv, use_applywarp=True)
+        wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
+        wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
         basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
 
     do_output(wsp)
@@ -203,7 +216,7 @@ def do_output(wsp):
         img = wsp.basil.main.finalstep.mean_ftiss
         img.data[img.data < 0] = 0
         output_wsp.perfusion = img
-        if wsp.calib is not None:
+        if wsp.calibration.calib is not None:
             output_wsp.perfusion_calib = calib.calibrate(wsp, output_wsp.perfusion)
 
 def _deletable(value):

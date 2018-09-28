@@ -13,14 +13,21 @@ import numpy as np
 
 import fsl.wrappers as fsl
 
-from oxasl import __version__, Workspace, calib, preproc, struc
+from oxasl import __version__, Workspace, calib, preproc, struc, brain
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.wrappers import epi_reg
+
+def init(wsp):
+    if wsp.reg is None:
+        wsp.sub("reg")
 
 def get_regfrom(wsp):
     """
     Set the 3D image to be used as the ASL registration target for structural->ASL registration
+
+    Regfrom defines the 'native' space 
     
+    FIXME can only 
     Optional workspace attributes
     -----------------------------
 
@@ -36,29 +43,38 @@ def get_regfrom(wsp):
     if wsp.isdone("get_regfrom"):
         return
 
+    wsp.sub("reg")
     wsp.log.write("\nGetting image to use for ASL->structural registration)\n")
-    calib.preproc_calib(wsp)
-    preproc.preproc_asl(wsp)
+    calib.init(wsp)
+    preproc.init(wsp)
     if wsp.regfrom is not None:
         wsp.log.write(" - Registration reference image supplied by user\n")
-    elif wsp.asldata_mean_brain:
-        wsp.log.write(" - Registration reference is mean raw ASL image (brain extracted)\n")
-        wsp.regfrom = wsp.asldata_mean_brain
-    elif wsp.calib_brain is not None:
+        wsp.reg.regfrom = wsp.regfrom
+    elif wsp.asl.data.iaf in ("tc", "ct"):
+        wsp.log.write(" - Registration reference is mean ASL signal (brain extracted)\n")
+        wsp.reg.regfrom = brain.brain(wsp, wsp.asl.data.mean(), thresh=0.2)
+    elif wsp.calibration.calib_asl is not None:
         wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
-        wsp.regfrom = wsp.calib_brain
-    elif wsp.diffasl_mean_brain:
+        wsp.reg.regfrom = brain.brain(wsp, wsp.calibration.calib_asl, thresh=0.2)
+    else:
         wsp.log.write(" - Registration reference is mean subtracted ASL image (brain extracted)\n")
-        wsp.regfrom = wsp.diffasl_mean_brain
-    elif wsp.pwi_brain:
-        wsp.log.write(" - Registration reference is perfusion weighted image (brain extracted)\n")
-        wsp.regfrom = wsp.pwi_brain
+        wsp.reg.regfrom = brain.brain(wsp, wsp.asl.data.diff().mean(), thresh=0.2)
 
     wsp.done("get_regfrom")
 
-def reg_asl2struc(wsp):
+def reg_asl2calib(wsp):
+    # FIXME If not already registered, assume in ASL space
+    if wsp.calibration.calib_asl is None:
+        wsp.calibration.calib_asl = wsp.calib
+        wsp.calibration.cblip_asl = wsp.calib
+        wsp.calibration.cref_asl = wsp.calib
+
+def reg_asl2struc(wsp, flirt=True, bbr=False):
     """
     Registration of ASL images to structural image
+    
+    :param flirt: If provided, sets whether to use FLIRT registration
+    :param bbr: If provided, sets whether to use BBR registration
     
     Required workspace attributes
     -----------------------------
@@ -76,24 +92,25 @@ def reg_asl2struc(wsp):
     if wsp.isdone("reg_asl2struc"):
         return
 
-    get_regfrom(wsp)
-    struc.preproc_struc(wsp)
-    wsp.log.write("\nRegistering ASL data to structural data\n")
-    if wsp.do_flirt:
-        wsp.regto, wsp.asl2struc = reg_flirt(wsp)
-    if wsp.do_bbr:
-        wsp.regto, wsp.asl2struc = reg_bbr(wsp)
-    
-    wsp.struc2asl = np.linalg.inv(wsp.asl2struc)
+    struc.init(wsp)
+    if wsp.structural.struc is not None:
+        get_regfrom(wsp)
+        wsp.log.write("\nRegistering ASL data to structural data\n")
+        if flirt:
+            wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp)
+        if bbr:
+            wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
+        
+        wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
 
-    wsp.log.write(" - ASL->Structural transform\n")
-    wsp.log.write(str(wsp.asl2struc) + "\n")
-    wsp.log.write(" - Structural->ASL transform\n")
-    wsp.log.write(str(wsp.struc2asl) + "\n")
+        wsp.log.write(" - ASL->Structural transform\n")
+        wsp.log.write(str(wsp.reg.asl2struc) + "\n")
+        wsp.log.write(" - Structural->ASL transform\n")
+        wsp.log.write(str(wsp.reg.struc2asl) + "\n")
 
     wsp.done("reg_asl2struc")
 
-def reg_struc2std(wsp, flirt=True):
+def reg_struc2std(wsp, fnirt=False):
     """
     Determine structural -> standard space registration
     
@@ -111,36 +128,35 @@ def reg_struc2std(wsp, flirt=True):
     if wsp.isdone("reg_struc2std"):
         return
 
-    if flirt:
-        wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
-        flirt_result = fsl.flirt(wsp.struc, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
-        wsp.struc2std = flirt_result["omat"]
-        wsp.std2struc = np.linalg.inv(wsp.struc2std)
-    else:
-        # FIXME expecting flirt already run?
+    wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
+    flirt_result = fsl.flirt(wsp.structural.struc, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
+    wsp.reg.struc2std = flirt_result["omat"]
+    wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
+    
+    if fnirt:
         wsp.log.write(" - Registering structural image to standard space using FNIRT\n")
-        fnirt_result = fsl.fnirt(wsp.struc, aff=wsp.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
-        wsp.struc2std = fnirt_result["cout"]
+        fnirt_result = fsl.fnirt(wsp.structural.struc, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
+        wsp.reg.struc2std = fnirt_result["cout"]
     
         # Calculate the inverse warp using INVWARP
-        invwarp_result = fsl.invwarp(wsp.struc, wsp.struc2std_warp, out=fsl.LOAD)
-        wsp.std2struc = invwarp_result["out"]
+        invwarp_result = fsl.invwarp(wsp.structural.struc, wsp.reg.struc2std_warp, out=fsl.LOAD)
+        wsp.reg.std2struc = invwarp_result["out"]
 
     wsp.done("reg_struc2std")
 
-def struc2asl(wsp, img, use_applywarp=False, interp="trilinear"):
+def struc2asl(wsp, img, use_applywarp=False, interp="trilinear", paddingsize=1):
     """
     Convert an image from structural to ASL space
 
     :param img: Image object in structural space
     :return: Transformed Image object
     """
-    get_regfrom(wsp)
-    reg_asl2struc(wsp)
+    if wsp.reg.asl2struc is None:
+        raise RuntimeError("Need to do asl2struc registration before converting any images")
     if not use_applywarp:
-        return fsl.applyxfm(img, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp=interp, log=wsp.fsllog)["out"]
+        return fsl.applyxfm(img, wsp.reg.regfrom, wsp.reg.struc2asl, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
     else:
-        return fsl.applywarp(img, wsp.regfrom, premat=wsp.struc2asl, out=fsl.LOAD, interp="spline", super=True, superlevel=4, log=wsp.fsllog)["out"]
+        return fsl.applywarp(img, wsp.reg.regfrom, premat=wsp.reg.struc2asl, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog)["out"]
         
 def reg_flirt(wsp):
     """ 
@@ -162,23 +178,16 @@ def reg_flirt(wsp):
 
     :return Tuple of registered image, transform matrix
     """
-    # This is done to avoid the contrast enhanced rim resulting from low intensity ref image
-    # FIXME from ENABLE!
-    #ref_data = ref_img.data
-    #threshold = np.percentile(ref_data[ref_data != 0], 10.0)
-    #ref_data[ref_data < threshold] = 0
-    #ref_img = Image(ref_data, name=ref_img.name + "_thr", header=ref_img.header)
-    
-    wsp.log.write(" - Registering image: %s using FLIRT\n" % wsp.regfrom.name)
+    wsp.log.write(" - Registering image: %s using FLIRT\n" % wsp.reg.regfrom.name)
     
     # Step 1: 3D translation only
     flirt_opts = {
         "schedule" : os.path.join(os.environ["FSLDIR"], "etc", "flirtsch", "xyztrans.sch"),
-        "init" : wsp.asl2struc,
+        "init" : wsp.reg.asl2struc,
         "inweight" : wsp.inweight,
         "log" : wsp.fsllog,
     }
-    step1_trans = fsl.flirt(wsp.regfrom, wsp.struc_brain, omat=fsl.LOAD, **flirt_opts)["omat"]
+    step1_trans = fsl.flirt(wsp.reg.regfrom, wsp.structural.brain, omat=fsl.LOAD, **flirt_opts)["omat"]
 
     # Step 2: 6 DOF transformation with small search region
     flirt_opts.update({
@@ -186,7 +195,7 @@ def reg_flirt(wsp):
         "init" : step1_trans,
         "dof" : wsp.ifnone("dof", 6),
     })
-    flirt_result = fsl.flirt(wsp.regfrom, wsp.struc_brain, out=fsl.LOAD, omat=fsl.LOAD, **flirt_opts)
+    flirt_result = fsl.flirt(wsp.reg.regfrom, wsp.structural.brain, out=fsl.LOAD, omat=fsl.LOAD, **flirt_opts)
 
     return flirt_result["out"], flirt_result["omat"]
 
@@ -216,7 +225,7 @@ def reg_bbr(wsp):
     struc.segment(wsp)
 
     wsp.log.write("  - BBR registration using epi_reg\n")
-    result = epi_reg(epi=wsp.regfrom, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg_struc, init=wsp.asl2struc, inweight=wsp.inweight)
+    result = epi_reg(epi=wsp.reg.regfrom, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight)
     return result["out.nii.gz"], result["out"]
 
     #OUTPUT
@@ -294,12 +303,12 @@ def main():
             parser.print_help()
             sys.exit(1)
 
-        reg_asl2struc(wsp)
+        reg_asl2struc(wsp, wsp.do_flirt, wsp.do_bbr)
         if wsp.output:
-            wsp.regto.save(wsp.output)
-        if wsp.asl2struc:
+            wsp.reg.regto.save(wsp.output)
+        if wsp.reg.asl2struc:
             with open(wsp.omat, "w") as transform_file:
-                for row in wsp.asl2struc:
+                for row in wsp.reg.asl2struc:
                     transform_file.write(" ".join(["%f" % val for val in row]) + "\n")
 
     except ValueError as exc:

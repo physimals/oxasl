@@ -25,17 +25,18 @@ transformation to minimise interpolation of the ASL data
 
 Copyright (c) 2008-2013 Univerisity of Oxford
 """
+import tempfile
+import shutil
 
 import numpy as np
 
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from .options import OptionCategory, IgnorableOptionGroup
-from .reporting import ReportPage
-from .wrappers import epi_reg
-import oxasl.struc as struc
-import oxasl.reg as reg
+from oxasl import reg, struc, calib
+from oxasl.options import OptionCategory, IgnorableOptionGroup
+from oxasl.reporting import ReportPage, LightboxImage
+from oxasl.wrappers import epi_reg
 
 class DistcorrOptions(OptionCategory):
     """
@@ -100,21 +101,46 @@ def get_cblip_correction(wsp):
     if wsp.isdone("get_cblip_correction"):
         return
 
+    wsp.sub("topup")
     wsp.log.write("Distortion Correction using TOPUP\n")
 
     topup_params = {
-        "x"  : " 1  0  0 %f\n-1  0  0 %f",
-        "-x" : "-1  0  0 %f\n 1  0  0 %f",
-        "y"  : " 0  1  0 %f\n 0 -1  0 %f",
-        "-y" : " 0 -1  0 %f\n 0  1  0 %f",
-        "z"  : " 0  0  1 %f\n 0  0 -1 %f",
-        "-z" : " 0  0 -1 %f\n 0  0  1 %f",
+        "x"  : [[1, 0, 0, -99], [-1, 0, 0, -99]],
+        "-x" : [[-1, 0, 0, -99], [1, 0, 0, -99]],
+        "y"  : [[0, 1, 0, -99], [0, -1, 0, -99]],
+        "-y" : [[0, -1, 0, -99], [0, 1, 0, -99]],
+        "z"  : [[0, 0, 1, -99], [0, 0, -1, -99]],
+        "-z" : [[0, 0, -1, -99], [0, 0, 1, -99]],
     }
-    params = topup_params[wsp.pedir] % (wsp.echospacing, wsp.echospacing)
+    dim_idx = {
+        "x"  : 0, "-x" : 0,
+        "y"  : 1, "-y" : 1,
+        "z"  : 2, "-z" : 2,
+    }
+    my_topup_params = np.array(topup_params[wsp.pedir], dtype=np.float)
+    dimsize = wsp.asldata.shape[dim_idx[wsp.pedir]]
+    my_topup_params[:, 3] = wsp.echospacing * (dimsize - 1)
+    wsp.topup.params = my_topup_params
     
-    # do topup
-    wsp.calib_blipped = Image(np.stack((wsp.calib.data, wsp.cblip.data), axis=-1), header=wsp.calib.header)
-    topup_result = fsl.topup(imain=wsp.calib_blipped, datain=params, config="b02b0.cnf", out=fsl.LOAD, fout=fsl.LOAD)
+    # Run TOPUP to calculate correction
+    wsp.topup.calib_blipped = Image(np.stack((wsp.calibration.calib_asl.data, wsp.calibration.cblip_asl.data), axis=-1), header=wsp.calibration.calib_asl.header)
+    topup_result = fsl.topup(imain=wsp.topup.calib_blipped, datain=wsp.topup.params, config="b02b0.cnf", out=fsl.LOAD, iout=fsl.LOAD, fout=fsl.LOAD)
+    wsp.topup.fieldcoef, wsp.topup.movpar = topup_result["out_fieldcoef"], topup_result["out_movpar"]
+    wsp.topup.iout = topup_result["iout"]
+    wsp.topup.fout = topup_result["fout"]
+
+    page = ReportPage()
+    page.heading("TOPUP distortion correction", level=0)
+    page.text("PE direction: %s" % wsp.pedir)
+    page.text("Echo spacing: %f s" % wsp.echospacing)
+    page.heading("Correction image", level=1)
+    #for dim in range(3):
+    #    #img = Image(wsp.fmap_warp.data[..., dim], header=wsp.fmap_warp.header)
+    #    wsp.report.add("fmap_warp%i" % dim, LightboxImage(img))
+    #    page.text("Dimension %i" % dim)
+    #    page.image("fmap_warp%i.png" % dim) 
+    wsp.report.add("topup", page)
+
     wsp.done("get_cblip_correction")
 
 def get_fieldmap_correction(wsp):
@@ -140,24 +166,23 @@ def get_fieldmap_correction(wsp):
     ----------------------------
 
      - ``fmap_warp``    : Fieldmap distortion correction warp image in ASL space
-     
     """
     if wsp.isdone("get_fieldmap_correction"):
         return
 
+    wsp.sub("fieldmap")
     if wsp.fmap is None or wsp.fmapmag is None or wsp.fmapmagbrain is None:
         wsp.log.write("\nNo fieldmap images for distortion correction\n")
     elif wsp.pedir is None or wsp.echospacing is None:
         wsp.log.write("\nWARNING: Fieldmap images supplied but pedir and echospacing required for distortion correction\n")
     else:
-        reg.reg_asl2struc(wsp)
         struc.segment(wsp)
 
         wsp.log.write("\nDistortion correction from fieldmap images using EPI_REG\n")
 
         epi_reg_opts = {
             "inweight" : wsp.inweight,
-            "init" : wsp.asl2struc,
+            "init" : wsp.reg.asl2struc,
             "fmap" : wsp.fmap,
             "fmapmag" : wsp.fmapmag,
             "fmapmagbrain" : wsp.fmapmagbrain,
@@ -166,14 +191,26 @@ def get_fieldmap_correction(wsp):
             "nofmapreg" : wsp.ifnone("nofmapreg", False),
         }
         
-        result = epi_reg(epi=wsp.pwi, t1=wsp.struc, t1brain=wsp.struc_brain, out=fsl.LOAD, wmseg=wsp.wm_seg_struc, **epi_reg_opts)
-        wsp.fmap_warp_struc = result["out_warp"]
-        wsp.fmap_asl2struc = result["out"]
-        wsp.fmap_struc2asl = np.linalg.inv(wsp.fmap_asl2struc)
+        result = epi_reg(epi=wsp.asl.data.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, **epi_reg_opts)
+        wsp.fieldmap.warp_struc = result["out_warp"]
+        wsp.fieldmap.asl2struc = result["out"]
+        wsp.fieldmap.struc2asl = np.linalg.inv(wsp.fieldmap.asl2struc)
 
-        result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.asldata_mean, warp1=wsp.fmap_warp_struc, postmat=wsp.fmap_struc2asl, rel=True)
-        wsp.fmap_warp = result["out"]
+        result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.asl.data, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True)
+        wsp.fieldmap.warp = result["out"]
         
+    page = ReportPage()
+    page.heading("Fieldmap distortion correction", level=0)
+    page.text("PE direction: %s" % wsp.pedir)
+    page.text("Echo spacing: %f s" % wsp.echospacing)
+    page.heading("Correction warps", level=1)
+    for dim in range(3):
+        img = Image(wsp.fieldmap.warp.data[..., dim], header=wsp.fieldmap.warp.header)
+        wsp.report.add("fmap_warp%i" % dim, LightboxImage(img))
+        page.text("Dimension %i" % dim)
+        page.image("fmap_warp%i.png" % dim)
+    wsp.report.add("fmap", page)
+
     wsp.done("get_fieldmap_correction")
 
 def get_motion_correction(wsp):
@@ -211,21 +248,27 @@ def get_motion_correction(wsp):
     if wsp.isdone("get_motion_correction"):
         return
 
+    calib.init(wsp)
+    reg.init(wsp)
+
+    wsp.sub("moco")
     wsp.log.write("\nMotion Correction\n")
     # If available, use the calibration image as reference since this will be most consistent if the data has a range 
     # of different TIs and background suppression etc. This also removes motion effects between asldata and calibration image
-    if wsp.calib:
+    if wsp.calibration.calib:
         wsp.log.write(" - Using calibration image as reference\n")
-        ref_source = "calibration image: %s" % wsp.calib.name
-        mcflirt_result = fsl.mcflirt(wsp.asldata, reffile=wsp.calib, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
+        ref_source = "calibration image: %s" % wsp.calibration.calib.name
+        wsp.moco.ref = wsp.calibration.calib
+        wsp.moco.input = wsp.asldata
+        mcflirt_result = fsl.mcflirt(wsp.asldata, reffile=wsp.moco.ref, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
 
         # To reduce interpolation of the ASL data change the transformations so that we end up in the space of the central volume of asldata
-        wsp.asl2calib = mats[int(float(len(mats))/2)]
-        wsp.calib2asl = np.linalg.inv(wsp.asl2calib)
-        mats = [np.dot(mat, wsp.calib2asl) for mat in mats]
-        wsp.log.write("   ASL middle volume->Calib:\n%s\n" % str(wsp.asl2calib))
-        wsp.log.write("   Calib->ASL middle volume:\n%s\n" % str(wsp.calib2asl))
+        wsp.reg.asl2calib = mats[int(float(len(mats))/2)]
+        wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
+        mats = [np.dot(wsp.reg.calib2asl, mat) for mat in mats]
+        wsp.log.write("   ASL middle volume->Calib:\n%s\n" % str(wsp.reg.asl2calib))
+        wsp.log.write("   Calib->ASL middle volume:\n%s\n" % str(wsp.reg.calib2asl))
     else:
         wsp.log.write(" - Using ASL data middle volume as reference\n")
         ref_source = "ASL data %s middle volume: %i" % (wsp.asldata.name, int(float(wsp.asldata.shape[3])/2))
@@ -234,7 +277,7 @@ def get_motion_correction(wsp):
         
     # Convert motion correction matrices into single (4*nvols, 4) matrix - convenient for writing
     # to file, and same form that applywarp expects
-    wsp.asldata_mc_mats = np.concatenate(mats, axis=0)
+    wsp.moco.mc_mats = np.concatenate(mats, axis=0)
 
     page = ReportPage()
     page.heading("Motion correction", level=0)
@@ -276,15 +319,14 @@ def get_sensitivity_correction(wsp):
             wsp.log.write(" - Sensitivity correction disabled\n")
         elif wsp.isen is not None:
             wsp.log.write(" - Sensitivity image supplied by user\n")
-        elif wsp.calib is not None and wsp.cref is not None:
+        elif wsp.calibration.calib is not None and wsp.cref is not None:
             wsp.log.write(" - Sensitivity image calculated from calibration reference image\n")
-            wsp.sensitivity = Image(wsp.calib.data / wsp.cref.data, header=wsp.calib.header)
+            wsp.sensitivity = Image(wsp.calibration.calib.data / wsp.calibration.cref.data, header=wsp.calibration.calib.header)
         elif wsp.senscorr_auto and wsp.bias is not None:
             struc.segment(wsp)
             wsp.log.write(" - Sensitivity image calculated from bias field\n")
-            sens = Image(np.reciprocal(wsp.bias.data), header=wsp.bias.header)           
-            reg.reg_asl2struc(wsp)
-            wsp.sensitivity = fsl.applyxfm(sens, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
+            sens = Image(np.reciprocal(wsp.bias.data), header=wsp.bias.header)
+            wsp.sensitivity = reg.struc2asl(wsp, sens)
         else:
             wsp.log.write(" - No source of sensitivity correction was found\n")
         wsp.log.write("\n")
@@ -317,18 +359,20 @@ def apply_corrections(wsp):
      - ``cref``       : Corrected calibration reference image
      - ``cblip``      : Corrected calibration BLIP image
     """
-    wsp.log.write("\nApplying combined corrections to data\n")
+    wsp.log.write("\nApplying corrections to data\n")
 
-    if wsp.asldata_mc_mats is not None:
-        wsp.log.write(" - Adding motion correction transforms\n")
+    wsp.sub("distcorr")
+
+    if wsp.moco.mc_mats is not None:
+        wsp.log.write(" - Using motion correction\n")
 
     warps = []
-    if wsp.fmap_warp:
-        wsp.log.write(" - Adding fieldmap based warp to correction\n")
-        warps.append(wsp.fmap_warp)
+    if wsp.fieldmap is not None:
+        wsp.log.write(" - Using fieldmap distortion correction\n")
+        warps.append(wsp.fieldmap.warp)
     
     if wsp.gdc_warp:
-        wsp.log.write(" - Adding user-supplied GDC warp to correction\n")
+        wsp.log.write(" - Using user-supplied GDC warp\n")
         warps.append(wsp.gdc_warp)
         
     if warps:
@@ -337,29 +381,57 @@ def apply_corrections(wsp):
             kwargs["warp%i" % (idx+1)] = warp
                 
         wsp.log.write(" - Converting all warps to single transform and extracting Jacobian\n")
-        fsl.convertwarp(ref=wsp.asldata_mean, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, **kwargs)
-        # FIXME save jacobian
+        result = fsl.convertwarp(ref=wsp.asl.data, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, **kwargs)
+        wsp.distcorr.warp = result["out"]
+        jacobian = result["jacobian"]
+        wsp.distcorr.jacobian = Image(np.mean(jacobian.data, 3), header=jacobian.header)
 
-    if not warps and wsp.asldata_mc_mats is None:
+    if not warps and wsp.moco.mc_mats is None:
         wsp.log.write(" - No corrections to apply\n")
         return
 
     # Apply all corrections to ASL data - note that we make sure the output keeps all the ASL metadata
     wsp.log.write(" - Applying corrections to ASL data\n")
-    asldata_img = correct_img(wsp, wsp.asldata_orig, wsp.asldata_mc_mats)
-    wsp.asldata = wsp.asldata_orig.derived(asldata_img.data)
+    asldata_corr = correct_img(wsp, wsp.asldata, wsp.moco.mc_mats)
+    wsp.asl.data = wsp.asldata.derived(asldata_corr.data)
 
     # Apply corrections to calibration images
-    if wsp.calib_orig is not None:
+    if wsp.calib is not None:
         wsp.log.write(" - Applying corrections to calibration data\n")
-        wsp.calib = correct_img(wsp, wsp.calib_orig, wsp.calib2asl)
+        wsp.calibration.calib_asl = correct_img(wsp, wsp.calibration.calib, wsp.reg.calib2asl)
     
-        if wsp.cref_orig is not None:
-            wsp.cref = correct_img(wsp, wsp.cref_orig, wsp.calib2asl)
-        if wsp.cblip_orig is not None:
-            wsp.cblip = correct_img(wsp, wsp.cref_cblip, wsp.calib2asl)
+        if wsp.cref is not None:
+            wsp.calibration.cref_asl = correct_img(wsp, wsp.calibration.cref, wsp.reg.calib2asl)
+        if wsp.cblip is not None:
+            wsp.calibration.cblip_asl = correct_img(wsp, wsp.calibration.cblip, wsp.reg.calib2asl)
 
-    # FIXME now need to apply TOPUP correction?
+    if wsp.topup is not None:
+        wsp.log.write(" - Adding TOPUP distortion correction\n")
+        # This can't currently be done using the FSL wrappers - we need the TOPUP output as two prefixed files
+        # Only workaround currently is to create a temp directory to store appropriately named input files
+        topup_input = tempfile.mkdtemp(prefix="topup_input")
+        try:
+            wsp.topup.fieldcoef.save("%s/topup_fieldcoef" % topup_input)
+            movpar_file = open("%s/topup_movpar.txt" % topup_input, "w")
+            for row in wsp.topup.movpar:
+                movpar_file.write("\t".join([str(val) for val in row]) + "\n")
+            movpar_file.close()
+            # TOPUP does not do the jacboian magntiude correction - so only okay if using voxelwise calibration
+            wsp.calibration.calib_asl_pretopup = wsp.calibration.calib_asl
+            wsp.calibration.calib_asl = fsl.applytopup(wsp.calibration.calib_asl, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac")["out"]
+            wsp.calibration.cblip_asl_pretopup = wsp.calibration.cblip_asl
+            wsp.calibration.cblip_asl = fsl.applytopup(wsp.calibration.cblip_asl, datain=wsp.topup.params, index=2, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac")["out"]
+            if wsp.cref:
+                wsp.calibration.cref_asl = fsl.applytopup(wsp.calibration.cref_asl, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac")["out"]
+            wsp.asl.data_pretopup = wsp.asl.data
+            post_topup = fsl.applytopup(wsp.asl.data, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac")["out"]
+            wsp.asl.data = wsp.asl.data.derived(post_topup.data)
+            #if wsp.calib_method != "voxel":
+            #    wsp.log.write("WARNING: Using TOPUP does not correct for magntiude using the jocbian in distortion correction")
+            #    wsp.log.write("         This is not optimal when not using voxelwise calibration\n")
+            #    wsp.log.write("         To avoid this supply structural image(s)\n")
+        finally:
+            shutil.rmtree(topup_input)
 
 def correct_img(wsp, img, linear_mat):
     """
@@ -374,7 +446,7 @@ def correct_img(wsp, img, linear_mat):
     FIXME there are slight differences to oxford_asl here due to use of spline interpolation rather than
     applyxfm4D which uses sinc interpolation.
 
-    Required workspace attributes
+    Required workspace attributesd
     -----------------------------
 
      - ``asldata_mean`` : Mean ASL image used as reference space
@@ -385,11 +457,15 @@ def correct_img(wsp, img, linear_mat):
      - ``total_warp``      : Combined warp image
      - ``jacobian``        : Jacobian associated with warp image
     """
-    warp_result = fsl.applywarp(img, wsp.asldata_mean, out=fsl.LOAD, warp=wsp.total_warp, premat=linear_mat, interp="sinc", paddingsize=1, rel=True)
+    warp_result = fsl.applywarp(img, wsp.asl.data, out=fsl.LOAD, warp=wsp.distcorr.warp, premat=linear_mat, super=True, superlevel="a", interp="trilinear", paddingsize=1, rel=True)
     img = warp_result["out"]
-    if wsp.jacobian:
+    if wsp.distcorr.jacobian is not None:
         wsp.log.write(" - Correcting for local volume scaling using Jacobian\n")
-        img = Image(img.data * wsp.jacobian)
+        jdata = wsp.distcorr.jacobian.data
+        if img.data.ndim == 4:
+            # Required to make broadcasting work
+            jdata = jdata[..., np.newaxis]
+        img = Image(img.data * jdata, header=img.header)
     return img
 
 def apply_sensitivity_correction(wsp, *imgs):

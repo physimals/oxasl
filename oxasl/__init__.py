@@ -47,12 +47,19 @@ for passing to FSL Python wrapper commands.
 
     wsp = Workspace()
     wsp.log.write("Hello World\n")
-    wsp.mask = fslmaths(img).bin().run(log=wsp.fsllog)
+    wsp.rois.mask = fslmaths(img).bin().run(log=wsp.fsllog)
 
 Module functions
 ~~~~~~~~~~~~~~~~
 Other modules typically contains one or more functions which operate on a 
 workspace, in some cases with additional parameters (but not always).
+
+Module functions operate under the general rule that data stored directly
+as a workspace attribute is unprocessed, user-supplied data. Derived data
+is then stored in a sub-workspace. Module functions will usually create
+a sub-workspace to store their own output in, for example the ``struc`` module 
+places it's output (brain extractions, segmentations) in the wsp.structural 
+sub-workspace.
 
 For example the ``calib`` module contains the ``calibrate`` function which
 calibrates a perfusion image to physical units using either voxelwise or reference 

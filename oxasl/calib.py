@@ -23,12 +23,16 @@ from oxasl.image import summary
 from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 from oxasl.reporting import ReportPage, LightboxImage
 
-def preproc_calib(wsp):
+def init(wsp):
     """
     Preprocess calibration images
     """
+    if wsp.isdone("calib.init"):
+        return
+
+    wsp.sub("calibration")
     for img_type in ("calib", "cblip", "cref"):
-        if getattr(wsp, img_type) is not None and getattr(wsp, img_type + "_orig") is None:
+        if getattr(wsp, img_type) is not None:
             img = getattr(wsp, img_type)
             wsp.log.write("\nPre-processing calibration image: %s (%s)\n" % (img.name, img_type))
             data = img.data
@@ -46,13 +50,9 @@ def preproc_calib(wsp):
                 data = np.mean(data, axis=-1)
 
             img = Image(data, name=img_type, header=img.header)
-            setattr(wsp, img_type, img)
-            setattr(wsp, img_type + "_orig", img)
-            if img_type == "calib" and wsp.calib_brain is None:
-                wsp.log.write(" - Doing brain extraction\n")
-                bet_result = fsl.bet(img, seg=True, mask=True, output=fsl.LOAD, log=wsp.fsllog)
-                wsp.calib_brain = bet_result["output"]
-                wsp.calib_brain_mask = bet_result["output_mask"]
+            setattr(wsp.calibration, img_type, img)
+
+    wsp.done("calib.init")
 
 def calibrate(wsp, perf_img, var=False):
     """
@@ -85,7 +85,7 @@ def calibrate(wsp, perf_img, var=False):
 
     if not perf_img:
         raise ValueError("Perfusion data cannot be None")
-    if not wsp.calib:
+    if not wsp.calibration.calib:
         raise ValueError("No calibration data supplied")
         
     if wsp.calib_method == "voxelwise":
@@ -151,7 +151,7 @@ def get_m0_voxelwise(wsp):
     alpha, gain, pct = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1), wsp.ifnone("pct", 0.9)
 
     # Calculate M0 value
-    m0 = wsp.calib.data * alpha * gain
+    m0 = wsp.calibration.calib.data * alpha * gain
 
     shorttr = 1
     if wsp.tr is not None and wsp.tr < 5:
@@ -166,12 +166,12 @@ def get_m0_voxelwise(wsp):
     wsp.log.write(" - Using partition coefficient: %f\n" % pct)
     m0 /= pct
 
-    if wsp.mask is not None:
+    if wsp.rois.mask is not None:
         if wsp.calib_edgecorr:
             wsp.log.write(" - Doing edge correction\n")
             m0 = _edge_correct(m0, wsp.brain_mask)
         wsp.log.write(" - Masking M0 image")
-        m0[wsp.mask.data == 0] = 0
+        m0[wsp.rois.mask.data == 0] = 0
 
     wsp.log.write(" - Mean M0: %f\n" % np.mean(m0))
 
@@ -192,11 +192,11 @@ def get_m0_voxelwise(wsp):
     page.heading("M0", level=1)
     page.text("M0 values obtained by multiplying calibration image by %f" % (alpha*gain/shorttr/pct))
     page.text("Mean M0 value: %f" % np.mean(m0))
-    if wsp.mask is not None:
+    if wsp.rois.mask is not None:
         page.text("M0 image was masked using current mask")
         if wsp.edgecorr:
             page.text("Edge correction was used on mask")
-        page.text("Mean M0 value (within mask): %f" % np.mean(m0[wsp.mask.data > 0]))
+        page.text("Mean M0 value (within mask): %f" % np.mean(m0[wsp.rois.mask.data > 0]))
     wsp.report.add("m0", page)
 
     return m0
@@ -338,23 +338,23 @@ def get_m0_refregion(wsp, mode="longtr"):
     wsp.log.write(" - T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pcr))
 
     # Check the data and masks
-    calib_data = np.copy(wsp.calib.data)
+    calib_data = np.copy(wsp.calibration.calib.data)
     if calib_data.ndim == 4:
         wsp.log.write(" - Taking mean across calibration images\n")
         calib_data = np.mean(calib_data, -1)
 
-    if wsp.mask is not None:
-        brain_mask = wsp.mask.data
+    if wsp.rois.mask is not None:
+        brain_mask = wsp.rois.mask.data
     else:
-        brain_mask = np.ones(wsp.calib.shape[:3])
+        brain_mask = np.ones(wsp.calibration.calib.shape[:3])
 
     if wsp.ref_mask is not None:
         wsp.log.write(" - Using supplied reference tissue mask: %s\n" % wsp.ref_mask.name)
-        ref_mask = wsp.ref_mask.data
-    elif wsp.tissref == "csf":
-        # FIXME what if not CSF?
-        get_csf_mask(wsp)
-        ref_mask = wsp.ref_mask.data
+        wsp.calibration.ref_mask = wsp.ref_mask
+        ref_mask = wsp.calibration.ref_mask.data
+    elif wsp.tissref.lower() in ("csf", "wm", "gm"):
+        get_tissref_mask(wsp)
+        ref_mask = wsp.calibration.ref_mask.data
     else:
         # In this case use the brain mask FIXME get rid of this, can easily be done manually if required
         wsp.log.write(" - Brain mask is being used as the reference tissue (beware!)\n")
@@ -405,7 +405,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         # NB only do the fit in the CSF mask
         # FIXME this is not functional at the moment
         options = {
-            "data" : wsp.calib,
+            "data" : wsp.calibration.calib,
             "mask" : ref_mask,
             "method" : "vb",
             "noise" : "white",
@@ -504,7 +504,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     
     return m0
 
-def get_csf_mask(wsp):
+def get_tissref_mask(wsp):
     """
     Calculate the CSF mask
     """
@@ -517,8 +517,8 @@ def get_csf_mask(wsp):
     page.text("Reference region was automatically generated for tissue type: %s" % wsp.tissref.upper())
     page.heading("Partial volume map for %s tissue (from structural segmentation)" % wsp.tissref.upper(), level=1)
     page.image("refpve.png")
-    wsp.refpve = getattr(wsp, "%s_pv_struc" % wsp.tissref.lower())
-    wsp.report.add("refpve", LightboxImage(wsp.refpve, bgimage=wsp.struc_brain))
+    wsp.calibration.refpve = getattr(wsp.structural, "%s_pv" % wsp.tissref.lower())
+    wsp.report.add("refpve", LightboxImage(wsp.calibration.refpve, bgimage=wsp.structural.brain))
 
     if wsp.tissref == "csf" and not wsp.csfmaskingoff:
         wsp.log.write(" - Doing automatic ventricle selection using standard atlas\n")
@@ -533,74 +533,74 @@ def get_csf_mask(wsp):
         atlases.rescanAtlases()
         atlas = atlases.loadAtlas("harvardoxford-subcortical", loadSummary=False, resolution=2)
         ventricles = ((atlas.data[..., 2] + atlas.data[..., 13]) > 0.1).astype(np.int)
-        wsp.ventricles = Image(scipy.ndimage.binary_erosion(ventricles, structure=np.ones([3, 3, 3]), border_value=1).astype(np.int), header=atlas.header)
+        wsp.calibration.ventricles = Image(scipy.ndimage.binary_erosion(ventricles, structure=np.ones([3, 3, 3]), border_value=1).astype(np.int), header=atlas.header)
         page.text("Standard space ventricles mask (from Harvard-Oxford atlas) eroded by 1 pixel")
         page.image("ventricles_std.png")
         std_img = Image(os.path.join(os.environ["FSLDIR"], "data", "standard", 'MNI152_T1_2mm_brain'))
-        wsp.report.add("ventricles_std", LightboxImage(wsp.ventricles, bgimage=std_img))
+        wsp.report.add("ventricles_std", LightboxImage(wsp.calibration.ventricles, bgimage=std_img))
 
         # Register structural image to std space using FLIRT
         #
         # FIXME should be in reg - what if warp provided ->std space
-        if wsp.struc2std is None:
+        if wsp.reg.struc2std is None:
             wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
-            flirt_result = fsl.flirt(wsp.struc_brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
-            wsp.struc2std = flirt_result["omat"]
-            wsp.std2struc = np.linalg.inv(wsp.struc2std)
+            flirt_result = fsl.flirt(wsp.structural.brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
+            wsp.reg.struc2std = flirt_result["omat"]
+            wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
 
         if not wsp.stdmaskfnirt:
             # FIXME use struc as ref?
             wsp.log.write(" - Registering standard space ventricle mask to structural using FLIRT\n")
-            flirt_result = fsl.applyxfm(wsp.ventricles, mat=wsp.std2struc, ref=wsp.refpve, out=fsl.LOAD, interp="trilinear")
-            wsp.ventricles_struc = flirt_result["out"]
+            flirt_result = fsl.applyxfm(wsp.calibration.ventricles, mat=wsp.reg.std2struc, ref=wsp.calibration.refpve, out=fsl.LOAD, interp="trilinear")
+            wsp.calibration.ventricles_struc = flirt_result["out"]
         else:
             wsp.log.write(" - Registering standard space ventricle mask to structural using FNIRT\n")
-            fnirt_result = fsl.fnirt(wsp.struc_brain, aff=wsp.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
-            wsp.struc2std_warp = fnirt_result["cout"]
+            fnirt_result = fsl.fnirt(wsp.structural.brain, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
+            wsp.reg.struc2std_warp = fnirt_result["cout"]
         
             # Calculate the inverse warp using INVWARP and apply to standard space ventricle mask
             # Using refpve as reference for applywarp as this is the image we apply the mask to, not the structural
-            invwarp_result = fsl.invwarp(wsp.struc2std_warp, wsp.struc_brain, out=fsl.LOAD)
-            wsp.std2struc_warp = invwarp_result["out"]
-            warp_result = fsl.applywarp(wsp.ventricles, wsp.refpve, warp=wsp.std2struc_warp, out=fsl.LOAD, interp="nn")
-            wsp.ventricles_struc = warp_result["out"]
+            invwarp_result = fsl.invwarp(wsp.reg.struc2std_warp, wsp.structural.brain, out=fsl.LOAD)
+            wsp.reg.std2struc_warp = invwarp_result["out"]
+            warp_result = fsl.applywarp(wsp.calibration.ventricles, wsp.calibration.refpve, warp=wsp.reg.std2struc_warp, out=fsl.LOAD, interp="nn")
+            wsp.calibration.ventricles_struc = warp_result["out"]
         
         page.heading("Structural space ventricles mask", level=1)
         page.text("This is the above image transformed into structural space. The transformation was obtained by registering the structural image to the standard brain image")
         page.image("ventricles_struc.png")
-        wsp.report.add("ventricles_struc", LightboxImage(wsp.ventricles_struc, bgimage=wsp.struc_brain))
+        wsp.report.add("ventricles_struc", LightboxImage(wsp.calibration.ventricles_struc, bgimage=wsp.structural.brain))
 
         wsp.log.write(" - Masking FAST output with standard space derrived ventricle mask\n")
-        wsp.refpve_pre_mask = wsp.refpve
-        refpve_data = np.copy(wsp.refpve.data)
-        refpve_data[wsp.ventricles_struc.data == 0] = 0
-        wsp.refpve = Image(refpve_data, header=wsp.refpve.header)
-        wsp.refpve_post = wsp.refpve
+        wsp.calibration.refpve_pre_mask = wsp.calibration.refpve
+        refpve_data = np.copy(wsp.calibration.refpve.data)
+        refpve_data[wsp.calibration.ventricles_struc.data == 0] = 0
+        wsp.calibration.refpve = Image(refpve_data, header=wsp.calibration.refpve.header)
+        wsp.calibration.refpve_post = wsp.calibration.refpve
 
         page.heading("Structural space ventricles PVE", level=1)
         page.text("This is the CSF partial volume masked by the ventricles mask. It should select only the ventricles from the original partial volume image.")
         page.image("refpve_post.png")
-        wsp.report.add("refpve_post", LightboxImage(wsp.refpve, bgimage=wsp.struc_brain))
+        wsp.report.add("refpve_post", LightboxImage(wsp.calibration.refpve, bgimage=wsp.structural.brain))
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
     # New conversion using applywarp, supersmapling and integration
-    result = fsl.applywarp(wsp.refpve, ref=wsp.asldata_mean, out=fsl.LOAD, premat=wsp.struc2asl, super=True, interp="spline", superlevel=4)
-    #result = fsl.applyxfm(wsp.refpve, ref=wsp.asldata_mean, mat=wsp.struc2asl, out=fsl.LOAD)
-    wsp.refpve_calib = result["out"]
-    wsp.refpve_calib.data[wsp.refpve_calib.data < 0.001] = 0 # Better for display
+    result = fsl.applywarp(wsp.calibration.refpve, ref=wsp.asl.data, out=fsl.LOAD, premat=wsp.reg.struc2asl, super=True, interp="spline", superlevel=4)
+    #result = fsl.applyxfm(wsp.calibration.refpve, ref=wsp.asl.data, mat=wsp.reg.struc2asl, out=fsl.LOAD)
+    wsp.calibration.refpve_calib = result["out"]
+    wsp.calibration.refpve_calib.data[wsp.calibration.refpve_calib.data < 0.001] = 0 # Better for display
     page.heading("Reference region in ASL space", level=1)
     page.text("Partial volume map")
     page.image("refpve_calib.png")
-    wsp.report.add("refpve_calib", LightboxImage(wsp.refpve_calib, bgimage=wsp.calib))
+    wsp.report.add("refpve_calib", LightboxImage(wsp.calibration.refpve_calib, bgimage=wsp.calibration.calib))
 
     # Threshold reference mask conservatively to select only reference tissue
     wsp.log.write(" - Thresholding reference mask\n")
-    wsp.ref_mask = Image((wsp.refpve_calib.data > 0.9).astype(np.int), header=wsp.refpve_calib.header)
+    wsp.calibration.ref_mask = Image((wsp.calibration.refpve_calib.data > 0.9).astype(np.int), header=wsp.calibration.refpve_calib.header)
 
     page.text("Reference Mask (thresholded at 0.9")
     page.image("ref_mask.png")
-    wsp.report.add("ref_mask", LightboxImage(wsp.ref_mask, bgimage=wsp.calib))
-    page.text("Number of voxels in reference region: %i" % np.count_nonzero(wsp.ref_mask.data))
+    wsp.report.add("ref_mask", LightboxImage(wsp.calibration.ref_mask, bgimage=wsp.calibration.calib))
+    page.text("Number of voxels in reference region: %i" % np.count_nonzero(wsp.calibration.ref_mask.data))
 
 TISS_DEFAULTS = {
     "csf" : [4.3, 750, 400, 1.15],
@@ -668,7 +668,7 @@ class CalibOptions(OptionCategory):
         group.add_option("--tis", help="Comma separated list of inversion times, e.group. --tis 0.2,0.4,0.6")
         group.add_option("--fa", help="Flip angle (in degrees) for Look-Locker readouts", type=float)
         group.add_option("--lfa", help="Lower flip angle (in degrees) for dual FA calibration", type=float)
-        group.add_option("--nphases", help="Number of phases (repetitions) of higher FA", type=int)
+        # FIXME conflicts with AslImage group.add_option("--nphases", help="Number of phases (repetitions) of higher FA", type=int)
         group.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
         groups.append(group)
 
@@ -712,7 +712,7 @@ def main():
         wsp = Workspace(**vars(options))
 
         summary(wsp.perf)
-        summary(wsp.calib)
+        summary(wsp.calibration.calib)
 
         if wsp.output is None:
             wsp.output = "%s_calib" % wsp.perf.name

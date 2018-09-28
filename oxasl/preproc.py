@@ -1,111 +1,28 @@
 """
 ASL data preprocessing command line tool
 """
+from __future__ import print_function
+
 import sys
 
-import numpy as np
 import scipy
 
 import fsl.wrappers as fsl
 
 from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup
 from .image import AslImage, AslImageOptions
-from .reporting import ReportPage
 
-def motion_correct(wsp):
-    """
-    Motion Correction of ASL data
-    
-    Note motion correction of multi-volume calibration data is done in preprocessing.
-
-    The reference volume for motion correction is the calibration image, if supplied, or
-    otherwise the middle volume of the ASL data is used. 
-    
-    If the calibration image is used, the inverse of the middle ASL volume -> calibration
-    transform is applied to each transform matrix. This ensures that the middle volume of 
-    the ASL data is unchanged and interpolation on the other volumes is also minimised.
-    In this case, all calibration images are also themselves transformed to bring them in
-    to ASL middle volume space.
-
-    Required workspace attributes
-    -----------------------------
-
-     - ``asldata`` : ASL data image
-
-    Optional workspace attributes
-    -----------------------------
-
-     - ``calib``    : Calibration image
-     - ``cref``     : Calibration reference image
-     - ``cblip``     : Calibration BLIP image
-
-    Updated workspace attributes
-    ----------------------------
-
-     - ``asldata_mc_mats`` : Sequence of matrices giving motion correction transform for each ASL volume
-     - ``asl2calib``       : ASL->calibration image transformation
-     - ``calib2asl``       : Calibration->ASL image transformation
-    """
-    wsp.log.write("\nMotion Correction\n")
-    if wsp.calib:
-        # use supplied image as our reference for motion correction
-        # Normally the calibration image since this will be most consistent if the data has a range of different TIs and background suppression etc
-        # this also removes motion effects between asldata and calibration image
-        wsp.log.write(" - Using calibration image as reference\n")
-        ref_source = "calibration image: %s" % wsp.calib.name
-        mcflirt_result = fsl.mcflirt(wsp.asldata, reffile=wsp.calib, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
-        wsp.asldata_mc_mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
-
-        # To reduce interpolation of the ASL data change the transformations so that we end up in the space of the central volume of asldata
-        wsp.asl2calib = wsp.asldata_mc_mats[len(wsp.asldata_mc_mats)/2+1]
-        wsp.calib2asl = np.linalg.inv(wsp.asl2calib)
-        wsp.asldata_mc_mats = [np.dot(mat, wsp.calib2asl) for mat in wsp.asldata_mc_mats]
-        wsp.log.write("   ASL middle volume->Calib:\n%s\n" % str(wsp.asl2calib))
-        wsp.log.write("   Calib->ASL middle volume:\n%s\n" % str(wsp.calib2asl))
-    else:
-        wsp.log.write(" - Using ASL data middle volume as reference\n")
-        ref_source = "ASL data %s middle volume: %s" % wsp.asldata.name
-        mcflirt_result = fsl.mcflirt(wsp.asldata, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
-        wsp.asldata_mc_mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
-        
-    page = ReportPage()
-    page.heading("Motion correction", level=0)
-    page.text("Reference volume: %s" % ref_source)
-    page.heading("Motion parameters", level=1)
-    for vol, mat in enumerate(wsp.asldata_mc_mats):
-        rst_math = "\\begin{bmatrix}\n"
-        for row in mat:
-            rst_math += "    " + " & ".join([str(v) for v in row]) + " \\"
-        rst_math += "\\end{bmatrix}\n"
-        page.maths(rst_math)
-    wsp.report.add("moco", page)
-
-def preproc_asl(wsp):
+def init(wsp):
     """
     Preprocessing on the main ASL data - calculate averaged images and run brain extraction
     """
-    if wsp.asldata is not None and wsp.diffasl is None:
-        wsp.log.write("\nPre-processing ASL data: %s\n" % wsp.asldata.name)
-        wsp.asldata_orig = wsp.asldata
-        wsp.asldata_mean_across_repeats = wsp.asldata.mean_across_repeats()
+    if wsp.isdone("asl.init"):
+        return
 
-        if "p" in wsp.asldata.order.lower():
-            # Data contains tag-control pairs to can extract mean raw signal
-            wsp.asldata_mean = wsp.asldata.mean()
-            bet_result = fsl.bet(wsp.asldata_mean, seg=True, mask=True, fracintensity=0.2, output=fsl.LOAD, log=wsp.fsllog)
-            wsp.asldata_mean_brain = bet_result["output"]
-            wsp.asldata_mean_brain_mask = bet_result["output_mask"]
-
-        wsp.diffasl = wsp.asldata.diff()
-        wsp.diffasl_mean = wsp.diffasl.mean()
-        bet_result = fsl.bet(wsp.diffasl_mean, seg=True, mask=True, fracintensity=0.2, output=fsl.LOAD, log=wsp.fsllog)
-        wsp.diffasl_mean_brain = bet_result["output"]
-
-        wsp.pwi = wsp.asldata.perf_weighted()
-        bet_result = fsl.bet(wsp.pwi, seg=True, mask=True, fracintensity=0.2, output=fsl.LOAD, log=wsp.fsllog)
-        wsp.pwi_brain = bet_result["output"]
-        wsp.pwi_brain_mask = bet_result["output_mask"]
-        wsp.log.write(" - Generated subtracted and averaged copies of input data\n")
+    wsp.sub("asl")
+    wsp.log.write("\nInitializing ASL data: %s\n" % wsp.asldata.name)
+    wsp.asl.data = wsp.asldata
+    wsp.done("asl.init")
 
 def preprocess(asldata, diff=False, reorder=None, mc=False, smooth=False, fwhm=None, ref=None, log=sys.stdout):
     """
@@ -145,7 +62,7 @@ def preprocess(asldata, diff=False, reorder=None, mc=False, smooth=False, fwhm=N
     if smooth:
         sigma = round(fwhm/2.355, 2)
         log.write("  - Spatial smoothing with FWHM: %f (sigma=%f)\n" % (fwhm, sigma))
-        smoothed = scipy.ndimage.gaussian_filter(asldata.nibImage.get_data(), sigma=sigma)
+        smoothed = scipy.ndimage.gaussian_filter(asldata.data, sigma=sigma)
         asldata = asldata.derived(smoothed, suffix="_smooth")
 
     log.write("DONE\n\n")
@@ -165,7 +82,7 @@ class AslPreprocOptions(OptionCategory):
         group.add_option("--smooth", help="Spatially smooth data", action="store_true", default=False)
         group.add_option("--fwhm", help="FWHM for spatial filter kernel", type="float", default=6)
         group.add_option("--mc", help="Motion correct data", action="store_true", default=False)
-        group.add_option("--ref", help="Optional reference image for motion correction", default=None)
+        group.add_option("--ref", help="Optional reference image for motion correction", type="image", default=None)
         group.add_option("--reorder", help="Re-order data in specified order")
         return [group, ]
 

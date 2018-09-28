@@ -18,10 +18,10 @@ from oxasl import Workspace, reg, AslImage
 def get_wsp():
     wsp = Workspace()
     wsp.struc = Image(np.random.rand(10, 10, 10))
-    wsp.asldata_mean_brain = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="tc", ibf="rpt")
-    wsp.calib_brain = Image(np.random.rand(5, 5, 5))
+    wsp.asl.mean_brain = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="tc", ibf="rpt")
+    wsp.calibration.brain = Image(np.random.rand(5, 5, 5))
     wsp.done("preproc_asl")
-    wsp.done("preproc_calib")
+    wsp.done("calib.init")
     return wsp
 
 def test_get_regfrom_supplied():
@@ -30,9 +30,9 @@ def test_get_regfrom_supplied():
     """
     wsp = get_wsp()
     user_regfrom = Image(np.random.rand(5, 5, 5))
-    wsp.regfrom = user_regfrom
+    wsp.reg.regfrom = user_regfrom
     reg.get_regfrom(wsp)
-    assert(np.all(user_regfrom.data == wsp.regfrom.data))
+    assert(np.all(user_regfrom.data == wsp.reg.regfrom.data))
 
 def test_get_regfrom_asldata_mean():
     """
@@ -40,13 +40,13 @@ def test_get_regfrom_asldata_mean():
     """
     wsp = get_wsp()
     reg.get_regfrom(wsp)
-    assert(np.all(wsp.asldata_mean_brain.data == wsp.regfrom.data))
+    assert(np.all(wsp.asl.mean_brain.data == wsp.reg.regfrom.data))
 
 def test_get_regfrom_calib():
     """
     Test brain extracted calibration image is used if mean ASL data not available
     """
     wsp = get_wsp()
-    wsp.asldata_mean_brain = None
+    wsp.asl.mean_brain = None
     reg.get_regfrom(wsp)
-    assert(np.all(wsp.calib_brain.data == wsp.regfrom.data))
+    assert(np.all(wsp.calibration.brain.data == wsp.reg.regfrom.data))

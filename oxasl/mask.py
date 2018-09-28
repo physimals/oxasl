@@ -38,6 +38,10 @@ def generate_mask(wsp):
      - ``calib``   : Calibration image
      - ``regfrom`` : ASL registration source image
     """
+    if wsp.isdone("generate_mask"):
+        return
+
+    wsp.sub("rois")
     reg.get_regfrom(wsp)
 
     # Reporting
@@ -45,25 +49,24 @@ def generate_mask(wsp):
     wsp.report.add("mask", page)
     page.heading("Mask generation", level=0)
 
-    if wsp.mask is not None:
-        wsp.mask_src = "user"
-        mask_source = "provided by user (assumed to be ASL space): %s" % wsp.mask.name
-    elif wsp.struc is not None:
+    if wsp.rois.mask is not None:
+        wsp.rois.mask_src = "user"
+        mask_source = "provided by user (assumed to be ASL space): %s" % wsp.rois.mask.name
+        wsp.rois.mask = wsp.mask
+    elif wsp.structural.struc is not None:
         # Preferred option is to use brain extracted structural
-        wsp.mask_src = "struc"
-        struc.preproc_struc(wsp)
+        wsp.rois.mask_src = "struc"
+        struc.init(wsp)
         page.heading("Brain extracted structural image", level=1)
         page.image("struc_brain.png")
-        wsp.report.add("struc_brain", LightboxImage(wsp.struc_brain, bgimage=wsp.struc))
-        wsp.do_flirt, wsp.do_bbr = True, False # FIXME
-        reg.reg_asl2struc(wsp)
-        brain_mask_asl = fsl.applyxfm(wsp.struc_brain_mask, wsp.regfrom, wsp.struc2asl, out=fsl.LOAD, interp="trilinear", log=wsp.fsllog)["out"]
-        wsp.mask = fsl.fslmaths(brain_mask_asl).thr(0.25).bin().fillh().run()
-        mask_source = "generated from brain extracting structural image and registering to ASL space: %s" % wsp.struc.name
+        wsp.report.add("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
+        brain_mask_asl = reg.struc2asl(wsp, wsp.structural.brain_mask)
+        wsp.rois.mask = fsl.fslmaths(brain_mask_asl).thr(0.25).bin().fillh().run()
+        mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
-        wsp.mask_src = "regfrom"
-        wsp.mask = fsl.fslmaths(wsp.regfrom).bin().run()
+        wsp.rois.mask_src = "regfrom"
+        wsp.rois.mask = fsl.fslmaths(wsp.reg.regfrom).bin().run()
         mask_source = "generated from brain extracted registration ASL image"
     
     wsp.log.write("\nGenerated ASL data mask\n")
@@ -71,9 +74,10 @@ def generate_mask(wsp):
     
     page.heading("Masked ASL brain image", level=1)
     page.text("Mask was %s" % mask_source)
-    page.text("Mean ASL image masked by ASL-space mask")
+    page.text("PW ASL image masked by ASL-space mask")
     page.image("mask_img.png")
-    wsp.report.add("mask_img", LightboxImage(wsp.asldata_mean, mask=wsp.mask, bgimage=wsp.asldata_mean))
+    wsp.report.add("mask_img", LightboxImage(wsp.asl.data.perf_weighted(), mask=wsp.rois.mask, bgimage=wsp.asl.data.perf_weighted()))
+    wsp.done("generate_mask")
 
 def main():
     """
@@ -103,7 +107,7 @@ def main():
         
         if wsp.output is None:
             wsp.output = wsp.asldata.name + "_mask"
-        wsp.mask.save(wsp.output)
+        wsp.rois.mask.save(wsp.output)
 
     except ValueError as exc:
         sys.stderr.write("ERROR: " + str(exc) + "\n")
