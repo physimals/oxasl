@@ -40,7 +40,7 @@ import numpy as np
 from fsl.wrappers import LOAD
 from fsl.data.image import Image
 
-from oxasl import __version__, __timestamp__, AslImage, Workspace, image, preproc
+from oxasl import __version__, __timestamp__, AslImage, Workspace, image
 from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 
 def basil(wsp, output_wsp=None, prefit=True):
@@ -79,13 +79,12 @@ def basil(wsp, output_wsp=None, prefit=True):
      - ``onestep`` : If True, do all inference in a single step (default: False)
      - ``basil_options`` : Optional dictionary of additional options for underlying model
     """
-    preproc.preproc_asl(wsp)
     wsp.log.write("\nRunning BASIL Bayesian modelling on ASL data\n")
     if output_wsp is None:
-        output_wsp = wsp
+        output_wsp = wsp.sub("modelling")
 
     # Single or Multi TI setup
-    if wsp.asldata.ntis == 1:
+    if wsp.asl.data.ntis == 1:
         # Single TI data - don't try to infer arterial component of bolus duration, we don't have enough info
         wsp.log.write(" - Operating in Single TI mode - no arterial component, fixed bolus duration\n")
         wsp.inferart = False
@@ -99,7 +98,7 @@ def basil(wsp, output_wsp=None, prefit=True):
         bat_default = 0.0
     else:
         t1_default = 1.3
-        if wsp.asldata.casl:
+        if wsp.asl.data.casl:
             bat_default = 1.3
         else:
             bat_default = 0.7
@@ -111,26 +110,27 @@ def basil(wsp, output_wsp=None, prefit=True):
         
     # if we are doing CASL then fix the bolus duration, unless explicitly told us otherwise
     if wsp.infertau is None: 
-        wsp.infertau = not wsp.asldata.casl
+        wsp.infertau = not wsp.asl.data.casl
 
     # Pick up extra BASIL options
-    extra_options = wsp.ifnone("basil_options", {})
+    extra_options = dict(wsp.ifnone("basil_options", {}))
 
-    if prefit and max(wsp.asldata.rpts) > 1:
+    if prefit and max(wsp.asl.data.rpts) > 1:
         # Initial BASIL run on mean data
         wsp.log.write(" - Doing initial fit on mean at each TI\n\n")
         init_wsp = output_wsp.sub("init")
         main_wsp = output_wsp.sub("main")
-        basil_fit(wsp, wsp.asldata_mean_across_repeats, output_wsp=init_wsp, **extra_options)
-        wsp.initmvn = output_wsp.init.finalstep.finalMVN
+        basil_fit(wsp, wsp.asl.data.mean_across_repeats(), mask=wsp.rois.mask, output_wsp=init_wsp, **extra_options)
+        extra_options["continue-from-mvn"] = output_wsp.init.finalstep.finalMVN
+        main_wsp.initmvn = extra_options["continue-from-mvn"]
     else:
         main_wsp = output_wsp
 
     # Main run on full ASL data
     wsp.log.write("\n - Doing fit on full ASL data\n\n")
-    basil_fit(wsp, wsp.asldata, output_wsp=main_wsp, **extra_options)
+    basil_fit(wsp, wsp.asl.data, mask=wsp.rois.mask, output_wsp=main_wsp, **extra_options)
 
-def basil_fit(wsp, asldata, output_wsp=None, **kwargs):
+def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
     """
     Run Bayesian model fitting on ASL data
 
@@ -141,12 +141,12 @@ def basil_fit(wsp, asldata, output_wsp=None, **kwargs):
     :param output_wsp: Optional Workspace object for storing output files. If not specified
                        ``wsp`` is used instead
     """
-    steps = basil_steps(wsp, asldata, **kwargs)
+    steps = basil_steps(wsp, asldata, mask, **kwargs)
     if output_wsp is None:
         output_wsp = wsp
 
     prev_result = None
-    output_wsp.diffdata_basil = asldata.diff()
+    output_wsp.asldata_diff = asldata.diff().reorder("rt")
 
     for idx, step in enumerate(steps):
         step_wsp = output_wsp.sub("step%i" % (idx+1))
@@ -167,7 +167,7 @@ def basil_fit(wsp, asldata, output_wsp=None, **kwargs):
     output_wsp.finalstep = step_wsp
     wsp.log.write("\nEnd\n")
 
-def basil_steps(wsp, asldata, **kwargs):
+def basil_steps(wsp, asldata, mask=None, **kwargs):
     """
     Get the steps required for a BASIL run
 
@@ -182,7 +182,7 @@ def basil_steps(wsp, asldata, **kwargs):
 
     wsp.log.write("BASIL v%s\n" % __version__)
     asldata.summary(log=wsp.log)
-    asldata = asldata.diff()
+    asldata = asldata.diff().reorder("rt")
 
     # Default Fabber options for VB runs and spatial steps. Note that attributes
     # which are None (e.g. sliceband) are not passed to Fabber
@@ -201,6 +201,9 @@ def basil_steps(wsp, asldata, **kwargs):
         "save-mvn" : True,
         "save-std" : True,
     }
+
+    if mask is not None:
+        options["mask"] = mask
 
     # We choose to pass TIs (not PLDs). The asldata object ensures that
     # TIs are correctly derived from PLDs, when these are specified, by adding
@@ -234,7 +237,7 @@ def basil_steps(wsp, asldata, **kwargs):
             else:
                 datamax = wsp.diffdata_mean.data
             #datamax = fslmaths(wsp.diffdata_mean).Tmax().run()
-            brain_mag = np.mean(datamax.data[wsp.mask.data != 0])
+            brain_mag = np.mean(datamax.data[wsp.rois.mask.data != 0])
             # this will correspond to whole brain CBF (roughly) - about 0.5 of GM
             noisesd = math.sqrt(brain_mag * 2 / snr)
         else:
@@ -246,7 +249,7 @@ def basil_steps(wsp, asldata, **kwargs):
     options.update(kwargs)
    
     # Additional optional workspace arguments
-    for attr in ("t1", "t1b", "bat", "tau", "taus", "bolus", "FA", "mask", "pwm", "pgm"):
+    for attr in ("t1", "t1b", "bat", "tau", "taus", "bolus", "FA", "mask", "pwm", "pgm", "batsd"):
         value = getattr(wsp, attr)
         if value is not None:
             options[attr] = value
@@ -390,7 +393,7 @@ def basil_steps(wsp, asldata, **kwargs):
 
         if steps:
             # Add initialisaiton step for PV correction - ONLY if we have something to init from
-            steps.append(PvcInitStep({"data" : asldata, "mask" : wsp.mask, "pgm" : pgm, "pwm" : pwm}, "PVC initialisation"))
+            steps.append(PvcInitStep({"data" : asldata, "mask" : wsp.rois.mask, "pgm" : pgm, "pwm" : pwm}, "PVC initialisation"))
 
     ### --- SPATIAL MODULE ---
     if wsp.spatial:
@@ -434,7 +437,6 @@ class FabberStep(Step):
         """
         if prev_output is not None:
             self.options["continue-from-mvn"] = prev_output["finalMVN"]
-
         from .wrappers import fabber
         ret = fabber(self.options, output=LOAD, progress=log)
         log.write("\n")
@@ -507,9 +509,8 @@ class BasilOptions(OptionCategory):
         group.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
         group.add_option("--spatial", dest="spatial", help="Add step that implements adaptive spatial smoothing on CBF", action="store_true", default=False)
         group.add_option("--fast", dest="fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
-        # FIXME not implemented
-        #group.add_option("--noiseprior", help="Use an informative prior for the noise estimation", action="store_true", default=False)
-        #group.add_option("--noisesd", help="Set a custom noise std. dev. for the nosie prior", type=float)
+        group.add_option("--noiseprior", help="Use an informative prior for the noise estimation", action="store_true", default=False)
+        group.add_option("--noisesd", help="Set a custom noise std. dev. for the nosie prior", type=float)
         groups.append(group)
 
         group = IgnorableOptionGroup(parser, "Model options", ignore=self.ignore)
