@@ -13,7 +13,7 @@ import numpy as np
 
 import fsl.wrappers as fsl
 
-from oxasl import __version__, Workspace, calib, preproc, struc, brain
+from oxasl import __version__, Workspace, struc, brain
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.wrappers import epi_reg
 
@@ -45,29 +45,24 @@ def get_regfrom(wsp):
 
     wsp.sub("reg")
     wsp.log.write("\nGetting image to use for ASL->structural registration)\n")
-    calib.init(wsp)
-    preproc.init(wsp)
     if wsp.regfrom is not None:
         wsp.log.write(" - Registration reference image supplied by user\n")
         wsp.reg.regfrom = wsp.regfrom
-    elif wsp.asl.data.iaf in ("tc", "ct"):
+    elif wsp.asldata.iaf in ("tc", "ct"):
         wsp.log.write(" - Registration reference is mean ASL signal (brain extracted)\n")
-        wsp.reg.regfrom = brain.brain(wsp, wsp.asl.data.mean(), thresh=0.2)
-    elif wsp.calibration.calib_asl is not None:
+        wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
+    elif wsp.calib is not None:
         wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
-        wsp.reg.regfrom = brain.brain(wsp, wsp.calibration.calib_asl, thresh=0.2)
+        wsp.reg.regfrom = brain.brain(wsp, wsp.calib, thresh=0.2)
     else:
-        wsp.log.write(" - Registration reference is mean subtracted ASL image (brain extracted)\n")
-        wsp.reg.regfrom = brain.brain(wsp, wsp.asl.data.diff().mean(), thresh=0.2)
+        wsp.log.write(" - Registration reference is mean ASL image (brain extracted)\n")
+        wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
 
     wsp.done("get_regfrom")
 
 def reg_asl2calib(wsp):
     # FIXME If not already registered, assume in ASL space
-    if wsp.calibration.calib_asl is None:
-        wsp.calibration.calib_asl = wsp.calib
-        wsp.calibration.cblip_asl = wsp.calib
-        wsp.calibration.cref_asl = wsp.calib
+    pass
 
 def reg_asl2struc(wsp, flirt=True, bbr=False):
     """
