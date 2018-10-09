@@ -33,7 +33,6 @@ Copyright (c) 2008-2018 University of Oxford
 
 import sys
 import math
-import os
 
 import numpy as np
 
@@ -84,7 +83,7 @@ def basil(wsp, output_wsp=None, prefit=True):
         output_wsp = wsp.sub("modelling")
 
     # Single or Multi TI setup
-    if wsp.asl.data.ntis == 1:
+    if wsp.asldata.ntis == 1:
         # Single TI data - don't try to infer arterial component of bolus duration, we don't have enough info
         wsp.log.write(" - Operating in Single TI mode - no arterial component, fixed bolus duration\n")
         wsp.inferart = False
@@ -98,7 +97,7 @@ def basil(wsp, output_wsp=None, prefit=True):
         bat_default = 0.0
     else:
         t1_default = 1.3
-        if wsp.asl.data.casl:
+        if wsp.asldata.casl:
             bat_default = 1.3
         else:
             bat_default = 0.7
@@ -107,20 +106,20 @@ def basil(wsp, output_wsp=None, prefit=True):
     if wsp.t1b is None: wsp.t1b = 1.65
     if wsp.bat is None: wsp.bat = bat_default
     if wsp.infertiss is None: wsp.infertiss = True
-        
+    
     # if we are doing CASL then fix the bolus duration, unless explicitly told us otherwise
     if wsp.infertau is None: 
-        wsp.infertau = not wsp.asl.data.casl
+        wsp.infertau = not wsp.asldata.casl
 
     # Pick up extra BASIL options
     extra_options = dict(wsp.ifnone("basil_options", {}))
 
-    if prefit and max(wsp.asl.data.rpts) > 1:
+    if prefit and max(wsp.asldata.rpts) > 1:
         # Initial BASIL run on mean data
         wsp.log.write(" - Doing initial fit on mean at each TI\n\n")
         init_wsp = output_wsp.sub("init")
         main_wsp = output_wsp.sub("main")
-        basil_fit(wsp, wsp.asl.data.mean_across_repeats(), mask=wsp.rois.mask, output_wsp=init_wsp, **extra_options)
+        basil_fit(wsp, wsp.asldata.mean_across_repeats(), mask=wsp.rois.mask, output_wsp=init_wsp, **extra_options)
         extra_options["continue-from-mvn"] = output_wsp.init.finalstep.finalMVN
         main_wsp.initmvn = extra_options["continue-from-mvn"]
     else:
@@ -128,7 +127,8 @@ def basil(wsp, output_wsp=None, prefit=True):
 
     # Main run on full ASL data
     wsp.log.write("\n - Doing fit on full ASL data\n\n")
-    basil_fit(wsp, wsp.asl.data, mask=wsp.rois.mask, output_wsp=main_wsp, **extra_options)
+    basil_fit(wsp, wsp.asldata, mask=wsp.rois.mask, output_wsp=main_wsp, **extra_options)
+    output_wsp.finalstep = main_wsp.finalstep
 
 def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
     """
@@ -158,10 +158,8 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
         for key, value in result.items():
             setattr(step_wsp, key, value)
 
-        # FIXME hack to write logfile
-        if step_wsp.logfile is not None and step_wsp._savedir is not None:
-            with open(os.path.join(step_wsp._savedir, "logfile"), "w") as tfile:
-                tfile.write(step_wsp.logfile)
+        if step_wsp.logfile is not None and step_wsp.savedir is not None:
+            step_wsp.set_item("logfile", step_wsp.logfile, save_fn=str)
 
         prev_result = result
     output_wsp.finalstep = step_wsp
@@ -200,6 +198,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         "save-mean" : True,
         "save-mvn" : True,
         "save-std" : True,
+        "save-model-fit" : True,
     }
 
     if mask is not None:
