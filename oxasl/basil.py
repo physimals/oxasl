@@ -153,7 +153,7 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
         desc = "Step %i of %i: %s" % (idx+1, len(steps), step.desc)
         if prev_result is not None:
             desc += " - Initialise with step %i" % idx
-        step_wsp.log.write(desc + "\n")
+        step_wsp.log.write(desc + "     ")
         result = step.run(prev_result, log=wsp.log)
         for key, value in result.items():
             setattr(step_wsp, key, value)
