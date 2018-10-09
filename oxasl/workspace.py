@@ -10,7 +10,8 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from .reporting import Report
+from oxasl import AslImage
+from oxasl.reporting import Report
 
 class Workspace(object):
     """
@@ -35,39 +36,69 @@ class Workspace(object):
     directly setting an attribute, as it supports a ``save`` option.
     """
 
-    def __init__(self, savedir=None, **kwargs):
+    def __init__(self, savedir=None, input_wsp="input", parent=None, defaults=("corrected", "input"), auto_asldata=False, **kwargs):
         """
         Create workspace
 
         :param savedir: If specified, use this path to save data. Will be created
                         if it does not not already exist
+        :param separate_input: If True a sub workspace named 'input' will be created
+                               and initial data will be stored there. This sub workspace
+                               will also be checked by default when attributes are 
+                               requested from the main workspace.
+        :param auto_asldata: If True, automatically create an AslImage attribute 
+                             from the input keyword arguments
         :param log:     File stream to write log output to (default: sys.stdout)
         """
+        self.savedir = None
+        self._parent = parent
+        self._defaults = list(defaults)
         if savedir is not None:
-            self._savedir = os.path.abspath(savedir)
+            self.savedir = os.path.abspath(savedir)
             mkdir(savedir, log=kwargs.get("log", sys.stdout))
-        else:
-            self._savedir = None
 
         # Used to record what workspace steps have been done
         self._done = {}
 
         # Defaults - these can be overridden by kwargs
-        self.log = sys.stdout
-        self.debug = False
-        self.fsllog = None
-        self.report = Report()
+        self.log = kwargs.pop("log", sys.stdout)
+        self.debug = kwargs.pop("debug", False)
+        self.fsllog = kwargs.pop("fsllog", None)
+        self.report = kwargs.pop("report", Report())
 
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-        
         # Default log configuration for FSL wrapper commands
         if not self.fsllog:
             self.fsllog = {"stderr" : self.log}
             if self.debug:
                 self.fsllog.update({"stdout" : self.log, "cmd" : self.log})
 
+        # Set kwargs as attributes in input workspace (if configured)
+        if input_wsp:
+            self.sub(input_wsp)
+            input_wsp = self.input
+        else:
+            input_wsp = self
+
+        for key, value in kwargs.items():
+            setattr(input_wsp, key, value)
+
+        # Auto-generate ASLImage object
+        if auto_asldata:
+            if kwargs.get("asldata", None) is None:
+                raise ValueError("Input ASL file not specified\n")
+            input_wsp.asldata = AslImage(self.asldata, **kwargs)
+
     def __getattr__(self, name):
+        if name in self._defaults:
+            return None
+        for wsp in self._defaults:
+            default_wsp = getattr(self, wsp)
+            if isinstance(default_wsp, Workspace):
+                val = getattr(default_wsp, name)
+                if val is not None:
+                    return val
+        if self._parent is not None:
+            return getattr(self._parent, name)
         return None
 
     def __setattr__(self, name, value):
@@ -102,7 +133,7 @@ class Workspace(object):
         """
         return self._done.get(proc_name, False)
 
-    def set_item(self, name, value, save=True, save_name=None):
+    def set_item(self, name, value, save=True, save_name=None, save_fn=None):
         """
         Add an item to the workspace
 
@@ -119,20 +150,42 @@ class Workspace(object):
         :param save: If False, do not save item even if savedir defined
         :param save_name: If specified, alternative name to use for saving this item
         """
-        if value is not None and save and self._savedir:
+        if value is not None and save and self.savedir:
             if not save_name:
                 save_name = name
-            if isinstance(value, Image):
+            if save_fn is not None:
+                with open(os.path.join(self.savedir, save_name), "w") as tfile:
+                    tfile.write(save_fn(value))
+            elif isinstance(value, Image):
                 # Save as Nifti file
-                value.save(os.path.join(self._savedir, save_name))
+                fname = os.path.join(self.savedir, save_name)
+                value.save(fname)
                 value.name = save_name
+                if type(value) == Image:
+                    # Create fresh image to avoid data caching
+                    # NB do not want subclasses
+                    value = Image(fname, name=save_name)
+                else:
+                    # Release cached data otherwise
+                    value.nibImage.uncache()
             elif isinstance(value, np.ndarray) and value.ndim == 2:
                 # Save as ASCII matrix
-                with open(os.path.join(self._savedir, save_name), "w") as tfile:
+                with open(os.path.join(self.savedir, save_name), "w") as tfile:
                     tfile.write(matrix_to_text(value))
         super(Workspace, self).__setattr__(name, value)
 
-    def sub(self, name, **kwargs):
+    def uncache(self):
+        """
+        Release in-memory data for all images in this workspace
+        """
+        for attr in dir(self):
+            val = getattr(self, attr)
+            if isinstance(val, Image):
+                val.nibImage.uncache()
+            elif isinstance(val, Workspace) and val != self and not attr.startswith("_"):
+                val.uncache()
+
+    def sub(self, name, parent_default=False, **kwargs):
         """
         Create a sub-workspace, (i.e. a subdir of this workspace)
 
@@ -143,13 +196,22 @@ class Workspace(object):
         as an attribute on the parent workspace.
         
         :param name: Name of sub workspace
+        :param parent_default: If True, attribute values default to the parent workspace
+                               if not set on the sub-workspace 
         """
-        if self._savedir:
-            savedir = os.path.join(self._savedir, name)
+        if self.savedir:
+            savedir = os.path.join(self.savedir, name)
         else:
             savedir = None
-        setattr(self, name, Workspace(savedir=savedir, log=self.log, debug=self.debug, **kwargs))
-        return getattr(self, name)
+        
+        if parent_default:
+            parent = self
+        else:
+            parent = None
+
+        sub_wsp = Workspace(savedir=savedir, log=self.log, debug=self.debug, parent=parent, input_wsp=None, **kwargs)
+        setattr(self, name, sub_wsp)
+        return sub_wsp
 
 def matrix_to_text(mat):
     """
