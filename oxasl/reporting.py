@@ -29,6 +29,7 @@ import datetime
 import shutil
 import tempfile
 import warnings
+import subprocess
 
 import six
 import numpy as np
@@ -59,7 +60,7 @@ class LightboxImage(object):
         if img is not None:
             nonzero_slices = [idx for idx in range(shape[2]) if np.count_nonzero(img.data[:, :, idx]) > 0]
             if nonzero_slices:
-               return min(nonzero_slices), max(nonzero_slices)
+                return min(nonzero_slices), max(nonzero_slices)
         else:
             return 0, shape[2]-1
 
@@ -72,7 +73,7 @@ class LightboxImage(object):
             if img is None:
                 continue
             if not isinstance(img, Image):
-                raise ValueError("Images must be instances of fsl.data.Image: %s" % img)
+                raise ValueError("%s: Images must be instances of fsl.data.Image: %s" % (fname, img))
             if shape is None:
                 shape = img.shape
             if img.ndim != 3:
@@ -103,7 +104,7 @@ class LightboxImage(object):
                 if issubclass(data.dtype.type, np.integer):
                     cmap = "Set1"
                 else:
-                    cmap= "viridis"
+                    cmap = "viridis"
 
                 if self._mask:
                     data = np.ma.masked_array(data, self._mask.data[:, :, slice_idx].T == 0)
@@ -224,7 +225,7 @@ class Report(object):
         self.title = title
         self.extension = ""
 
-    def generate_html(self, dest_dir, build_dir=None):
+    def generate_html(self, dest_dir, build_dir=None, log=sys.stdout):
         """
         Generate an HTML report
         """
@@ -248,8 +249,15 @@ class Report(object):
             with open(os.path.join(build_dir, "conf.py"), "w") as conffile:
                 conffile.write(REPORT_CONF)
 
-            os.system('sphinx-build -M html "%s" "%s"' % (build_dir, os.path.join(build_dir, "_build")))
-
+            try:
+                result = subprocess.check_output(['sphinx-build', '-M', 'html', build_dir, os.path.join(build_dir, "_build")])
+            except OSError:
+                log.write("WARNING: sphinx-build not found, HTML report will not be generated")
+                return
+            except subprocess.CalledProcessError:
+                log.write("WARNING: sphinx-build failed, HTML report will not be generated")
+                return
+                
             if os.path.exists(dest_dir):
                 if not os.path.isdir(dest_dir):
                     raise ValueError("Report destination directory %s exists but is not a directory" % dest_dir)
