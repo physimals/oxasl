@@ -4,6 +4,7 @@ Structural data module for ASL
 Copyright (c) 2008-2018 University of Oxford
 """
 import os
+import glob
 
 import numpy as np
 
@@ -34,7 +35,6 @@ class StructuralImageOptions(OptionCategory):
         group.add_option("--csf-seg", help="CSF segmentation of structural image", type="image", default=None)
         group.add_option("--fslanat", help="FSL_ANAT output directory for structural information", default=None)
         group.add_option("--fastsrc", dest="fastsrc", help="Images from a FAST segmentation - if not set FAST will be run on structural image")
-        group.add_option("--senscorr", dest="senscorr", help="Use bias field (from segmentation) for sensitivity correction", action="store_true", default=False)
         group.add_option("--struc2std", help="Structural to MNI152 linear registration (.mat)")
         group.add_option("--struc2std-warp", help="Structural to MNI152 non-linear registration (warp)")
 
@@ -56,7 +56,7 @@ def init(wsp):
         wsp.log.write(" - Using FSL_ANAT output directory for structural data: %s\n" % wsp.fslanat)
         biascorr = os.path.join(wsp.fslanat, "T1_biascorr")
         biascorr_brain = os.path.join(wsp.fslanat, "T1_biascorr_brain")
-        if os.path.isfile(biascorr) and os.path.isfile(biascorr_brain):
+        if glob.glob(biascorr + ".*") and glob.glob(biascorr_brain + ".*"):
             wsp.log.write(" - Using bias-corrected structural images")
             wsp.structural.struc = Image(biascorr)
             wsp.structural.brain = Image(biascorr_brain)
@@ -67,10 +67,12 @@ def init(wsp):
             
         warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff")
         mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
+        import oxasl.reg as reg # FIXME
+        reg.init(wsp)
         if os.path.isfile(warp):
             wsp.reg.struc2std_warp = warp
         elif os.path.isfile(mat):
-            wsp.reg.struc2std_mat = mat
+            wsp.reg.struc2std = mat
 
     elif wsp.struc:
         wsp.log.write(" - Using structural image provided: %s\n" % wsp.structural.name)
