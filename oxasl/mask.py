@@ -38,9 +38,9 @@ def generate_mask(wsp):
      - ``calib``   : Calibration image
      - ``regfrom`` : ASL registration source image
     """
-    if wsp.isdone("generate_mask"):
+    if wsp.rois is not None and wsp.rois.mask is not None:
         return
-
+        
     wsp.sub("rois")
     reg.get_regfrom(wsp)
 
@@ -80,7 +80,6 @@ def generate_mask(wsp):
         wsp.report.add("mask_img", LightboxImage(wsp.asldata.perf_weighted(), mask=wsp.rois.mask, bgimage=wsp.asldata.perf_weighted()))
     else:
         wsp.report.add("mask_img", LightboxImage(wsp.asldata.mean(), mask=wsp.rois.mask, bgimage=wsp.asldata.mean()))
-    wsp.done("generate_mask")
 
 def main():
     """

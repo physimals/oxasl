@@ -46,7 +46,7 @@ def init(wsp):
 
     FIXME copy across all supplied structural data
     """
-    if wsp.isdone("struc.init"):
+    if wsp.structural is not None:
         return
 
     wsp.log.write("\nInitialising structural data\n")
@@ -93,12 +93,11 @@ def init(wsp):
         # different results compared to using the mask returned by BET
         wsp.structural.brain_mask = fsl.fslmaths(wsp.structural.brain).bin().run()
 
-    wsp.done("struc.init")
-
 def segment(wsp):
     """
     Segment the structural image
     """
+    init(wsp)
     if None in (wsp.structural.wm_seg, wsp.structural.gm_seg, wsp.structural.csf_seg):
         init(wsp)
         page = ReportPage()

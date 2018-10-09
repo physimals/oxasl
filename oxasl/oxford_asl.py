@@ -184,17 +184,16 @@ def oxasl_model(wsp):
         wsp.reg.regfrom = Image(new_regfrom, header=wsp.reg.regfrom.header)
         wsp.reg.asl2struc_initial = wsp.reg.asl2struc
         wsp.reg.struc2asl_initial = wsp.reg.struc2asl
-        wsp.done("reg_asl2struc", status=False)
         reg.reg_asl2struc(wsp, False, True)
 
-    # We could at this point re-apply corrections derived from structural space
+    # FIXME: We could at this point re-apply corrections derived from structural space?
+    # But would need to make sure corrections module re-transforms things like sensitivity map
     if wsp.pvcorr:
         # Partial volume correction is very sensitive to the mask, so recreate it
         # if it came from the structural image
         if wsp.mask is None and wsp.struc is not None:
-            # If mask was generated from structural image update it from new registration
             wsp.rois.mask_orig = wsp.rois.mask
-            wsp.done("generate_mask", status=False)
+            wsp.rois.mask = None
             mask.generate_mask(wsp)
 
         # Generate PVM and PWM maps for Basil

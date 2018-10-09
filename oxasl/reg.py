@@ -40,7 +40,9 @@ def get_regfrom(wsp):
 
      - ``regfrom``    : Registration reference image in ASL space
     """
-    if wsp.isdone("get_regfrom"):
+    init(wsp)
+
+    if wsp.reg.regfrom is not None:
         return
 
     wsp.sub("reg")
@@ -57,8 +59,6 @@ def get_regfrom(wsp):
     else:
         wsp.log.write(" - Registration reference is mean ASL image (brain extracted)\n")
         wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
-
-    wsp.done("get_regfrom")
 
 def reg_asl2calib(wsp):
     # FIXME If not already registered, assume in ASL space
@@ -84,9 +84,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False):
      - ``struc2asl``    : Structural->ASL transformation matrix
      - ``regto``        : ``regfrom`` image transformed to structural space
     """
-    if wsp.isdone("reg_asl2struc"):
-        return
-
+    init(wsp)
     struc.init(wsp)
     if wsp.structural.struc is not None:
         get_regfrom(wsp)
@@ -103,8 +101,6 @@ def reg_asl2struc(wsp, flirt=True, bbr=False):
         wsp.log.write(" - Structural->ASL transform\n")
         wsp.log.write(str(wsp.reg.struc2asl) + "\n")
 
-    wsp.done("reg_asl2struc")
-
 def reg_struc2std(wsp, fnirt=False):
     """
     Determine structural -> standard space registration
@@ -120,9 +116,6 @@ def reg_struc2std(wsp, fnirt=False):
      - ``std2struc``    : MNI->structural transformation - either warp image or FLIRT matrix
      - ``struc2std``    : Structural->MNI transformation matrix - either warp image or FLIRT matrix
     """
-    if wsp.isdone("reg_struc2std"):
-        return
-
     wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
     flirt_result = fsl.flirt(wsp.structural.struc, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
     wsp.reg.struc2std = flirt_result["omat"]
@@ -136,8 +129,6 @@ def reg_struc2std(wsp, fnirt=False):
         # Calculate the inverse warp using INVWARP
         invwarp_result = fsl.invwarp(wsp.structural.struc, wsp.reg.struc2std_warp, out=fsl.LOAD)
         wsp.reg.std2struc = invwarp_result["out"]
-
-    wsp.done("reg_struc2std")
 
 def struc2asl(wsp, img, use_applywarp=False, interp="trilinear", paddingsize=1):
     """

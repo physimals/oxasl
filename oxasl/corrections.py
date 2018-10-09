@@ -379,7 +379,7 @@ def get_sensitivity_correction(wsp):
         wsp.sub("senscorr")
         wsp.senscorr.sensitivity = Image(sdata, header=sensitivity.header)
 
-        page = ReportPage()
+        page = ReportPage(wsp)
         page.heading("Sensitivity correction", level=0)
         page.heading("Sensitivity map", level=1)
         wsp.report.add("sensitivity", LightboxImage(wsp.senscorr.sensitivity))
@@ -387,6 +387,14 @@ def get_sensitivity_correction(wsp):
         wsp.report.add("sensitivity", page)
 
     wsp.done("get_sensitivity_correction")
+
+def SensitivityReport(ReportPage):
+    def generate(self, report):
+        self.heading("Sensitivity correction", level=0)
+        self.heading("Sensitivity map", level=1)
+        self.image("sensitivity.png")
+        report.add("sensitivity", LightboxImage(self.wsp.senscorr.sensitivity, mask=self.wsp.rois.mask))
+        report.add("sensitivity", self)
 
 def apply_corrections(wsp):
     """
@@ -427,7 +435,7 @@ def apply_corrections(wsp):
     wsp.corrected.cref = single_volume(wsp, wsp.input.cref)
     wsp.corrected.cblip = single_volume(wsp, wsp.input.cblip)
     
-    wsp.log.write(" - Applying data transformations\n")
+    wsp.log.write(" - Data transformations\n")
     if wsp.moco is not None:
         wsp.log.write("   - Using motion correction\n")
 
@@ -534,7 +542,7 @@ def correct_img(wsp, img, linear_mat):
     warp_result = fsl.applywarp(img, ref=wsp.corrected.asldata, out=fsl.LOAD, warp=wsp.distcorr.warp, premat=linear_mat, super=True, superlevel="a", interp="trilinear", paddingsize=1, rel=True)
     img = warp_result["out"]
     if wsp.distcorr.jacobian is not None:
-        wsp.log.write(" - Correcting for local volume scaling using Jacobian\n")
+        wsp.log.write("   - Correcting for local volume scaling using Jacobian\n")
         jdata = wsp.distcorr.jacobian.data
         if img.data.ndim == 4:
             # Required to make broadcasting work
