@@ -12,18 +12,6 @@ import fsl.wrappers as fsl
 from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup
 from .image import AslImage, AslImageOptions
 
-def init(wsp):
-    """
-    Preprocessing on the main ASL data - calculate averaged images and run brain extraction
-    """
-    if wsp.isdone("asl.init"):
-        return
-
-    wsp.sub("asl")
-    wsp.log.write("\nInitializing ASL data: %s\n" % wsp.asldata.name)
-    wsp.asl.data = wsp.asldata
-    wsp.done("asl.init")
-
 def preprocess(asldata, diff=False, reorder=None, mc=False, smooth=False, fwhm=None, ref=None, log=sys.stdout):
     """
     Basic preprocessing of ASL data
