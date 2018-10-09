@@ -76,7 +76,10 @@ def generate_mask(wsp):
     page.text("Mask was %s" % mask_source)
     page.text("PW ASL image masked by ASL-space mask")
     page.image("mask_img.png")
-    wsp.report.add("mask_img", LightboxImage(wsp.asl.data.perf_weighted(), mask=wsp.rois.mask, bgimage=wsp.asl.data.perf_weighted()))
+    if wsp.asldata.iaf in ("diff", "tc", "ct"):
+        wsp.report.add("mask_img", LightboxImage(wsp.asldata.perf_weighted(), mask=wsp.rois.mask, bgimage=wsp.asldata.perf_weighted()))
+    else:
+        wsp.report.add("mask_img", LightboxImage(wsp.asldata.mean(), mask=wsp.rois.mask, bgimage=wsp.asldata.mean()))
     wsp.done("generate_mask")
 
 def main():
