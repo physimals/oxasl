@@ -18,41 +18,13 @@ import scipy.ndimage
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from oxasl import Workspace, struc
+from oxasl import Workspace, struc, reg
 from oxasl.image import summary
 from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 from oxasl.reporting import ReportPage, LightboxImage
 
 def init(wsp):
-    """
-    Preprocess calibration images
-    """
-    if wsp.isdone("calib.init"):
-        return
-
     wsp.sub("calibration")
-    for img_type in ("calib", "cblip", "cref"):
-        if getattr(wsp, img_type) is not None:
-            img = getattr(wsp, img_type)
-            wsp.log.write("\nPre-processing calibration image: %s (%s)\n" % (img.name, img_type))
-            data = img.data
-            if img.ndim == 4:
-                if img.shape[3] > 1:
-                    wsp.log.write(" - Removing first volume to ensure data is in steady state\n")
-                    data = data[..., :-1]
-                
-                if data.shape[3] > 1:
-                    if wsp.moco:
-                        wsp.log.write(" - Motion correcting\n")
-                        data = fsl.mcflirt(data, out=fsl.LOAD, log=wsp.fsllog)
-        
-                wsp.log.write(" - Taking mean across time axis\n")
-                data = np.mean(data, axis=-1)
-
-            img = Image(data, name=img_type, header=img.header)
-            setattr(wsp.calibration, img_type, img)
-
-    wsp.done("calib.init")
 
 def calibrate(wsp, perf_img, var=False):
     """
@@ -81,20 +53,25 @@ def calibrate(wsp, perf_img, var=False):
     Additional optional and mandatory attributes may be required for different methods - see :ref get_m0_voxelwise:
     and :ref get_m0_refregion: functions for details.
     """
-    wsp.log.write("\nCalibrating perfusion data\n")
 
     if not perf_img:
         raise ValueError("Perfusion data cannot be None")
-    if not wsp.calibration.calib:
+    if not wsp.calib:
         raise ValueError("No calibration data supplied")
         
-    if wsp.calib_method == "voxelwise":
-        m0 = get_m0_voxelwise(wsp)
-    elif wsp.calib_method == "refregion":
-        m0 = get_m0_refregion(wsp)
-    else:
-        raise ValueError("Unknown calibration method: %s" % wsp.calib_method)
+    if wsp.m0 is None:
+        wsp.log.write("\nCalibration - calculating M0\n")
+        if wsp.calib_method == "voxelwise":
+            wsp.m0 = get_m0_voxelwise(wsp)
+        elif wsp.calib_method in ("refregion", "single"):
+            wsp.m0 = get_m0_refregion(wsp)
+        elif wsp.calib_method == "wholebrain":
+            wsp.m0 = get_m0_wholebrain(wsp)
+        else:
+            raise ValueError("Unknown calibration method: %s" % wsp.calib_method)
 
+    wsp.log.write("\nCalibrating perfusion data: %s\n" % perf_img.name)
+    m0 = wsp.m0
     multiplier = wsp.ifnone("multiplier", 1)
     if var:
         wsp.log.write(" - Treating data as variance - squaring M0 correction and multiplier\n")
@@ -116,13 +93,11 @@ def calibrate(wsp, perf_img, var=False):
     
     # Reporting
     page = ReportPage()
-    wsp.report.add("calib", page)
-    page.heading("Calibration")
-
-    page.heading("Perfusion Image: %s" % perf_img.name, level=1)
+    wsp.report.add(perf_calib.name, page)
+    page.heading("Calibration of image: %s" % perf_calib.name)
     page.text("Multiplier for physical units: %f" % multiplier)
-    page.image("perfusion_calib.png")
-    wsp.report.add("perfusion_calib", LightboxImage(perf_calib))
+    wsp.report.add("%s_img" % perf_calib.name, LightboxImage(perf_calib))
+    page.image("%s_img.png" % perf_calib.name)
     # FIXME link to detailed calibration report
 
     return perf_calib
@@ -151,7 +126,7 @@ def get_m0_voxelwise(wsp):
     alpha, gain, pct = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1), wsp.ifnone("pct", 0.9)
 
     # Calculate M0 value
-    m0 = wsp.calibration.calib.data * alpha * gain
+    m0 = wsp.calib.data * alpha * gain
 
     shorttr = 1
     if wsp.tr is not None and wsp.tr < 5:
@@ -167,12 +142,13 @@ def get_m0_voxelwise(wsp):
     m0 /= pct
 
     if wsp.rois.mask is not None:
-        if wsp.calib_edgecorr:
+        if wsp.ifnone("calib_edgecorr", True):
             wsp.log.write(" - Doing edge correction\n")
-            m0 = _edge_correct(m0, wsp.brain_mask)
+            m0 = _edge_correct(m0, wsp.rois.mask)
         wsp.log.write(" - Masking M0 image")
         m0[wsp.rois.mask.data == 0] = 0
 
+    wsp.calibration.m0 = Image(m0, header=wsp.calib.header)
     wsp.log.write(" - Mean M0: %f\n" % np.mean(m0))
 
     # Reporting
@@ -191,12 +167,11 @@ def get_m0_voxelwise(wsp):
 
     page.heading("M0", level=1)
     page.text("M0 values obtained by multiplying calibration image by %f" % (alpha*gain/shorttr/pct))
-    page.text("Mean M0 value: %f" % np.mean(m0))
-    if wsp.rois.mask is not None:
-        page.text("M0 image was masked using current mask")
-        if wsp.edgecorr:
-            page.text("Edge correction was used on mask")
-        page.text("Mean M0 value (within mask): %f" % np.mean(m0[wsp.rois.mask.data > 0]))
+    page.text("Mean M0 value (within mask): %f" % np.mean(m0[wsp.rois.mask.data > 0]))
+    if wsp.rois.mask is not None and wsp.edgecorr:
+        page.text("Edge correction was used")
+    wsp.report.add("m0img", LightboxImage(wsp.calibration.m0))
+    page.image("m0img.png")
     wsp.report.add("m0", page)
 
     return m0
@@ -243,6 +218,69 @@ def _masked_mean(vals):
             return 0
     else:
         return voxel_val
+
+def get_m0_wholebrain(wsp):
+    """
+    Get a whole-brain M0 value
+
+    This calculates an M0 map for the whole brain using the T1, T2 and PC
+    values for each tissue type with the contribution at each voxel weighted 
+    by the tissue partial volume
+    """
+    wsp.log.write(" - Doing wholebrain region calibration\n")
+
+    tr = wsp.ifnone("tr", 3.2)
+    te = wsp.ifnone("te", 0)
+    taq = wsp.ifnone("taq", 0)
+    wsp.log.write(" - Using TE=%f, TR=%f, TAQ=%f\n" % (te, tr, taq))
+
+    t2star = wsp.ifnone("t2star", False)
+    if t2star:
+        # From Petersen 2006 MRM 55(2):219-232 see discussion
+        t2b = 50
+    else:
+        # From Lu et al. 2012 MRM 67:42-49 have 154ms at 3T during normoxia
+        t2b = 150
+
+    # Check the data and masks
+    calib_data = np.copy(wsp.calib.data)
+    brain_mask = wsp.rois.mask.data
+    
+    ### Sensitivity image calculation (if we have a sensitivity image)
+    if wsp.sens:
+        wsp.log.write(" - Using sensitivity image: %s\n" % wsp.sens.name)
+        calib_data /= wsp.sens.data
+    
+    m0 = np.zeros(calib_data.shape, dtype=np.float)
+    for tiss_type in ("wm", "gm", "csf"):
+        pve_struc = getattr(wsp.structural, "%s_pv" % tiss_type)
+        wsp.log.write(" - Transforming %s tissue PVE into ASL space\n" % tiss_type)
+        pve = reg.struc2asl(wsp, pve_struc)
+        t1r, t2r, t2rstar, pcr = tissue_defaults(tiss_type)
+        if t2star:
+            t2r = t2rstar
+        t1_corr = 1 / (1 - math.exp(- (tr - taq) / t1r))
+        t2_corr = 1 / math.exp(- te / t2r)
+        wsp.log.write("Correction factors: T1: %f, T2 %f, PC: %f" % (t1_corr, t2_corr, pcr))
+        tiss_m0 = calib_data * t1_corr * t2_corr / pcr
+        wsp.log.write(" - Mean %s M0: %f (weighted by PV)\n" % (tiss_type, np.average(tiss_m0, weights=pve.data)))
+        tiss_m0 *= pve.data
+        setattr(wsp.calibration, "m0_img_%s" % tiss_type, Image(tiss_m0, header=wsp.calib.header))
+        m0 += tiss_m0
+
+    m0 = m0 * math.exp(- te / t2b)
+    alpha, gain = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1)
+    if gain != 1:
+        wsp.log.write(" - Applying calibration gain: %f\n" % gain)
+        m0 = m0 * gain
+    if alpha != 1:
+        wsp.log.write(" - Applying inversion efficiency of: %f\n" % alpha)
+        m0 = m0 * alpha
+
+    wsp.calibration.m0_img = Image(m0, header=wsp.calib.header)
+    m0 = np.mean(m0[brain_mask != 0])
+    wsp.log.write(" - M0 of brain: %f\n" % m0)
+    return m0
 
 def get_m0_refregion(wsp, mode="longtr"):
     """
@@ -338,7 +376,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     wsp.log.write(" - T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pcr))
 
     # Check the data and masks
-    calib_data = np.copy(wsp.calibration.calib.data)
+    calib_data = np.copy(wsp.calib.data)
     if calib_data.ndim == 4:
         wsp.log.write(" - Taking mean across calibration images\n")
         calib_data = np.mean(calib_data, -1)
@@ -346,7 +384,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     if wsp.rois.mask is not None:
         brain_mask = wsp.rois.mask.data
     else:
-        brain_mask = np.ones(wsp.calibration.calib.shape[:3])
+        brain_mask = np.ones(wsp.calib.shape[:3])
 
     if wsp.ref_mask is not None:
         wsp.log.write(" - Using supplied reference tissue mask: %s\n" % wsp.ref_mask.name)
@@ -405,7 +443,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         # NB only do the fit in the CSF mask
         # FIXME this is not functional at the moment
         options = {
-            "data" : wsp.calibration.calib,
+            "data" : wsp.calib,
             "mask" : ref_mask,
             "method" : "vb",
             "noise" : "white",
@@ -584,14 +622,14 @@ def get_tissref_mask(wsp):
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
     # New conversion using applywarp, supersmapling and integration
-    result = fsl.applywarp(wsp.calibration.refpve, ref=wsp.asl.data, out=fsl.LOAD, premat=wsp.reg.struc2asl, super=True, interp="spline", superlevel=4)
-    #result = fsl.applyxfm(wsp.calibration.refpve, ref=wsp.asl.data, mat=wsp.reg.struc2asl, out=fsl.LOAD)
+    result = fsl.applywarp(wsp.calibration.refpve, ref=wsp.asldata, out=fsl.LOAD, premat=wsp.reg.struc2asl, super=True, interp="spline", superlevel=4)
+    #result = fsl.applyxfm(wsp.calibration.refpve, ref=wsp.asldata, mat=wsp.reg.struc2asl, out=fsl.LOAD)
     wsp.calibration.refpve_calib = result["out"]
-    wsp.calibration.refpve_calib.data[wsp.calibration.refpve_calib.data < 0.001] = 0 # Better for display
+    #wsp.calibration.refpve_calib.data[wsp.calibration.refpve_calib.data < 0.001] = 0 # Better for display
     page.heading("Reference region in ASL space", level=1)
     page.text("Partial volume map")
     page.image("refpve_calib.png")
-    wsp.report.add("refpve_calib", LightboxImage(wsp.calibration.refpve_calib, bgimage=wsp.calibration.calib))
+    wsp.report.add("refpve_calib", LightboxImage(wsp.calibration.refpve_calib, bgimage=wsp.calib))
 
     # Threshold reference mask conservatively to select only reference tissue
     wsp.log.write(" - Thresholding reference mask\n")
@@ -599,7 +637,7 @@ def get_tissref_mask(wsp):
 
     page.text("Reference Mask (thresholded at 0.9")
     page.image("ref_mask.png")
-    wsp.report.add("ref_mask", LightboxImage(wsp.calibration.ref_mask, bgimage=wsp.calibration.calib))
+    wsp.report.add("ref_mask", LightboxImage(wsp.calibration.ref_mask, bgimage=wsp.calib))
     page.text("Number of voxels in reference region: %i" % np.count_nonzero(wsp.calibration.ref_mask.data))
 
 TISS_DEFAULTS = {
@@ -611,6 +649,10 @@ TISS_DEFAULTS = {
 def tissue_defaults(tiss_type=None):
     """
     Get default T1, T2, T2* and PC for different tissue types
+    
+    Parameters for reference tissue type: T1, T2, T2*, partition coeffs, FAST seg ID
+    Partition coeffs based on Herscovitch and Raichle 1985 with a blood water density of 0.87
+    GM/WM T2* from Foucher 2011 JMRI 34:785-790
     
     :return: If tiss_type given, tuple of T1, T2, T2* and PC for tissue type.
              Otherwise return dictionary of tissue type name (csf, wm, gm) to tuple
@@ -636,7 +678,7 @@ class CalibOptions(OptionCategory):
         group = IgnorableOptionGroup(parser, "Calibration", ignore=self.ignore)
         group.add_option("-c", dest="calib", help="Calibration image", type="image")
         group.add_option("-i", dest="perf", help="Perfusion image for calibration, in same image space as calibration image", type="image")
-        group.add_option("--calib-method", dest="calib_method", help="Calibration method: voxelwise or refregion")
+        group.add_option("--calib-method", "--cmethod", dest="calib_method", help="Calibration method: voxelwise or refregion")
         group.add_option("--alpha", dest="calib_alpha", help="Inversion efficiency", type=float, default=1.0)
         group.add_option("--cgain", dest="calib_gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
         group.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
@@ -712,7 +754,7 @@ def main():
         wsp = Workspace(**vars(options))
 
         summary(wsp.perf)
-        summary(wsp.calibration.calib)
+        summary(wsp.calib)
 
         if wsp.output is None:
             wsp.output = "%s_calib" % wsp.perf.name
