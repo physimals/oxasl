@@ -28,11 +28,11 @@ class AslImageOptions(OptionCategory):
         group.add_option("--order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, l=labelling (tag/control/phases etc). First character is fastest varying")
         group.add_option("--tis", help="TIs as comma-separated list")
         group.add_option("--plds", help="PLDs as comma-separated list - alternative to --tis")
-        group.add_option("--ntis", help="Number of TIs (for use when processing does not require actual values)")
-        group.add_option("--nplds", help="Equivalent to --ntis")
+        group.add_option("--ntis", help="Number of TIs (for use when processing does not require actual values)", type="int")
+        group.add_option("--nplds", help="Equivalent to --ntis", type="int")
         group.add_option("--rpts", help="Variable repeats as comma-separated list, one per TI/PLD", default=None)
-        group.add_option("--nphases", help="For --iaf=mp, number of phases (assumed to be evenly spaced)", default=None)
-        group.add_option("--nenc", help="For --iaf=ve, number of encoding cycles", default=None)
+        group.add_option("--nphases", help="For --iaf=mp, number of phases (assumed to be evenly spaced)", default=None, type="int")
+        group.add_option("--nenc", help="For --iaf=ve, number of encoding cycles", type="int", default=8)
         group.add_option("--casl", help="Acquisition was pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
         group.add_option("--tau", "--taus", "--bolus", help="Bolus duration. Can be single value or comma separated list, one per TI/PLD")
         group.add_option("--slicedt", help="Timing difference between slices (ms) for 2D readout", type=float, default=0.0)
@@ -258,8 +258,11 @@ class AslImage(Image):
             self.taus = 1.8
         if isinstance(self.taus, str): self.taus = [float(tau) for tau in self.taus.split(",")]
         elif isinstance(self.taus, (float, int)): self.taus = [float(self.taus),] * self.ntis
+
+        if len(self.taus) == 1:
+            self.taus = self.taus * self.ntis
         if len(self.taus) != self.ntis:
-            raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs" % (self.ntis, len(rpts)))
+            raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs" % (self.ntis, len(self.taus)))
             
         # Labelling type. CASL/pCASL normally associated with PLDs but can pass TIs instead. 
         # However we would not expect PLDs for a non-CASL aquisition so this generates a warning
@@ -341,9 +344,9 @@ class AslImage(Image):
             raise ValueError("Can't change data format from '%s' to '%s'" % (self.iaf, iaf))
             
         input_data = self.data
-        output_data = np.zeros(self.shape, dtype=input_data.dtype)
         if input_data.ndim == 3:
             input_data = input_data[..., np.newaxis]
+        output_data = np.zeros(input_data.shape, dtype=input_data.dtype)
         tags = range(self.ntc)
         for ti in range(self.ntis):
             for rpt in range(self.rpts[ti]):    
@@ -424,36 +427,44 @@ class AslImage(Image):
             name = self.name + "_diff"
         return self.derived(image=output_data, name=name, iaf="diff", order=out_order)
 
-    def mean_across_repeats(self, name=None):
+    def mean_across_repeats(self, name=None, diff=True):
         """
         Calculate the mean ASL signal across all repeats
 
         :return: Label-control subtracted AslImage with one volume per TI/PLD
         """
-        if self.ntc > 1:
-            # Have tag-control pairs - need to diff
-            diff = self.diff()
+        if diff and self.ntc > 1:
+            # Have tag-control pairs - need to subtract
+            data = self.diff()
+            out_order = "rt"
+        elif self.ntc > 1:
+            data = self
+            out_order = "rlt"
         else:
-            diff = self
+            data = self
+            out_order = "rt"
         
         # Reorder so repeats are together saving original order. Note that
         # rt and tr are equivalent in the output but we want to preserve
         # whatever it was beforehand
-        orig_order = diff.order
-        diff = diff.reorder("rt")
-        input_data = diff.data
+        orig_order = data.order
+        data = data.reorder(out_order)
+        input_data = data.data
+        if input_data.ndim == 3:
+            input_data = input_data[..., np.newaxis]
 
-        # Create output data - one volume per ti
-        output_data = np.zeros(list(self.shape[:3]) + [self.ntis])
+        # Create output data - one repeat per ti
+        output_data = np.zeros(list(self.shape[:3]) + [self.ntis * data.ntc])
         start = 0
         for ti, nrp in enumerate(self.rpts):
-            repeat_data = input_data[..., start:start+nrp]
-            output_data[..., ti] = np.mean(repeat_data, 3)
-            start += nrp
+            for label in range(data.ntc):
+                repeat_data = input_data[..., start:start+nrp]
+                output_data[..., label+data.ntc*ti] = np.mean(repeat_data, 3)
+                start += nrp
         
         if not name:
             name = self.name + "_mean"
-        return self.derived(image=output_data, name=name, iaf="diff", order=orig_order, rpts=1)
+        return self.derived(image=output_data, name=name, iaf=data.iaf, order=orig_order, rpts=1)
 
     def mean(self, name=None):
         """
@@ -570,11 +581,10 @@ class AslImage(Image):
         if name is None:
             name = self.name
         name = name + suffix
-        derived_kwargs = {
-            "iaf" : self.iaf, "order" : self.order,
-            "ntis" : self.ntis, "tis" : self.tis, "rpts" : self.rpts,
-            "phases" : self.phases,
-        }
+        derived_kwargs = {"nenc" : self.ntc}
+        for attr in ("iaf", "order", "ntis", "tis", "rpts", "phases",
+                     "casl", "sliceband", "slicedt", "artsupp"):
+            derived_kwargs[attr] = getattr(self, attr, None)
         derived_kwargs.update(kwargs)
         try:
             return AslImage(image=image, name=name, header=self.header, **derived_kwargs)
