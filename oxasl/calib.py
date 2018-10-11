@@ -24,7 +24,21 @@ from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup,
 from oxasl.reporting import ReportPage, LightboxImage
 
 def init(wsp):
-    wsp.sub("calibration")
+    if wsp.calibration is None:
+        wsp.sub("calibration")
+
+def calculate_m0(wsp):
+    init(wsp)
+    if wsp.calibration.m0 is None:
+        wsp.log.write("\nCalibration - calculating M0\n")
+        if wsp.calibration.calib_method == "voxelwise":
+            wsp.calibration.m0 = get_m0_voxelwise(wsp)
+        elif wsp.calib_method in ("refregion", "single"):
+            wsp.calibration.m0 = get_m0_refregion(wsp)
+        elif wsp.calib_method == "wholebrain":
+            wsp.calibration.m0 = get_m0_wholebrain(wsp)
+        else:
+            raise ValueError("Unknown calibration method: %s" % wsp.calib_method)
 
 def calibrate(wsp, perf_img, var=False):
     """
@@ -53,25 +67,15 @@ def calibrate(wsp, perf_img, var=False):
     Additional optional and mandatory attributes may be required for different methods - see :ref get_m0_voxelwise:
     and :ref get_m0_refregion: functions for details.
     """
-
     if not perf_img:
         raise ValueError("Perfusion data cannot be None")
     if not wsp.calib:
         raise ValueError("No calibration data supplied")
         
-    if wsp.m0 is None:
-        wsp.log.write("\nCalibration - calculating M0\n")
-        if wsp.calib_method == "voxelwise":
-            wsp.m0 = get_m0_voxelwise(wsp)
-        elif wsp.calib_method in ("refregion", "single"):
-            wsp.m0 = get_m0_refregion(wsp)
-        elif wsp.calib_method == "wholebrain":
-            wsp.m0 = get_m0_wholebrain(wsp)
-        else:
-            raise ValueError("Unknown calibration method: %s" % wsp.calib_method)
-
+    init(wsp)
+    calculate_m0(wsp)
     wsp.log.write("\nCalibrating perfusion data: %s\n" % perf_img.name)
-    m0 = wsp.m0
+    m0 = wsp.calibration.m0
     multiplier = wsp.ifnone("multiplier", 1)
     if var:
         wsp.log.write(" - Treating data as variance - squaring M0 correction and multiplier\n")
@@ -491,8 +495,8 @@ def get_m0_refregion(wsp, mode="longtr"):
         wsp.log.write(" - M0 of reference tissue: %f\n" % m0_value)
 
         # Save useful results
-        wsp.t1_ref = Image("%s/mean_T1t" % wsp.workdir)
-        wsp.m0_ref = Image("%s/mean_M0t" % wsp.workdir)
+        wsp.calibration.t1_ref = Image("%s/mean_T1t" % wsp.workdir)
+        wsp.calibration.m0_ref = Image("%s/mean_M0t" % wsp.workdir)
 
         # Do fabber again within whole brain to get estimated T1 of tissue and FA correction (if LL)
         # (note that we do not apply sensitivity correction to the data here - thius is 'built-into' the M0t map)
