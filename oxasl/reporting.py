@@ -121,11 +121,16 @@ class ReportPage(object):
     Simple helper class for creating documents containing ReStructuredText
     """
 
-    def __init__(self):
+    def __init__(self, wsp=None):
         self._content = ""
         self._heading_chars = "=-~+"
         self.extension = ".rst"
+        self.wsp = wsp
+        self._prepared = False
         
+    def prepare(self):
+        pass
+
     def image(self, fname):
         """
         Add a block-level image
@@ -205,10 +210,12 @@ class ReportPage(object):
         """
         Write RST content to a file
         """
+        self.prepare()
         with open(fname, "w") as rstfile:
             rstfile.write(self._content)
 
     def __str__(self):
+        self.prepare()
         return self._content
 
 class Report(object):
