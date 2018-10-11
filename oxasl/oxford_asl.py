@@ -81,9 +81,10 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
         ret.append(g)
         g = IgnorableOptionGroup(parser, "Acquisition/Data specific")
-        g.add_option("--bat", dest="bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
-        g.add_option("--t1", dest="t1", help="Tissue T1 value", type=float, default=1.3)
-        g.add_option("--t1b", dest="t1b", help="Blood T1 value", type=float, default=1.65)
+        g.add_option("--bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
+        g.add_option("--batsd", help="Bolus arrival time standard deviation", type=float)
+        g.add_option("--t1", help="Tissue T1 value", type=float, default=1.3)
+        g.add_option("--t1b", help="Blood T1 value", type=float, default=1.65)
         ret.append(g)
         g = IgnorableOptionGroup(parser, "Output options")
         g.add_option("--save-corrected", help="Save corrected input data", action="store_true", default=False)
@@ -169,7 +170,7 @@ def oxasl_preproc(wsp):
     mask.generate_mask(wsp)
 
 def oxasl_model(wsp):
-    if wsp.asldata.ntis > 1:
+    if wsp.asldata.ntis > 1 and wsp.batsd is None:
         # For multi TI/PLD data, set a more liberal prior for tissue ATT since we should be able to 
         # determine this from the data. NB this leaves the arterial BAT alone.
         wsp.batsd = 1
@@ -229,17 +230,17 @@ def do_output(wsp):
     # Always output in native space
     output_spaces = ["native", ]
     output_items = {
-        "ftiss" : ("perfusion", 6000, True),
-        "fblood" : ("aCBV", 100, True),
-        "delttiss" : ("arrival", 1, False),
-        "ftisswm" : ("perfusion_wm", 6000, True),
-        "deltwm" : ("arrival_wm", 1, False),
+        "mean_ftiss" : ("perfusion", 6000, True),
+        "mean_fblood" : ("aCBV", 100, True),
+        "mean_delttiss" : ("arrival", 1, False),
+        "mean_ftisswm" : ("perfusion_wm", 6000, True),
+        "mean_deltwm" : ("arrival_wm", 1, False),
         "modelfit" : ("modelfit", 1, False),
     }
     for space in output_spaces:
         output_wsp = wsp.sub(space)
         for fabber_output, oxasl_output in output_items.items():
-            img = wsp.basil.finalstep.ifnone("mean_%s" % fabber_output, None)
+            img = wsp.basil.finalstep.ifnone(fabber_output, None)
             if img is not None:
                 # Make negative values = 0 and ensure masked value zeroed
                 data = np.copy(img.data)
