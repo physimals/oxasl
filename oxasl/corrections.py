@@ -242,6 +242,7 @@ def get_fieldmap_correction(wsp):
         wsp.report.add("fmap_warp%i" % dim, LightboxImage(img))
         page.text("Dimension %i" % dim)
         page.image("fmap_warp%i.png" % dim)
+        #page.image("fmap_warp%i" % dim, LightboxImage(img))
     wsp.report.add("fmap", page)
 
     wsp.done("get_fieldmap_correction")
@@ -461,23 +462,22 @@ def apply_corrections(wsp):
 
     if not warps and wsp.moco is None:
         wsp.log.write("   - No corrections to apply\n")
-        return
+    else:
+        # Apply all corrections to ASL data - note that we make sure the output keeps all the ASL metadata
+        wsp.log.write("   - Applying to ASL data\n")
+        if wsp.moco is None: wsp.sub("moco") # FIXME
+        asldata_corr = correct_img(wsp, wsp.input.asldata, wsp.moco.mc_mats)
+        wsp.corrected.asldata = wsp.input.asldata.derived(asldata_corr.data)
 
-    # Apply all corrections to ASL data - note that we make sure the output keeps all the ASL metadata
-    wsp.log.write("   - Applying to ASL data\n")
-    if wsp.moco is None: wsp.sub("moco") # FIXME
-    asldata_corr = correct_img(wsp, wsp.input.asldata, wsp.moco.mc_mats)
-    wsp.corrected.asldata = wsp.input.asldata.derived(asldata_corr.data)
-
-    # Apply corrections to calibration images
-    if wsp.input.calib is not None:
-        wsp.log.write("   - Applying to calibration data\n")
-        wsp.corrected.calib = correct_img(wsp, wsp.corrected.calib, wsp.reg.calib2asl)
-    
-        if wsp.cref is not None:
-            wsp.corrected.cref = correct_img(wsp, wsp.corrected.cref, wsp.reg.calib2asl)
-        if wsp.cblip is not None:
-            wsp.corrected.cblip = correct_img(wsp, wsp.corrected.cblip, wsp.reg.calib2asl)
+        # Apply corrections to calibration images
+        if wsp.input.calib is not None:
+            wsp.log.write("   - Applying to calibration data\n")
+            wsp.corrected.calib = correct_img(wsp, wsp.corrected.calib, wsp.reg.calib2asl)
+        
+            if wsp.cref is not None:
+                wsp.corrected.cref = correct_img(wsp, wsp.corrected.cref, wsp.reg.calib2asl)
+            if wsp.cblip is not None:
+                wsp.corrected.cblip = correct_img(wsp, wsp.corrected.cblip, wsp.reg.calib2asl)
 
     if wsp.topup is not None:
         wsp.log.write(" - Adding TOPUP distortion correction\n")
