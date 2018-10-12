@@ -5,8 +5,10 @@ Workspace for executing FSL commands
 import os
 import sys
 import errno
+import six
 
 import numpy as np
+import yaml
 
 from fsl.data.image import Image
 
@@ -50,24 +52,23 @@ class Workspace(object):
                              from the input keyword arguments
         :param log:     File stream to write log output to (default: sys.stdout)
         """
-        self.savedir = None
+        self.savedir = None # Have to set this first otherwise setattr fails!
         self._parent = parent
         self._defaults = list(defaults)
+        self._stuff = {}
         if savedir is not None:
             self.savedir = os.path.abspath(savedir)
-            mkdir(savedir, log=kwargs.get("log", sys.stdout))
+            mkdir(savedir, log=self.ifnone("log", kwargs.get("log", sys.stdout)))
 
-        # Used to record what workspace steps have been done
-        self._done = {}
-
-        # Defaults - these can be overridden by kwargs
+        # Defaults - these can be overridden by kwargs but might be
+        # already defined in parent workspace
         if self.log is None:
             self.log = kwargs.pop("log", sys.stdout)
         if self.debug is None:
             self.debug = kwargs.pop("debug", False)
         if self.report is None:
             self.report = kwargs.pop("report", Report())
-
+        
         # Default log configuration for FSL wrapper commands
         if self.fsllog is None:
             self.fsllog = kwargs.pop("fsllog", None)
@@ -118,25 +119,6 @@ class Workspace(object):
             ret = alternative
         return ret
 
-    def done(self, proc_name, status=True):
-        """
-        Mark that a particular named process has been done and does not
-        need to be done again
-
-        :param proc_name: process name, should be unique
-        :param status: Done status. By default set process as done, passing
-                       ``False`` means process no longer considered done
-        """
-        self._done[proc_name] = status
-
-    def isdone(self, proc_name):
-        """
-        Has a process been done?
-
-        :return True if process has been flagged as done via the ``done`` method
-        """
-        return self._done.get(proc_name, False)
-
     def set_item(self, name, value, save=True, save_name=None, save_fn=None):
         """
         Add an item to the workspace
@@ -153,10 +135,13 @@ class Workspace(object):
         :param value: Value to set
         :param save: If False, do not save item even if savedir defined
         :param save_name: If specified, alternative name to use for saving this item
+        :param save_fn: If specified, Callable which generates string representation of
+                        value suitable for saving the item to a file
         """
         if value is not None and save and self.savedir:
             if not save_name:
                 save_name = name
+
             if save_fn is not None:
                 with open(os.path.join(self.savedir, save_name), "w") as tfile:
                     tfile.write(save_fn(value))
@@ -176,6 +161,11 @@ class Workspace(object):
                 # Save as ASCII matrix
                 with open(os.path.join(self.savedir, save_name), "w") as tfile:
                     tfile.write(matrix_to_text(value))
+            elif not name.startswith("_") and isinstance(value, (int, float, six.string_types)):
+                # Save other attributes in JSON file
+                self._stuff[name] = value
+                self._save_stuff()
+
         super(Workspace, self).__setattr__(name, value)
 
     def uncache(self):
@@ -212,10 +202,16 @@ class Workspace(object):
             parent = self
         else:
             parent = None
+            kwargs["log"] = self.log
+            kwargs["debug"] = self.debug
 
-        sub_wsp = Workspace(savedir=savedir, log=self.log, debug=self.debug, parent=parent, input_wsp=None, **kwargs)
+        sub_wsp = Workspace(savedir=savedir, parent=parent, input_wsp=None, **kwargs)
         setattr(self, name, sub_wsp)
         return sub_wsp
+
+    def _save_stuff(self):
+        with open(os.path.join(self.savedir, "_oxasl.yml"), "w") as tfile:
+            yaml.dump(self._stuff, tfile, default_flow_style=False)
 
 def matrix_to_text(mat):
     """
