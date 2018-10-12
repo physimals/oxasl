@@ -121,21 +121,20 @@ class ReportPage(object):
     Simple helper class for creating documents containing ReStructuredText
     """
 
-    def __init__(self, wsp=None):
+    def __init__(self, name, report, **kwargs):
+        self._name = name
+        self._report = report
         self._content = ""
         self._heading_chars = "=-~+"
         self.extension = ".rst"
-        self.wsp = wsp
         self._prepared = False
-        
-    def prepare(self):
-        pass
 
-    def image(self, fname):
+    def image(self, name, img_obj):
         """
         Add a block-level image
         """
-        self._content += ".. image:: %s\n\n" % fname
+        self._report.add(name, img_obj)
+        self._content += ".. image:: %s%s\n\n" % (name, img_obj.extension)
         
     def text(self, txt):
         """
@@ -210,12 +209,10 @@ class ReportPage(object):
         """
         Write RST content to a file
         """
-        self.prepare()
         with open(fname, "w") as rstfile:
             rstfile.write(self._content)
 
     def __str__(self):
-        self.prepare()
         return self._content
 
 class Report(object):
@@ -290,6 +287,11 @@ class Report(object):
         for fname, content in self._files.items():
             content.tofile(os.path.join(build_dir, fname))
 
+    def page(self, name, overwrite=False, **kwargs):
+        page = ReportPage(name, report=self, **kwargs)
+        self.add(name, page, overwrite)
+        return page
+
     def add(self, name, content, overwrite=False):
         """
         Add content to a report
@@ -298,16 +300,22 @@ class Report(object):
         :param content: Content object which has ``extension`` attribute and supports ``tofile()`` method
         :param overwrite: If True, and content already exists with the same ``name`` and extension, 
                           replace content. Otherwise an exception is thrown.
+
+        :return: Name given to the object in the report. If ``overwrite=True`` this will be the same as ``name``
         """
         fname = name + content.extension
-        if not overwrite and fname in self._files:
-            raise ValueError("Content with file name '%s' already exists and overwrite=False" % fname)
+        if not overwrite:
+            idx = 2
+            while fname in self._files:
+                name = name + "_%i" % idx
+                fname = name + content.extension
 
         self._files[fname] = content
         if isinstance(content, ReportPage):
             self._contents.append(name)
         if isinstance(content, Report):
             self._contents.append(name + "/index")
+        return name
 
     def _timings(self, indexfile):
         if self._start_time:
@@ -371,12 +379,9 @@ def main():
     Simple command line for testing
     """
     report = Report()
-    report.add("lbox", LightboxImage(*[Image(fname) for fname in sys.argv[1:]]))
-
-    page = ReportPage()
-    page.image("lbox.png")
-    report.add("test", page)
-
+    page = report.page("test")
+    page.image("lbox", LightboxImage(*[Image(fname) for fname in sys.argv[1:]]))
+    
     report.generate_html("testreport")
 
 if __name__ == "__main__":
