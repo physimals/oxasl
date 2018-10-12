@@ -11,6 +11,7 @@ import sys
 
 import numpy as np
 
+from fsl.data.image import Image
 import fsl.wrappers as fsl
 
 from oxasl import __version__, Workspace, struc, brain
@@ -18,6 +19,9 @@ from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, Ignor
 from oxasl.wrappers import epi_reg
 
 def init(wsp):
+    """
+    Create registration sub-workspace if not already there
+    """
     if wsp.reg is None:
         wsp.sub("reg")
 
@@ -27,7 +31,6 @@ def get_regfrom(wsp):
 
     Regfrom defines the 'native' space 
     
-    FIXME can only 
     Optional workspace attributes
     -----------------------------
 
@@ -42,23 +45,20 @@ def get_regfrom(wsp):
     """
     init(wsp)
 
-    if wsp.reg.regfrom is not None:
-        return
-
-    wsp.sub("reg")
-    wsp.log.write("\nGetting image to use for ASL->structural registration)\n")
-    if wsp.regfrom is not None:
-        wsp.log.write(" - Registration reference image supplied by user\n")
-        wsp.reg.regfrom = wsp.regfrom
-    elif wsp.asldata.iaf in ("tc", "ct"):
-        wsp.log.write(" - Registration reference is mean ASL signal (brain extracted)\n")
-        wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
-    elif wsp.calib is not None:
-        wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
-        wsp.reg.regfrom = brain.brain(wsp, wsp.calib, thresh=0.2)
-    else:
-        wsp.log.write(" - Registration reference is mean ASL image (brain extracted)\n")
-        wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
+    if wsp.reg.regfrom is None:
+        wsp.log.write("\nGetting image to use for ASL->structural registration)\n")
+        if wsp.regfrom is not None:
+            wsp.log.write(" - Registration reference image supplied by user\n")
+            wsp.reg.regfrom = wsp.regfrom
+        elif wsp.asldata.iaf in ("tc", "ct"):
+            wsp.log.write(" - Registration reference is mean ASL signal (brain extracted)\n")
+            wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
+        elif wsp.calib is not None:
+            wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
+            wsp.reg.regfrom = brain.brain(wsp, wsp.calib, thresh=0.2)
+        else:
+            wsp.log.write(" - Registration reference is mean ASL image (brain extracted)\n")
+            wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
 
 def reg_asl2calib(wsp):
     # FIXME If not already registered, assume in ASL space
@@ -105,30 +105,48 @@ def reg_struc2std(wsp, fnirt=False):
     """
     Determine structural -> standard space registration
     
-    Required workspace attributes
+    Optional workspace attributes
     -----------------------------
 
-     - ``struc``              : Structural image
+     - ``structural.struc``   : Structural image
+     - ``fslanat``            : Path to existing FSLANAT data
 
     Updated workspace attributes
     ----------------------------
 
-     - ``std2struc``    : MNI->structural transformation - either warp image or FLIRT matrix
-     - ``struc2std``    : Structural->MNI transformation matrix - either warp image or FLIRT matrix
+     - ``reg.struc2std``    : Structural->MNI transformation matrix - either warp image or FLIRT matrix
+     - ``reg.std2struc``    : MNI->structural transformation - either warp image or FLIRT matrix
     """
-    wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
-    flirt_result = fsl.flirt(wsp.structural.struc, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
-    wsp.reg.struc2std = flirt_result["omat"]
-    wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
+    init(wsp)
+
+    if wsp.reg.std2struc is not None:
+        return
     
-    if fnirt:
-        wsp.log.write(" - Registering structural image to standard space using FNIRT\n")
-        fnirt_result = fsl.fnirt(wsp.structural.struc, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
-        wsp.reg.struc2std = fnirt_result["cout"]
+    if wsp.fslanat:
+        warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff")
+        mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
+        if os.path.isfile(warp):
+            wsp.reg.struc2std = warp
+        elif os.path.isfile(mat):
+            wsp.reg.struc2std = mat
+
+    if wsp.reg.struc2std is None:
+        struc.init(wsp)
+        wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
+        flirt_result = fsl.flirt(wsp.structural.struc, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
+        wsp.reg.struc2std = flirt_result["omat"]
+        
+        if fnirt:
+            wsp.log.write(" - Registering structural image to standard space using FNIRT\n")
+            fnirt_result = fsl.fnirt(wsp.structural.struc, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
+            wsp.reg.struc2std = fnirt_result["cout"]
     
+    if isinstance(wsp.reg.struc2std, Image):
         # Calculate the inverse warp using INVWARP
         invwarp_result = fsl.invwarp(wsp.structural.struc, wsp.reg.struc2std_warp, out=fsl.LOAD)
         wsp.reg.std2struc = invwarp_result["out"]
+    else:
+        wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
 
 def struc2asl(wsp, img, use_applywarp=False, interp="trilinear", paddingsize=1):
     """
