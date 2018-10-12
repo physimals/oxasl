@@ -135,6 +135,9 @@ def main():
         sys.exit(1)
 
 def oxasl(wsp):
+    """
+    Main oxasl pipeline script
+    """
     wsp.log.write("OXASL - running\n")
     wsp.log.write("Version: %s\n" % __version__)
     wsp.log.write("Input ASL data: %s\n" % wsp.asldata.name)
@@ -142,6 +145,12 @@ def oxasl(wsp):
 
     oxasl_preproc(wsp)
     oxasl_model(wsp)
+    redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
+    if wsp.pvcorr:
+        pvcorr(wsp)
+
+    do_report(wsp)
+    do_cleanup(wsp)
 
     wsp.log.write("\nOutput is %s\n" % wsp.savedir)
     wsp.log.write("OXASL - done\n")
@@ -168,6 +177,7 @@ def oxasl_preproc(wsp):
     corrections.apply_corrections(wsp)
 
     mask.generate_mask(wsp)
+    calib.calculate_m0(wsp)
 
 def oxasl_model(wsp):
     if wsp.asldata.ntis > 1 and wsp.batsd is None:
@@ -176,37 +186,42 @@ def oxasl_model(wsp):
         wsp.batsd = 1
 
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
+    do_output(wsp, wsp.basil)
 
-    # Re-do ASL->structural registration using BBR and perfusion image
-    if wsp.structural.struc is not None:
-        wsp.reg.regfrom_orig = wsp.reg.regfrom
-        new_regfrom = np.copy(wsp.basil.finalstep.mean_ftiss.data)
-        new_regfrom[new_regfrom < 0] = 0
-        wsp.reg.regfrom = Image(new_regfrom, header=wsp.reg.regfrom.header)
-        wsp.reg.asl2struc_initial = wsp.reg.asl2struc
-        wsp.reg.struc2asl_initial = wsp.reg.struc2asl
-        reg.reg_asl2struc(wsp, False, True)
+def redo_reg(wsp, pwi):
+    """
+    Re-do ASL->structural registration using BBR and perfusion image
+    """
+    wsp.reg.regfrom_orig = wsp.reg.regfrom
+    new_regfrom = np.copy(pwi.data)
+    new_regfrom[new_regfrom < 0] = 0
+    wsp.reg.regfrom = Image(new_regfrom, header=pwi.header)
+    wsp.reg.asl2struc_initial = wsp.reg.asl2struc
+    wsp.reg.struc2asl_initial = wsp.reg.struc2asl
+    reg.reg_asl2struc(wsp, False, True)
 
-    # FIXME: We could at this point re-apply corrections derived from structural space?
-    # But would need to make sure corrections module re-transforms things like sensitivity map
-    if wsp.pvcorr:
-        # Partial volume correction is very sensitive to the mask, so recreate it
-        # if it came from the structural image
-        if wsp.mask is None and wsp.struc is not None:
-            wsp.rois.mask_orig = wsp.rois.mask
-            wsp.rois.mask = None
-            mask.generate_mask(wsp)
+def pvcorr(wsp):
+    """
+    Do partial volume correction fitting
 
-        # Generate PVM and PWM maps for Basil
-        struc.segment(wsp)
-        wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv, use_applywarp=True)
-        wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
-        wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
-        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
+    FIXME: We could at this point re-apply all corrections derived from structural space?
+    But would need to make sure corrections module re-transforms things like sensitivity map
+    
+    Partial volume correction is very sensitive to the mask, so recreate it
+    if it came from the structural image as this requires accurate ASL->Struc registration
+    """
+    if wsp.mask is None and wsp.struc is not None:
+        wsp.rois.mask_orig = wsp.rois.mask
+        wsp.rois.mask = None
+        mask.generate_mask(wsp)
 
-    do_output(wsp)
-    do_report(wsp)
-    do_cleanup(wsp)
+    # Generate PVM and PWM maps for Basil
+    struc.segment(wsp)
+    wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv, use_applywarp=True)
+    wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
+    wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
+    basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
+    do_output(wsp, wsp.basil_pvcorr)
 
 def do_report(wsp):
     """
@@ -222,13 +237,10 @@ def do_report(wsp):
     wsp.report.generate_html(report_dir, report_build_dir)
     wsp.log.write(" - Report generated in %s\n" % report_dir)
 
-def do_output(wsp):
+def do_output(wsp, basil_wsp):
     """
-    Create output images
+    Create native space output images
     """
-    calib.init(wsp)
-    # Always output in native space
-    output_spaces = ["native", ]
     output_items = {
         "mean_ftiss" : ("perfusion", 6000, True),
         "mean_fblood" : ("aCBV", 100, True),
@@ -237,23 +249,21 @@ def do_output(wsp):
         "mean_deltwm" : ("arrival_wm", 1, False),
         "modelfit" : ("modelfit", 1, False),
     }
-    for space in output_spaces:
-        output_wsp = wsp.sub(space)
-        for fabber_output, oxasl_output in output_items.items():
-            img = wsp.basil.finalstep.ifnone(fabber_output, None)
-            if img is not None:
-                # Make negative values = 0 and ensure masked value zeroed
-                data = np.copy(img.data)
-                data[img.data < 0] = 0
-                data[wsp.rois.mask.data == 0] = 0
-                img = Image(data, header=img.header)
-                name, multiplier, is_perfusion = oxasl_output
-                if is_perfusion:
-                    img, = corrections.apply_sensitivity_correction(wsp, img)
-                setattr(output_wsp, name, img)
-                if is_perfusion and wsp.calib is not None:
-                    wsp.multiplier = multiplier
-                    setattr(output_wsp, "%s_calib" % name, calib.calibrate(wsp, img))
+    output_wsp = wsp.sub("native")
+    for fabber_output, oxasl_output in output_items.items():
+        img = basil_wsp.finalstep.ifnone(fabber_output, None)
+        if img is not None:
+            # Make negative values = 0 and ensure masked value zeroed
+            data = np.copy(img.data)
+            data[img.data < 0] = 0
+            data[wsp.rois.mask.data == 0] = 0
+            img = Image(data, header=img.header)
+            name, multiplier, is_perfusion = oxasl_output
+            if is_perfusion:
+                img, = corrections.apply_sensitivity_correction(wsp, img)
+            setattr(output_wsp, name, img)
+            if is_perfusion and wsp.calib is not None:
+                setattr(output_wsp, "%s_calib" % name, calib.calibrate(wsp, img, multiplier=multiplier))
 
 def do_cleanup(wsp):
     """
