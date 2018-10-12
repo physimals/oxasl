@@ -148,8 +148,8 @@ def test_multiplier():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="voxelwise", multiplier=MULTIPLIER)
-    perf_calib = calib.calibrate(wsp, perf_img)
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise")
+    perf_calib = calib.calibrate(wsp, perf_img, multiplier=MULTIPLIER)
     calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
@@ -290,8 +290,8 @@ def test_multiplier_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="voxelwise", multiplier=MULTIPLIER)
-    perf_calib = calib.calibrate(wsp, perf_img, var=True)
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise")
+    perf_calib = calib.calibrate(wsp, perf_img, var=True, multiplier=MULTIPLIER)
     calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)

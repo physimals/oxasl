@@ -1,6 +1,6 @@
 import numpy as np
 
-from oxasl import AslImage, preprocess
+from oxasl import AslImage, preproc
 
 def test_preproc_none():
     d = np.random.rand(5, 5, 5, 6)

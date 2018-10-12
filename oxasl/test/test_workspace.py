@@ -38,22 +38,6 @@ def test_log():
     wsp.log.write("hello")
     assert(log.getvalue() == "hello")
 
-def test_done():
-    """ Check the 'done' logic """
-    wsp = Workspace()
-    assert(not wsp.isdone("process"))
-    wsp.done("process")
-    assert(wsp.isdone("process"))
-
-def test_undone():
-    """ Check the 'done' logic can be undone """
-    wsp = Workspace()
-    assert(not wsp.isdone("process"))
-    wsp.done("process")
-    assert(wsp.isdone("process"))
-    wsp.done("process", status=False)
-    assert(not wsp.isdone("process"))
-
 def test_ifnone():
     wsp = Workspace(wibble=11)
     assert(wsp.ifnone("wibble", 12) == 11)
@@ -81,7 +65,7 @@ def test_savedir_created():
     try:
         log = StringIO.StringIO()
         wsp = Workspace(savedir=tempdir, log=log)
-        assert(wsp._savedir) == tempdir
+        assert(wsp.savedir) == tempdir
         assert(os.path.isdir(tempdir))
         assert("WARNING" not in log.getvalue())
     finally:
@@ -93,7 +77,7 @@ def test_savedir_created_multilevel():
     try:
         log = StringIO.StringIO()
         wsp = Workspace(savedir=tempdir, log=log)
-        assert(wsp._savedir) == tempdir
+        assert(wsp.savedir) == tempdir
         assert(os.path.isdir(tempdir))
         assert("WARNING" not in log.getvalue())
     finally:
@@ -107,7 +91,7 @@ def test_savedir_sub():
         wsp = Workspace(savedir=tempdir, log=log)
         wsp.sub("quark")
         path = os.path.join(tempdir, "quark")
-        assert(wsp.quark._savedir == path)
+        assert(wsp.quark.savedir == path)
         assert(os.path.isdir(path))
         assert("WARNING" not in log.getvalue())
     finally:

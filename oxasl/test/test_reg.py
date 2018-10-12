@@ -13,15 +13,12 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from oxasl import Workspace, reg, AslImage
+from oxasl import Workspace, reg, AslImage, brain
 
 def get_wsp():
-    wsp = Workspace()
+    wsp = Workspace(debug=True)
     wsp.struc = Image(np.random.rand(10, 10, 10))
-    wsp.asl.mean_brain = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="tc", ibf="rpt")
-    wsp.calibration.brain = Image(np.random.rand(5, 5, 5))
-    wsp.done("preproc_asl")
-    wsp.done("calib.init")
+    wsp.calib = Image(np.random.rand(5, 5, 5))
     return wsp
 
 def test_get_regfrom_supplied():
@@ -30,23 +27,36 @@ def test_get_regfrom_supplied():
     """
     wsp = get_wsp()
     user_regfrom = Image(np.random.rand(5, 5, 5))
-    wsp.reg.regfrom = user_regfrom
+    wsp.regfrom = user_regfrom
     reg.get_regfrom(wsp)
-    assert(np.all(user_regfrom.data == wsp.reg.regfrom.data))
+    assert(np.allclose(user_regfrom.data, wsp.reg.regfrom.data))
 
-def test_get_regfrom_asldata_mean():
+def test_get_regfrom_asldata_mean_tc():
     """
-    Test brain extracted ASL mean is used by default
+    Test brain extracted ASL mean is used for TC data
     """
     wsp = get_wsp()
+    wsp.asldata = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="tc", ibf="rpt")
     reg.get_regfrom(wsp)
-    assert(np.all(wsp.asl.mean_brain.data == wsp.reg.regfrom.data))
+    meanasl_brain = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
+    assert(np.allclose(meanasl_brain.data, wsp.reg.regfrom.data))
+
+def test_get_regfrom_asldata_mean_ct():
+    """
+    Test brain extracted ASL mean is used for CT data
+    """
+    wsp = get_wsp()
+    wsp.asldata = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="ct", ibf="rpt")
+    reg.get_regfrom(wsp)
+    meanasl_brain = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
+    assert(np.allclose(meanasl_brain.data, wsp.reg.regfrom.data))
 
 def test_get_regfrom_calib():
     """
-    Test brain extracted calibration image is used if mean ASL data not available
+    Test brain extracted calibration image is used for differenced data
     """
     wsp = get_wsp()
-    wsp.asl.mean_brain = None
+    wsp.asldata = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="diff", ibf="rpt")
     reg.get_regfrom(wsp)
-    assert(np.all(wsp.calibration.brain.data == wsp.reg.regfrom.data))
+    calib_brain = brain.brain(wsp, wsp.calib, thresh=0.2)
+    assert(np.allclose(calib_brain.data, wsp.reg.regfrom.data))
