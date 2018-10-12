@@ -35,7 +35,7 @@ from fsl.data.image import Image
 
 from oxasl import reg, struc
 from oxasl.options import OptionCategory, IgnorableOptionGroup
-from oxasl.reporting import ReportPage, LightboxImage
+from oxasl.reporting import LightboxImage
 from oxasl.wrappers import epi_reg
 
 class DistcorrOptions(OptionCategory):
@@ -126,10 +126,9 @@ def get_cblip_correction(wsp):
      - ``cblip_warp``    : CBLIP Distortion correction warp image
      
     """
-    if wsp.isdone("get_cblip_correction"):
+    if wsp.topup is not None:
         return
-
-    if wsp.cblip is None:
+    elif wsp.cblip is None:
         wsp.log.write("\nNo CBLIP images provided for distortion correction\n")
         return
 
@@ -161,19 +160,15 @@ def get_cblip_correction(wsp):
     wsp.topup.iout = topup_result["iout"]
     wsp.topup.fout = topup_result["fout"]
 
-    page = ReportPage()
+    page = wsp.report.page("topup")
     page.heading("TOPUP distortion correction", level=0)
     page.text("PE direction: %s" % wsp.pedir)
     page.text("Echo spacing: %f s" % wsp.echospacing)
     page.heading("Correction image", level=1)
     #for dim in range(3):
     #    #img = Image(wsp.fmap_warp.data[..., dim], header=wsp.fmap_warp.header)
-    #    wsp.report.add("fmap_warp%i" % dim, LightboxImage(img))
     #    page.text("Dimension %i" % dim)
-    #    page.image("fmap_warp%i.png" % dim) 
-    wsp.report.add("topup", page)
-
-    wsp.done("get_cblip_correction")
+    #    page.image("fmap_warp%i" % dim, LightboxImage(img))
 
 def get_fieldmap_correction(wsp):
     """
@@ -199,10 +194,9 @@ def get_fieldmap_correction(wsp):
 
      - ``fmap_warp``    : Fieldmap distortion correction warp image in ASL space
     """
-    if wsp.isdone("get_fieldmap_correction"):
+    if wsp.fieldmap is not None:
         return
-
-    if wsp.fmap is None or wsp.fmapmag is None or wsp.fmapmagbrain is None:
+    elif wsp.fmap is None or wsp.fmapmag is None or wsp.fmapmagbrain is None:
         wsp.log.write("\nNo fieldmap images for distortion correction\n")
         return
     elif wsp.pedir is None or wsp.echospacing is None:
@@ -232,20 +226,15 @@ def get_fieldmap_correction(wsp):
     result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.asldata, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True)
     wsp.fieldmap.warp = result["out"]
         
-    page = ReportPage()
+    page = wsp.report.page("fmap")
     page.heading("Fieldmap distortion correction", level=0)
     page.text("PE direction: %s" % wsp.pedir)
     page.text("Echo spacing: %f s" % wsp.echospacing)
     page.heading("Correction warps", level=1)
     for dim in range(3):
         img = Image(wsp.fieldmap.warp.data[..., dim], header=wsp.fieldmap.warp.header)
-        wsp.report.add("fmap_warp%i" % dim, LightboxImage(img))
         page.text("Dimension %i" % dim)
-        page.image("fmap_warp%i.png" % dim)
-        #page.image("fmap_warp%i" % dim, LightboxImage(img))
-    wsp.report.add("fmap", page)
-
-    wsp.done("get_fieldmap_correction")
+        page.image("fmap_warp%i" % dim, LightboxImage(img))
 
 def get_motion_correction(wsp):
     """
@@ -279,9 +268,9 @@ def get_motion_correction(wsp):
      - ``asl2calib``       : ASL->calibration image transformation
      - ``calib2asl``       : Calibration->ASL image transformation
     """
-    if wsp.isdone("get_motion_correction"):
+    if wsp.moco is not None:
         return
-    if not wsp.mc:
+    elif not wsp.mc:
         wsp.log.write("\nNo motion correction\n")
         return
 
@@ -315,16 +304,13 @@ def get_motion_correction(wsp):
     # to file, and same form that applywarp expects
     wsp.moco.mc_mats = np.concatenate(mats, axis=0)
 
-    page = ReportPage()
+    page = wsp.report.page("moco")
     page.heading("Motion correction", level=0)
     page.text("Reference volume: %s" % ref_source)
     page.heading("Motion parameters", level=1)
     for vol, mat in enumerate(mats):
         page.text("Volume %i" % vol)
         page.matrix(mat)
-    wsp.report.add("moco", page)
-
-    wsp.done("get_motion_correction")
 
 def get_sensitivity_correction(wsp):
     """
@@ -349,7 +335,7 @@ def get_sensitivity_correction(wsp):
 
      - ``sensitivity``    : Sensitivity correction image in ASL space
     """
-    if wsp.isdone("get_sensitivity_correction"):
+    if wsp.senscorr is not None:
         return
 
     wsp.log.write("\nCalculating Sensitivity correction\n")
@@ -380,22 +366,10 @@ def get_sensitivity_correction(wsp):
         wsp.sub("senscorr")
         wsp.senscorr.sensitivity = Image(sdata, header=sensitivity.header)
 
-        page = ReportPage(wsp)
+        page = wsp.report.page("sensitivity")
         page.heading("Sensitivity correction", level=0)
         page.heading("Sensitivity map", level=1)
-        wsp.report.add("sensitivity", LightboxImage(wsp.senscorr.sensitivity))
-        page.image("sensitivity.png")
-        wsp.report.add("sensitivity", page)
-
-    wsp.done("get_sensitivity_correction")
-
-def SensitivityReport(ReportPage):
-    def generate(self, report):
-        self.heading("Sensitivity correction", level=0)
-        self.heading("Sensitivity map", level=1)
-        self.image("sensitivity.png")
-        report.add("sensitivity", LightboxImage(self.wsp.senscorr.sensitivity, mask=self.wsp.rois.mask))
-        report.add("sensitivity", self)
+        page.image("sensitivity", LightboxImage(wsp.senscorr.sensitivity))
 
 def apply_corrections(wsp):
     """
