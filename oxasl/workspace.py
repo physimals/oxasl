@@ -79,8 +79,7 @@ class Workspace(object):
 
         # Set kwargs as attributes in input workspace (if configured)
         if input_wsp:
-            self.sub(input_wsp)
-            input_wsp = self.input
+            input_wsp = self.sub(input_wsp)
         else:
             input_wsp = self
 
