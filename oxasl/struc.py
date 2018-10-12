@@ -13,7 +13,7 @@ from fsl.data.image import Image
 from fsl.utils.path import PathError
 
 from oxasl.options import OptionCategory, IgnorableOptionGroup
-from oxasl.reporting import ReportPage, LightboxImage
+from oxasl.reporting import LightboxImage
 
 class StructuralImageOptions(OptionCategory):
     """
@@ -64,16 +64,6 @@ def init(wsp):
             wsp.log.write(" - Using non bias-corrected structural images")
             wsp.structural.struc = Image(os.path.join(wsp.fslanat, "T1"))
             wsp.structural.brain = Image(os.path.join(wsp.fslanat, "T1_brain"))
-            
-        warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff")
-        mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
-        import oxasl.reg as reg # FIXME
-        reg.init(wsp)
-        if os.path.isfile(warp):
-            wsp.reg.struc2std_warp = warp
-        elif os.path.isfile(mat):
-            wsp.reg.struc2std = mat
-
     elif wsp.struc:
         wsp.log.write(" - Using structural image provided: %s\n" % wsp.structural.name)
         wsp.structural.struc = wsp.struc
@@ -100,7 +90,7 @@ def segment(wsp):
     init(wsp)
     if None in (wsp.structural.wm_seg, wsp.structural.gm_seg, wsp.structural.csf_seg):
         init(wsp)
-        page = ReportPage()
+        page = wsp.report.page("seg")
         page.heading("Segmentation of structural image")
 
         wsp.log.write("\nGetting structural segmentation\n")
@@ -132,16 +122,11 @@ def segment(wsp):
         wsp.structural.csf_seg = Image((wsp.structural.csf_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
         wsp.structural.gm_seg = Image((wsp.structural.gm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
         wsp.structural.wm_seg = Image((wsp.structural.wm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
-
-        wsp.report.add("csf_pv", LightboxImage(wsp.structural.csf_pv, bgimage=wsp.structural.brain))
-        wsp.report.add("gm_pv", LightboxImage(wsp.structural.gm_pv, bgimage=wsp.structural.brain))
-        wsp.report.add("wm_pv", LightboxImage(wsp.structural.wm_pv, bgimage=wsp.structural.brain))
         
         page.heading("Segmentation image", level=1)
         page.text("CSF partial volume")
-        page.image("csf_pv.png")
+        page.image("csf_pv", LightboxImage(wsp.structural.csf_pv, bgimage=wsp.structural.brain))
         page.text("Grey matter partial volume")
-        page.image("gm_pv.png")
+        page.image("gm_pv", LightboxImage(wsp.structural.gm_pv, bgimage=wsp.structural.brain))
         page.text("White matter partial volume")
-        page.image("wm_pv.png")
-        wsp.report.add("seg", page)
+        page.image("wm_pv", LightboxImage(wsp.structural.wm_pv, bgimage=wsp.structural.brain))

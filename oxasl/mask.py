@@ -7,7 +7,7 @@ import fsl.wrappers as fsl
 
 from oxasl import __version__, AslImage, Workspace, image, reg, struc
 from oxasl.options import AslOptionParser, GenericOptions
-from oxasl.reporting import ReportPage, LightboxImage
+from oxasl.reporting import LightboxImage
 
 def generate_mask(wsp):
     """
@@ -45,8 +45,7 @@ def generate_mask(wsp):
     reg.get_regfrom(wsp)
 
     # Reporting
-    page = ReportPage()
-    wsp.report.add("mask", page)
+    page = wsp.report.page("mask")
     page.heading("Mask generation", level=0)
 
     if wsp.rois.mask is not None:
@@ -58,8 +57,7 @@ def generate_mask(wsp):
         wsp.rois.mask_src = "struc"
         struc.init(wsp)
         page.heading("Brain extracted structural image", level=1)
-        page.image("struc_brain.png")
-        wsp.report.add("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
+        page.image("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
         brain_mask_asl = reg.struc2asl(wsp, wsp.structural.brain_mask)
         wsp.rois.mask = fsl.fslmaths(brain_mask_asl).thr(0.25).bin().fillh().run()
         mask_source = "generated from brain extracting structural image and registering to ASL space"
@@ -75,11 +73,10 @@ def generate_mask(wsp):
     page.heading("Masked ASL brain image", level=1)
     page.text("Mask was %s" % mask_source)
     page.text("PW ASL image masked by ASL-space mask")
-    page.image("mask_img.png")
     if wsp.asldata.iaf in ("diff", "tc", "ct"):
-        wsp.report.add("mask_img", LightboxImage(wsp.asldata.perf_weighted(), mask=wsp.rois.mask, bgimage=wsp.asldata.perf_weighted()))
+        page.image("mask_img", LightboxImage(wsp.asldata.perf_weighted(), mask=wsp.rois.mask, bgimage=wsp.asldata.perf_weighted()))
     else:
-        wsp.report.add("mask_img", LightboxImage(wsp.asldata.mean(), mask=wsp.rois.mask, bgimage=wsp.asldata.mean()))
+        page.image("mask_img", LightboxImage(wsp.asldata.mean(), mask=wsp.rois.mask, bgimage=wsp.asldata.mean()))
 
 def main():
     """
