@@ -59,7 +59,7 @@ def calculate_m0(wsp):
     init(wsp)
     if wsp.calibration.m0 is None:
         wsp.log.write("\nCalibration - calculating M0\n")
-        if wsp.calibration.calib_method == "voxelwise":
+        if wsp.calib_method == "voxelwise":
             wsp.calibration.m0 = get_m0_voxelwise(wsp)
         elif wsp.calib_method in ("refregion", "single"):
             wsp.calibration.m0 = get_m0_refregion(wsp)
@@ -93,6 +93,9 @@ def calibrate(wsp, perf_img, multiplier=1.0, var=False):
     calculate_m0(wsp)
     wsp.log.write("\nCalibrating perfusion data: %s\n" % perf_img.name)
     m0 = wsp.calibration.m0
+    if isinstance(m0, Image):
+        m0 = m0.data
+
     if var:
         wsp.log.write(" - Treating data as variance - squaring M0 correction and multiplier\n")
         m0 = m0**2
@@ -162,7 +165,7 @@ def get_m0_voxelwise(wsp):
     wsp.log.write(" - Using partition coefficient: %f\n" % pct)
     m0 /= pct
 
-    if wsp.rois.mask is not None:
+    if wsp.rois is not None and wsp.rois.mask is not None:
         if wsp.ifnone("calib_edgecorr", True):
             wsp.log.write(" - Doing edge correction\n")
             m0 = _edge_correct(m0, wsp.rois.mask)
@@ -188,9 +191,13 @@ def get_m0_voxelwise(wsp):
 
     page.heading("M0", level=1)
     page.text("M0 values obtained by multiplying calibration image by %f" % (alpha*gain/shorttr/pct))
-    page.text("Mean M0 value (within mask): %f" % np.mean(m0[wsp.rois.mask.data > 0]))
-    if wsp.rois.mask is not None and wsp.edgecorr:
-        page.text("Edge correction was used")
+
+    if wsp.rois is not None and wsp.rois.mask is not None:
+        page.text("Mean M0 value (within mask): %f" % np.mean(m0[wsp.rois.mask.data > 0]))
+        if wsp.edgecorr:
+            page.text("Edge correction was used")
+    else:
+        page.text("Mean M0 value: %f" % np.mean(m0))
     page.image("m0img", LightboxImage(m0img))
 
     return m0img
@@ -273,7 +280,10 @@ def get_m0_wholebrain(wsp):
 
     # Check the data and masks
     calib_data = np.copy(wsp.calib.data)
-    brain_mask = wsp.rois.mask.data
+    if wsp.rois is not None and wsp.rois.mask is not None:
+        brain_mask = wsp.rois.mask.data
+    else:
+        brain_mask = np.ones(wsp.calib.shape[:3])
     
     ### Sensitivity image calculation (if we have a sensitivity image)
     if wsp.sens:
@@ -410,7 +420,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         wsp.log.write(" - Taking mean across calibration images\n")
         calib_data = np.mean(calib_data, -1)
 
-    if wsp.rois.mask is not None:
+    if wsp.rois is not None and wsp.rois.mask is not None:
         brain_mask = wsp.rois.mask.data
     else:
         brain_mask = np.ones(wsp.calib.shape[:3])
