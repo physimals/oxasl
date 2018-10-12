@@ -79,6 +79,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
         g.add_option("--fixbolus", dest="infertau", help="Fix bolus duration", action="store_false", default=True)
         g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
+        g.add_option("--spatial-off", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
         ret.append(g)
         g = IgnorableOptionGroup(parser, "Acquisition/Data specific")
         g.add_option("--bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
@@ -114,7 +115,6 @@ def main():
             options.output = "oxasl"
 
         # Some oxasl command-line specific defaults
-        options.spatial = True
         if options.calib is not None and options.calib_method is None:
             if options.struc is not None:
                 options.calib_method = "refregion"
