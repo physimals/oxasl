@@ -61,16 +61,20 @@ class Workspace(object):
         self._done = {}
 
         # Defaults - these can be overridden by kwargs
-        self.log = kwargs.pop("log", sys.stdout)
-        self.debug = kwargs.pop("debug", False)
-        self.fsllog = kwargs.pop("fsllog", None)
-        self.report = kwargs.pop("report", Report())
+        if self.log is None:
+            self.log = kwargs.pop("log", sys.stdout)
+        if self.debug is None:
+            self.debug = kwargs.pop("debug", False)
+        if self.report is None:
+            self.report = kwargs.pop("report", Report())
 
         # Default log configuration for FSL wrapper commands
-        if not self.fsllog:
-            self.fsllog = {"stderr" : self.log}
-            if self.debug:
-                self.fsllog.update({"stdout" : self.log, "cmd" : self.log})
+        if self.fsllog is None:
+            self.fsllog = kwargs.pop("fsllog", None)
+            if not self.fsllog:
+                self.fsllog = {"stderr" : self.log}
+                if self.debug:
+                    self.fsllog.update({"stdout" : self.log, "cmd" : self.log})
 
         # Set kwargs as attributes in input workspace (if configured)
         if input_wsp:
