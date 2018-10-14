@@ -48,9 +48,9 @@ def generate_mask(wsp):
     page = wsp.report.page("mask")
     page.heading("Mask generation", level=0)
 
-    if wsp.rois.mask is not None:
+    if wsp.mask is not None:
         wsp.rois.mask_src = "user"
-        mask_source = "provided by user (assumed to be ASL space): %s" % wsp.rois.mask.name
+        mask_source = "provided by user (assumed to be ASL space): %s" % wsp.mask.name
         wsp.rois.mask = wsp.mask
     elif wsp.structural.struc is not None:
         # Preferred option is to use brain extracted structural
