@@ -57,6 +57,7 @@ def calculate_m0(wsp):
      - ``calibration.m0`` : M0 value, either a single value or an voxelwise Image
     """    
     init(wsp)
+
     if wsp.calibration.m0 is None:
         wsp.log.write("\nCalibration - calculating M0\n")
         if wsp.calib_method == "voxelwise":
@@ -148,6 +149,7 @@ def get_m0_voxelwise(wsp):
     """
     wsp.log.write(" - Doing voxelwise calibration\n")
     alpha, gain, pct = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1), wsp.ifnone("pct", 0.9)
+    wsp.log.write(" - Calibration gain: %f, inversion efficiency: %f\n" % (gain, alpha))
 
     # Calculate M0 value
     m0 = wsp.calib.data * alpha * gain
@@ -309,11 +311,10 @@ def get_m0_wholebrain(wsp):
 
     m0 = m0 * math.exp(- te / t2b)
     alpha, gain = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1)
+    wsp.log.write(" - Calibration gain: %f, inversion efficiency: %f\n" % (gain, alpha))
     if gain != 1:
-        wsp.log.write(" - Applying calibration gain: %f\n" % gain)
         m0 = m0 * gain
     if alpha != 1:
-        wsp.log.write(" - Applying inversion efficiency of: %f\n" % alpha)
         m0 = m0 * alpha
 
     wsp.calibration.m0_img = Image(m0, header=wsp.calib.header)
@@ -351,11 +352,11 @@ def get_m0_refregion(wsp, mode="longtr"):
     """
     wsp.log.write(" - Doing reference region calibration\n")
     alpha, gain = wsp.ifnone("calib_alpha", 1), wsp.ifnone("calib_gain", 1)
-
+ 
     tr = wsp.ifnone("tr", 3.2)
     te = wsp.ifnone("te", 0)
     taq = wsp.ifnone("taq", 0)
-    wsp.log.write(" - Using TE=%f\n" % te)
+    wsp.log.write(" - Acquisition: TE=%f, TR=%f, TAQ=%f\n" % (te, tr, taq))
 
     t2star = wsp.ifnone("t2star", False)
     if t2star:
@@ -447,8 +448,8 @@ def get_m0_refregion(wsp, mode="longtr"):
         sens_data = wsp.sens.data
     
     wsp.log.write(" - MODE: %s\n" % mode)
-    wsp.log.write(" - Calibration gain: %f\n" % gain)
-
+    wsp.log.write(" - Calibration gain: %f, inversion efficiency: %f\n" % (gain, alpha))
+ 
     if mode == "longtr":
         if sens_corr:
             wsp.log.write(" - Applying sensitivity image\n")
