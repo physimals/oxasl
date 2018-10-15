@@ -88,7 +88,12 @@ def basil(wsp, output_wsp=None, prefit=True):
         wsp.log.write(" - Operating in Single TI mode - no arterial component, fixed bolus duration\n")
         wsp.inferart = False
         wsp.infertau = False
-        
+        batsd_default = 0.1
+    else:
+        # For multi TI/PLD data, set a more liberal prior for tissue ATT since we should be able to 
+        # determine this from the data. NB this leaves the arterial BAT alone.
+        batsd_default = 1
+
     if wsp.wp:
         # White paper mode - this overrides defaults, but can be overwritten by command line 
         # specification of individual parameters
@@ -105,6 +110,7 @@ def basil(wsp, output_wsp=None, prefit=True):
     if wsp.t1 is None: wsp.t1 = t1_default
     if wsp.t1b is None: wsp.t1b = 1.65
     if wsp.bat is None: wsp.bat = bat_default
+    if wsp.batsd is None: wsp.batsd = batsd_default
     if wsp.infertiss is None: wsp.infertiss = True
     
     # if we are doing CASL then fix the bolus duration, unless explicitly told us otherwise
