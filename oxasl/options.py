@@ -7,6 +7,8 @@ from optparse import OptionGroup, OptionParser, Option, OptionValueError
 from collections import defaultdict
 from copy import copy
 
+import numpy as np
+
 from fsl.data.image import Image
 
 from ._version import __version__
@@ -114,7 +116,18 @@ def _check_image(option, opt, value):
     except ValueError:
         raise OptionValueError("option %s: invalid Image value: %r" % (opt, value))
             
+def _check_matrix(option, opt, value):
+    try:
+        matrix = []
+        with open(value, "r") as f:
+            for line in f.readlines():
+                matrix.append([float(v) for v in line.split()])
+        return np.array(matrix, dtype=np.float)
+    except ValueError:
+        raise OptionValueError("option %s: invalid matrix value: %r" % (opt, value))
+            
 class _ImageOption(Option):
-    TYPES = Option.TYPES + ("image",)
+    TYPES = Option.TYPES + ("image", "matrix",)
     TYPE_CHECKER = copy(Option.TYPE_CHECKER)
     TYPE_CHECKER["image"] = _check_image
+    TYPE_CHECKER["matrix"] = _check_matrix
