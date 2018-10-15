@@ -233,9 +233,9 @@ def model_paired(wsp):
      - ``output.native`` - Native (ASL) space output from last Basil modelling output
      - ``output.struc``  - Structural space output
     """
-    basil.basil(wsp, output_wsp=wsp.sub("basil"))
+    basil.basil(wsp, output_wsp=wsp.sub("basil", parent_default=True))
     redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
-    oxasl.sub("output")
+    wsp.sub("output", parent_default=True)
 
     if wsp.pvcorr:
         # Do partial volume correction fitting
@@ -255,7 +255,7 @@ def model_paired(wsp):
         wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv, use_applywarp=True)
         wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
         wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
-        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
+        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr", parent_default=True), prefit=False)
         output_native(wsp.output, wsp.basil_pvcorr)
     else:
         output_native(wsp.output, wsp.basil)
@@ -304,7 +304,7 @@ def output_native(wsp, basil_wsp):
         "mean_deltwm" : ("arrival_wm", 1, False),
         "modelfit" : ("modelfit", 1, False),
     }
-    wsp.sub("native")
+    wsp.sub("native", parent_default=True)
     for fabber_output, oxasl_output in output_items.items():
         img = basil_wsp.finalstep.ifnone(fabber_output, None)
         if img is not None:
@@ -325,7 +325,7 @@ def output_trans(wsp):
     Create transformed output, i.e. in structural and/or standard space
     """
     if wsp.reg.asl2struc is not None:
-        wsp.sub("struct")
+        wsp.sub("struct", parent_default=True)
     for suffix in ("", "_calib"):
         for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit"):
             native_output = getattr(wsp.native, output + suffix)
