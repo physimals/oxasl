@@ -44,7 +44,6 @@ def get_regfrom(wsp):
      - ``regfrom``    : Registration reference image in ASL space
     """
     init(wsp)
-
     if wsp.reg.regfrom is None:
         wsp.log.write("\nGetting image to use for ASL->structural registration)\n")
         if wsp.regfrom is not None:
@@ -61,8 +60,17 @@ def get_regfrom(wsp):
             wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
 
 def reg_asl2calib(wsp):
-    # FIXME If not already registered, assume in ASL space
-    pass
+    """
+    Register calibration image to ASL space
+    
+    Note that this might already have been done as part of motion correction
+    """
+    init(wsp)
+    if wsp.calib is not None and wsp.reg.asl2calib is None:
+        get_regfrom(wsp)
+        wsp.log.write("Registering calibration image to ASL image\n")
+        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.regfrom, wsp.calib)
+        wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
 
 def reg_asl2struc(wsp, flirt=True, bbr=False):
     """
@@ -90,7 +98,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False):
         get_regfrom(wsp)
         wsp.log.write("\nRegistering ASL data to structural data\n")
         if flirt:
-            wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp)
+            wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.regfrom, wsp.structural.struc, wsp.reg.asl2struc)
         if bbr:
             wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
         
@@ -148,39 +156,50 @@ def reg_struc2std(wsp, fnirt=False):
     else:
         wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
 
-def struc2asl(wsp, img, use_applywarp=False, interp="trilinear", paddingsize=1):
+def struc2asl(wsp, img, **kwargs):
     """
     Convert an image from structural to ASL space
 
     :param img: Image object in structural space
     :return: Transformed Image object in ASL (native) space
     """
-    return _convert(wsp, img, wsp.reg.struc2asl, wsp.reg.regfrom, use_applywarp, interp, paddingsize)
+    init(wsp)
+    return transform(wsp, img, wsp.reg.struc2asl, wsp.reg.regfrom, **kwargs)
 
-def asl2struc(wsp, img, use_applywarp=False, interp="trilinear", paddingsize=1):
+def asl2struc(wsp, img, **kwargs):
     """
     Convert an image from ASL to structural space
+
+    Keyword arguments are passed to ``transform``
 
     :param img: Image object in native (ASL) space
     :return: Transformed Image object in structural space
     """
-    return _convert(wsp, img, wsp.reg.asl2struc, wsp.structural.struc, use_applywarp, interp, paddingsize)
+    init(wsp)
+    return transform(wsp, img, wsp.reg.asl2struc, wsp.structural.struc, **kwargs)
 
-def _convert(wsp, img, transform, ref, use_applywarp=False, interp="trilinear", paddingsize=1):
+def transform(wsp, img, trans, ref, use_applywarp=False, interp="trilinear", paddingsize=1):
     """
-    Convert an image from structural to ASL space
+    Transform an image 
 
-    :param img: Image object in structural space
+    :param wsp: Workspace, used for logging only
+    :param img: Image to transform
+    :param trans: Transformation matrix (not a warp image)
+    :param ref: Reference image
+    :param use_applywarp: Use 'applywarp' rather than Flirt
+    :param interp: Interpolation method
+    :param paddingsize: Padding size in pixels
+
     :return: Transformed Image object
     """
-    if transform is None:
-        raise RuntimeError("Need to do asl2struc registration before converting any images")
+    if trans is None:
+        raise ValueError("Transformation matrix not available - has registration been performed?")
     if not use_applywarp:
-        return fsl.applyxfm(img, ref, transform, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
+        return fsl.applyxfm(img, ref, trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
     else:
-        return fsl.applywarp(img, ref, premat=transform, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog)["out"]
+        return fsl.applywarp(img, ref, premat=trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog)["out"]
         
-def reg_flirt(wsp):
+def reg_flirt(wsp, img, ref, initial_transform=None):
     """ 
     Register low resolution ASL or calibration data to a high resolution
     structural image using Flirt rigid-body registration
@@ -200,16 +219,16 @@ def reg_flirt(wsp):
 
     :return Tuple of registered image, transform matrix
     """
-    wsp.log.write(" - Registering image: %s using FLIRT\n" % wsp.reg.regfrom.name)
+    wsp.log.write(" - Registering image: %s using FLIRT\n" % img.name)
     
     # Step 1: 3D translation only
     flirt_opts = {
         "schedule" : os.path.join(os.environ["FSLDIR"], "etc", "flirtsch", "xyztrans.sch"),
-        "init" : wsp.reg.asl2struc,
+        "init" : initial_transform,
         "inweight" : wsp.inweight,
         "log" : wsp.fsllog,
     }
-    step1_trans = fsl.flirt(wsp.reg.regfrom, wsp.structural.brain, omat=fsl.LOAD, **flirt_opts)["omat"]
+    step1_trans = fsl.flirt(img, ref, omat=fsl.LOAD, **flirt_opts)["omat"]
 
     # Step 2: 6 DOF transformation with small search region
     flirt_opts.update({
@@ -217,7 +236,7 @@ def reg_flirt(wsp):
         "init" : step1_trans,
         "dof" : wsp.ifnone("dof", 6),
     })
-    flirt_result = fsl.flirt(wsp.reg.regfrom, wsp.structural.brain, out=fsl.LOAD, omat=fsl.LOAD, **flirt_opts)
+    flirt_result = fsl.flirt(img, ref, out=fsl.LOAD, omat=fsl.LOAD, **flirt_opts)
 
     return flirt_result["out"], flirt_result["omat"]
 
