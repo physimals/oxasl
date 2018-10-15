@@ -103,7 +103,7 @@ def segment(wsp):
         
             try:
                 wsp.structural.bias = Image(os.path.join(wsp.fslanat, "T1_fast_bias"))
-                wsp.log.write(" - Bias field extracted sucessfully")
+                wsp.log.write(" - Bias field extracted sucessfully\n")
             except PathError:
                 wsp.log.write(" - No bias field found")
         elif wsp.fastdir:
