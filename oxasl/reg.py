@@ -153,14 +153,32 @@ def struc2asl(wsp, img, use_applywarp=False, interp="trilinear", paddingsize=1):
     Convert an image from structural to ASL space
 
     :param img: Image object in structural space
+    :return: Transformed Image object in ASL (native) space
+    """
+    return _convert(wsp, img, wsp.reg.struc2asl, wsp.reg.regfrom, use_applywarp, interp, paddingsize)
+
+def asl2struc(wsp, img, use_applywarp=False, interp="trilinear", paddingsize=1):
+    """
+    Convert an image from ASL to structural space
+
+    :param img: Image object in native (ASL) space
+    :return: Transformed Image object in structural space
+    """
+    return _convert(wsp, img, wsp.reg.asl2struc, wsp.structural.struc, use_applywarp, interp, paddingsize)
+
+def _convert(wsp, img, transform, ref, use_applywarp=False, interp="trilinear", paddingsize=1):
+    """
+    Convert an image from structural to ASL space
+
+    :param img: Image object in structural space
     :return: Transformed Image object
     """
-    if wsp.reg.asl2struc is None:
+    if transform is None:
         raise RuntimeError("Need to do asl2struc registration before converting any images")
     if not use_applywarp:
-        return fsl.applyxfm(img, wsp.reg.regfrom, wsp.reg.struc2asl, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
+        return fsl.applyxfm(img, ref, transform, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
     else:
-        return fsl.applywarp(img, wsp.reg.regfrom, premat=wsp.reg.struc2asl, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog)["out"]
+        return fsl.applywarp(img, ref, premat=transform, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog)["out"]
         
 def reg_flirt(wsp):
     """ 
