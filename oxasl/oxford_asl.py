@@ -55,6 +55,7 @@ from __future__ import print_function
 import sys
 import os
 import traceback
+import tempfile
 
 import numpy as np
 
@@ -123,11 +124,29 @@ def main():
         parser.add_category(OxfordAslOptions())
         parser.add_category(calib.CalibOptions(ignore=["perf", "tis"]))
         parser.add_category(corrections.DistcorrOptions())
+        if oxasl_ve:
+            parser.add_category(oxasl_ve.VeaslOptions())
         parser.add_category(GenericOptions())
 
-        options, _ = parser.parse_args(sys.argv)
+        options, args = parser.parse_args(sys.argv)
         if not options.output:
             options.output = "oxasl"
+
+        # Deal with case where asldata is given as separate files
+        if len(args) > 1 and options.asldata is None:
+            merged_data = None
+            for idx, fname in enumerate(args[1:]):
+                img = Image(fname)
+                shape = list(img.shape)
+                if img.ndim == 3:
+                    shape += [1,]
+                if merged_data is None:
+                    merged_data = np.zeros(shape[:3] + [shape[3] * len(args[1:])])
+                merged_data[..., idx*shape[3]:(idx+1)*shape[3]] = img.data
+            merged_img = Image(merged_data, header=img.header)
+            temp_asldata = tempfile.NamedTemporaryFile(prefix="oxasl", delete=True)
+            options.asldata = temp_asldata.name
+            merged_img.save(options.asldata)
 
         # Some oxasl command-line specific defaults
         if options.calib is not None and options.calib_method is None:
@@ -161,24 +180,11 @@ def oxasl(wsp):
     oxasl_preproc(wsp)
 
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
-        oxasl_model(wsp)
-        redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
-        if wsp.pvcorr:
-            pvcorr(wsp)
-            output_native(wsp, wsp.basil_pvcorr)
-        else:
-            output_native(wsp, wsp.basil)
-        output_trans(wsp)
+        model_paired(wsp)
     elif wsp.asldata.iaf == "ve":
         if oxasl_ve is None:
             raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
-        oxasl_ve.decode(wsp)
-        oxasl_ve.model_vessels(wsp)
-        oxasl_ve.combine_vessels(wsp)
-        redo_reg(wsp, wsp.veasl.all_vessels.native.perfusion)
-        if wsp.pvcorr:
-            # FIXME 
-            pass
+        oxasl_ve.model_ve(wsp)
     else:
         raise ValueError("ASL data has format '%s' - not supported by OXASL pipeline" % wsp.asldata.iaf)
 
@@ -214,13 +220,47 @@ def oxasl_preproc(wsp):
     if wsp.calib:
         calib.calculate_m0(wsp)
 
-def oxasl_model(wsp):
-    if wsp.asldata.ntis > 1 and wsp.batsd is None:
-        # For multi TI/PLD data, set a more liberal prior for tissue ATT since we should be able to 
-        # determine this from the data. NB this leaves the arterial BAT alone.
-        wsp.batsd = 1
+def model_paired(wsp):
+    """
+    Do model fitting on TC/CT or subtracted data
 
+    Workspace attributes updated
+    ----------------------------
+
+     - ``basil``         - Contains model fitting output on data without partial volume correction
+     - ``basil_pvcorr``  - Contains model fitting output with partial volume correction if 
+                           ``wsp.pvcorr`` is ``True``
+     - ``output.native`` - Native (ASL) space output from last Basil modelling output
+     - ``output.struc``  - Structural space output
+    """
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
+    redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
+    oxasl.sub("output")
+
+    if wsp.pvcorr:
+        # Do partial volume correction fitting
+        #
+        # FIXME: We could at this point re-apply all corrections derived from structural space?
+        # But would need to make sure corrections module re-transforms things like sensitivity map
+        #
+        # Partial volume correction is very sensitive to the mask, so recreate it
+        # if it came from the structural image as this requires accurate ASL->Struc registration
+        if wsp.mask is None and wsp.struc is not None:
+            wsp.rois.mask_orig = wsp.rois.mask
+            wsp.rois.mask = None
+            mask.generate_mask(wsp)
+
+        # Generate PVM and PWM maps for Basil
+        struc.segment(wsp)
+        wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv, use_applywarp=True)
+        wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
+        wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
+        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
+        output_native(wsp.output, wsp.basil_pvcorr)
+    else:
+        output_native(wsp.output, wsp.basil)
+
+    output_trans(wsp.output)
 
 def redo_reg(wsp, pwi):
     """
@@ -233,28 +273,6 @@ def redo_reg(wsp, pwi):
     wsp.reg.asl2struc_initial = wsp.reg.asl2struc
     wsp.reg.struc2asl_initial = wsp.reg.struc2asl
     reg.reg_asl2struc(wsp, False, True)
-
-def pvcorr(wsp):
-    """
-    Do partial volume correction fitting
-
-    FIXME: We could at this point re-apply all corrections derived from structural space?
-    But would need to make sure corrections module re-transforms things like sensitivity map
-    
-    Partial volume correction is very sensitive to the mask, so recreate it
-    if it came from the structural image as this requires accurate ASL->Struc registration
-    """
-    if wsp.mask is None and wsp.struc is not None:
-        wsp.rois.mask_orig = wsp.rois.mask
-        wsp.rois.mask = None
-        mask.generate_mask(wsp)
-
-    # Generate PVM and PWM maps for Basil
-    struc.segment(wsp)
-    wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv, use_applywarp=True)
-    wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
-    wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
-    basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
 
 def do_report(wsp):
     """
@@ -286,7 +304,7 @@ def output_native(wsp, basil_wsp):
         "mean_deltwm" : ("arrival_wm", 1, False),
         "modelfit" : ("modelfit", 1, False),
     }
-    output_wsp = wsp.sub("native")
+    wsp.sub("native")
     for fabber_output, oxasl_output in output_items.items():
         img = basil_wsp.finalstep.ifnone(fabber_output, None)
         if img is not None:
@@ -298,9 +316,9 @@ def output_native(wsp, basil_wsp):
             name, multiplier, is_perfusion = oxasl_output
             if is_perfusion:
                 img, = corrections.apply_sensitivity_correction(wsp, img)
-            setattr(output_wsp, name, img)
+            setattr(wsp.native, name, img)
             if is_perfusion and wsp.calib is not None:
-                setattr(output_wsp, "%s_calib" % name, calib.calibrate(wsp, img, multiplier=multiplier))
+                setattr(wsp.native, "%s_calib" % name, calib.calibrate(wsp, img, multiplier=multiplier))
 
 def output_trans(wsp):
     """
@@ -311,9 +329,9 @@ def output_trans(wsp):
     for suffix in ("", "_calib"):
         for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit"):
             native_output = getattr(wsp.native, output + suffix)
-            if native_output is None: continue
-            if wsp.reg.asl2struc is not None:
-                setattr(wsp.struct, output, reg.asl2struc(wsp, native_output))
+            if native_output is not None:
+                if wsp.reg.asl2struc is not None:
+                    setattr(wsp.struct, output, reg.asl2struc(wsp, native_output))
 
 def do_cleanup(wsp):
     """
