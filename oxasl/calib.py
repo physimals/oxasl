@@ -24,6 +24,7 @@ from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup,
 from oxasl.reporting import LightboxImage
 
 def init(wsp):
+    """ Initialize calibration sub-workspace """
     if wsp.calibration is None:
         wsp.sub("calibration")
 
@@ -265,7 +266,8 @@ def get_m0_wholebrain(wsp):
       - ``rois.mask`` - Brain mask Image in ASL native space
       - ``struc``     - Structural image
     """
-    wsp.log.write(" - Doing wholebrain region calibration\n")
+    struc.segment(wsp)
+    wsp.log.write("\n - Doing wholebrain region calibration\n")
 
     tr = wsp.ifnone("tr", 3.2)
     te = wsp.ifnone("te", 0)
@@ -723,7 +725,7 @@ class CalibOptions(OptionCategory):
         group.add_option("--t1r", help="T1 of reference tissue (defaults: csf 4.3, gm 1.3, wm 1.0 s)", type=float, default=None)
         group.add_option("--t2r", help="T2 of reference tissue (defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50  ms)", type=float, default=None)
         group.add_option("--t2b", help="T2(*) of blood (default T2/T2*: 150/50 ms)", type=float, default=None)
-        group.add_option("--refmask", dest="ref_mask", help="Reference tissue mask in perfusion/calibration image space")
+        group.add_option("--refmask", dest="ref_mask", help="Reference tissue mask in perfusion/calibration image space", type="image")
         group.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
         group.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
         #group.add_option("--Mo", dest="mo", help="Save calculated M0 value to specified file")
