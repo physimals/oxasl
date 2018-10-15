@@ -402,8 +402,6 @@ def apply_corrections(wsp):
     wsp.log.write("\nApplying preprocessing corrections\n")
     if wsp.corrected is None:
         wsp.sub("corrected")
-    if wsp.distcorr is None:
-        wsp.sub("distcorr")
 
     wsp.corrected.asldata = wsp.input.asldata
     wsp.corrected.calib = single_volume(wsp, wsp.input.calib)
@@ -414,7 +412,7 @@ def apply_corrections(wsp):
     if wsp.moco is not None:
         wsp.log.write("   - Using motion correction\n")
 
-    warps = []
+    warps, moco_mats = [], None
     if wsp.fieldmap is not None:
         wsp.log.write("   - Using fieldmap distortion correction\n")
         warps.append(wsp.fieldmap.warp)
@@ -423,6 +421,9 @@ def apply_corrections(wsp):
         wsp.log.write("   - Using user-supplied GDC warp\n")
         warps.append(wsp.gdc_warp)
         
+    if wsp.moco is not None: 
+        moco_mats = wsp.moco.mc_mats
+
     if warps:
         kwargs = {}
         for idx, warp in enumerate(warps):
@@ -430,17 +431,16 @@ def apply_corrections(wsp):
                 
         wsp.log.write("   - Converting all warps to single transform and extracting Jacobian\n")
         result = fsl.convertwarp(ref=wsp.asldata, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, **kwargs)
-        wsp.distcorr.warp = result["out"]
+        wsp.corrected.total_warp = result["out"]
         jacobian = result["jacobian"]
-        wsp.distcorr.jacobian = Image(np.mean(jacobian.data, 3), header=jacobian.header)
+        wsp.corrected.total_jacobian = Image(np.mean(jacobian.data, 3), header=jacobian.header)
 
-    if not warps and wsp.moco is None:
+    if not warps and moco_mats is None:
         wsp.log.write("   - No corrections to apply\n")
     else:
         # Apply all corrections to ASL data - note that we make sure the output keeps all the ASL metadata
         wsp.log.write("   - Applying to ASL data\n")
-        if wsp.moco is None: wsp.sub("moco") # FIXME
-        asldata_corr = correct_img(wsp, wsp.input.asldata, wsp.moco.mc_mats)
+        asldata_corr = correct_img(wsp, wsp.input.asldata, moco_mats)
         wsp.corrected.asldata = wsp.input.asldata.derived(asldata_corr.data)
 
         # Apply corrections to calibration images
@@ -513,11 +513,11 @@ def correct_img(wsp, img, linear_mat):
      - ``total_warp``      : Combined warp image
      - ``jacobian``        : Jacobian associated with warp image
     """
-    warp_result = fsl.applywarp(img, ref=wsp.corrected.asldata, out=fsl.LOAD, warp=wsp.distcorr.warp, premat=linear_mat, super=True, superlevel="a", interp="trilinear", paddingsize=1, rel=True)
+    warp_result = fsl.applywarp(img, ref=wsp.corrected.asldata, out=fsl.LOAD, warp=wsp.corrected.total_warp, premat=linear_mat, super=True, superlevel="a", interp="trilinear", paddingsize=1, rel=True)
     img = warp_result["out"]
-    if wsp.distcorr.jacobian is not None:
+    if wsp.corrected.total_jacobian is not None:
         wsp.log.write("   - Correcting for local volume scaling using Jacobian\n")
-        jdata = wsp.distcorr.jacobian.data
+        jdata = wsp.corrected.total_jacobian.data
         if img.data.ndim == 4:
             # Required to make broadcasting work
             jdata = jdata[..., np.newaxis]
