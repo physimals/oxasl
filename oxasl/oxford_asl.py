@@ -60,6 +60,21 @@ import numpy as np
 
 from fsl.data.image import Image
 
+try:
+    import oxasl_ve
+except ImportError:
+    oxasl_ve = None
+
+try:
+    import oxasl_deblur
+except ImportError:
+    oxasl_deblur = None
+
+try:
+    import oxasl_enable
+except ImportError:
+    oxasl_enable = None
+
 from oxasl import Workspace, __version__, image, calib, struc, basil, mask, corrections, reg
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 
@@ -144,10 +159,28 @@ def oxasl(wsp):
     wsp.asldata.summary(wsp.log)
 
     oxasl_preproc(wsp)
-    oxasl_model(wsp)
-    redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
-    if wsp.pvcorr:
-        pvcorr(wsp)
+
+    if wsp.asldata.iaf in ("tc", "ct", "diff"):
+        oxasl_model(wsp)
+        redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
+        if wsp.pvcorr:
+            pvcorr(wsp)
+            output_native(wsp, wsp.basil_pvcorr)
+        else:
+            output_native(wsp, wsp.basil)
+        output_trans(wsp)
+    elif wsp.asldata.iaf == "ve":
+        if oxasl_ve is None:
+            raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
+        oxasl_ve.decode(wsp)
+        oxasl_ve.model_vessels(wsp)
+        oxasl_ve.combine_vessels(wsp)
+        redo_reg(wsp, wsp.veasl.all_vessels.native.perfusion)
+        if wsp.pvcorr:
+            # FIXME 
+            pass
+    else:
+        raise ValueError("ASL data has format '%s' - not supported by OXASL pipeline" % wsp.asldata.iaf)
 
     do_report(wsp)
     do_cleanup(wsp)
@@ -177,7 +210,9 @@ def oxasl_preproc(wsp):
     corrections.apply_corrections(wsp)
 
     mask.generate_mask(wsp)
-    calib.calculate_m0(wsp)
+
+    if wsp.calib:
+        calib.calculate_m0(wsp)
 
 def oxasl_model(wsp):
     if wsp.asldata.ntis > 1 and wsp.batsd is None:
@@ -186,7 +221,6 @@ def oxasl_model(wsp):
         wsp.batsd = 1
 
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
-    do_output(wsp, wsp.basil)
 
 def redo_reg(wsp, pwi):
     """
@@ -221,7 +255,6 @@ def pvcorr(wsp):
     wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
     wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
     basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
-    do_output(wsp, wsp.basil_pvcorr)
 
 def do_report(wsp):
     """
@@ -237,9 +270,13 @@ def do_report(wsp):
     wsp.report.generate_html(report_dir, report_build_dir)
     wsp.log.write(" - Report generated in %s\n" % report_dir)
 
-def do_output(wsp, basil_wsp):
+def output_native(wsp, basil_wsp):
     """
     Create native space output images
+
+    :param wsp: Workspace object. Output will be placed in a sub workspace named ``native``
+    :param basil_wsp: Workspace in which Basil modelling has been run. The ``finalstep``
+                      attribute is expected to point to the final output workspace
     """
     output_items = {
         "mean_ftiss" : ("perfusion", 6000, True),
@@ -264,6 +301,19 @@ def do_output(wsp, basil_wsp):
             setattr(output_wsp, name, img)
             if is_perfusion and wsp.calib is not None:
                 setattr(output_wsp, "%s_calib" % name, calib.calibrate(wsp, img, multiplier=multiplier))
+
+def output_trans(wsp):
+    """
+    Create transformed output, i.e. in structural and/or standard space
+    """
+    if wsp.reg.asl2struc is not None:
+        wsp.sub("struct")
+    for suffix in ("", "_calib"):
+        for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit"):
+            native_output = getattr(wsp.native, output + suffix)
+            if native_output is None: continue
+            if wsp.reg.asl2struc is not None:
+                setattr(wsp.struct, output, reg.asl2struc(wsp, native_output))
 
 def do_cleanup(wsp):
     """
