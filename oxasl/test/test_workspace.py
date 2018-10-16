@@ -66,7 +66,7 @@ def test_sub_inherit():
     wsp = Workspace()
     wsp.wibble = 7
     wsp.wobble = 6
-    wsp.sub("child", parent_default=True)
+    wsp.sub("child")
     wsp.child.wobble = 5
     assert(wsp.child.wibble == 7)
     assert(wsp.child.wobble == 5)
@@ -76,7 +76,7 @@ def test_sub_inherit_wsp():
     wsp = Workspace()
     wsp.sub("child1")
     wsp.child1.wibble = 7
-    wsp.sub("child2", parent_default=True)
+    wsp.sub("child2")
     assert(wsp.child2.child1 is not None)
     assert(wsp.child2.child1.wibble == 7)
 
