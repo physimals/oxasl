@@ -67,6 +67,7 @@ class DistcorrOptions(OptionCategory):
 
         g = IgnorableOptionGroup(parser, "Sensitivity correction")
         g.add_option("--cref", help="Reference image for sensitivity correction", type="image")
+        g.add_option("--cact", help="Image from coil used for actual ASL acquisition (default: calibration image - only in longtr mode)", type="image")
         g.add_option("--isen", help="User-supplied sensitivity correction in ASL space")
         g.add_option("--senscorr-auto", help="Apply automatic sensitivity correction using bias field from FAST", action="store_true", default=False)
         g.add_option("--senscorr-off", help="Do not apply any sensitivity correction", action="store_true", default=False)
@@ -165,10 +166,10 @@ def get_cblip_correction(wsp):
     page.text("PE direction: %s" % wsp.pedir)
     page.text("Echo spacing: %f s" % wsp.echospacing)
     page.heading("Correction image", level=1)
-    #for dim in range(3):
-    #    #img = Image(wsp.fmap_warp.data[..., dim], header=wsp.fmap_warp.header)
-    #    page.text("Dimension %i" % dim)
-    #    page.image("fmap_warp%i" % dim, LightboxImage(img))
+    for dim in range(3):
+        img = Image(wsp.topup.fieldcoef.data[..., dim], header=wsp.topup.fieldcoef.header)
+        page.text("Dimension %i" % dim)
+        page.image("fmap_warp%i" % dim, LightboxImage(img))
 
 def get_fieldmap_correction(wsp):
     """
@@ -325,7 +326,8 @@ def get_sensitivity_correction(wsp):
     -----------------------------
 
      - ``isen`` : User supplied sensitivity image
-     - ``calib`` : Calibration image. Used in conjunction with ``cref`` to calculate sensitivity map
+     - ``cact`` : Calibration image. Used in conjunction with ``cref`` to calculate sensitivity map
+     - ``calib`` : Calibration image. Used as alternative to cact provided ``mode`` is ``longtr``
      - ``cref`` : Calibration reference image 
      - ``senscorr_auto`` : If True, automatically calculate sensitivity correction using FAST
      - ``senscorr_off`` If True, do not apply sensitivity correction
@@ -345,8 +347,15 @@ def get_sensitivity_correction(wsp):
     elif wsp.isen is not None:
         wsp.log.write(" - Sensitivity image supplied by user\n")
         sensitivity = wsp.isen
+    elif wsp.cact is not None and wsp.cref is not None:
+        wsp.log.write(" - Sensitivity image calculated from calibration actual and reference images\n")
+        cref_data = np.copy(wsp.cref.data)
+        cref_data[cref_data == 0] = 1
+        sensitivity = Image(wsp.cact.data.astype(np.float) / cref_data, header=wsp.calib.header)
     elif wsp.calib is not None and wsp.cref is not None:
-        wsp.log.write(" - Sensitivity image calculated from calibration reference image\n")
+        if wsp.ifnone("mode", "longtr") != "longtr":
+            raise ValueError("Calibration reference image specified but calibration image was not in longtr mode - need to provided additional calibration image using the ASL coil")
+        wsp.log.write(" - Sensitivity image calculated from calibration and reference images\n")
         cref_data = np.copy(wsp.cref.data)
         cref_data[cref_data == 0] = 1
         sensitivity = Image(wsp.calib.data.astype(np.float) / cref_data, header=wsp.calib.header)
@@ -406,6 +415,7 @@ def apply_corrections(wsp):
     wsp.corrected.asldata = wsp.input.asldata
     wsp.corrected.calib = single_volume(wsp, wsp.input.calib)
     wsp.corrected.cref = single_volume(wsp, wsp.input.cref)
+    wsp.corrected.cact = single_volume(wsp, wsp.input.cact)
     wsp.corrected.cblip = single_volume(wsp, wsp.input.cblip)
     
     wsp.log.write(" - Data transformations\n")
