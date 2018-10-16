@@ -178,7 +178,7 @@ class Workspace(object):
             elif isinstance(val, Workspace) and val != self and not attr.startswith("_"):
                 val.uncache()
 
-    def sub(self, name, parent_default=False, **kwargs):
+    def sub(self, name, parent_default=True, **kwargs):
         """
         Create a sub-workspace, (i.e. a subdir of this workspace)
 
@@ -197,7 +197,7 @@ class Workspace(object):
         else:
             savedir = None
         
-        if parent_default:
+        if parent_default and name not in self._defaults:
             parent = self
         else:
             parent = None

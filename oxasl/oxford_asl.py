@@ -90,8 +90,8 @@ class OxfordAslOptions(OptionCategory):
     def groups(self, parser):
         ret = []
         g = IgnorableOptionGroup(parser, "Main Options")
-        g.add_option("--wp", dest="wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
-        g.add_option("--mc", dest="mc", help="Motion correct data", action="store_true", default=False)
+        g.add_option("--wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
+        g.add_option("--mc", help="Motion correct data", action="store_true", default=False)
         g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
         g.add_option("--fixbolus", dest="infertau", help="Fix bolus duration", action="store_false", default=True)
         g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
@@ -129,9 +129,10 @@ def main():
         parser.add_category(GenericOptions())
 
         options, args = parser.parse_args(sys.argv)
+
         if not options.output:
             options.output = "oxasl"
-
+        
         # Deal with case where asldata is given as separate files
         if len(args) > 1 and options.asldata is None:
             merged_data = None
@@ -233,9 +234,9 @@ def model_paired(wsp):
      - ``output.native`` - Native (ASL) space output from last Basil modelling output
      - ``output.struc``  - Structural space output
     """
-    basil.basil(wsp, output_wsp=wsp.sub("basil", parent_default=True))
+    basil.basil(wsp, output_wsp=wsp.sub("basil"))
     redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
-    wsp.sub("output", parent_default=True)
+    wsp.sub("output")
 
     if wsp.pvcorr:
         # Do partial volume correction fitting
@@ -255,7 +256,7 @@ def model_paired(wsp):
         wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv, use_applywarp=True)
         wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
         wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
-        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr", parent_default=True), prefit=False)
+        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
         output_native(wsp.output, wsp.basil_pvcorr)
     else:
         output_native(wsp.output, wsp.basil)
@@ -304,7 +305,7 @@ def output_native(wsp, basil_wsp):
         "mean_deltwm" : ("arrival_wm", 1, False),
         "modelfit" : ("modelfit", 1, False),
     }
-    wsp.sub("native", parent_default=True)
+    wsp.sub("native")
     for fabber_output, oxasl_output in output_items.items():
         img = basil_wsp.finalstep.ifnone(fabber_output, None)
         if img is not None:
@@ -325,7 +326,7 @@ def output_trans(wsp):
     Create transformed output, i.e. in structural and/or standard space
     """
     if wsp.reg.asl2struc is not None:
-        wsp.sub("struct", parent_default=True)
+        wsp.sub("struct")
     for suffix in ("", "_calib"):
         for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit"):
             native_output = getattr(wsp.native, output + suffix)
