@@ -322,6 +322,20 @@ def get_m0_wholebrain(wsp):
     wsp.calibration.m0_img = Image(m0, header=wsp.calib.header)
     m0 = np.mean(m0[brain_mask != 0])
     wsp.log.write(" - M0 of brain: %f\n" % m0)
+
+    # Reporting
+    page = wsp.report.page("m0")
+    page.heading("Whole-brain M0 calculation")
+    page.text("Whole-brain calibration calculates an M0 value for each voxel from the calibration image based on partial volume estimates")  
+    page.text("- Inversion efficiency: %f" % alpha)  
+    page.text("- Calibration gain: %f" % gain)  
+    page.text(" - TR: %f" % wsp.tr)
+    page.text(" - TE: %f" % wsp.te)
+
+    page.heading("M0", level=1)
+    page.text("Mean M0 value (within mask): %f" % m0)
+    page.image("m0img", LightboxImage(wsp.calibration.m0_img))
+
     return float(m0)
 
 def get_m0_refregion(wsp, mode="longtr"):
@@ -498,8 +512,8 @@ def get_m0_refregion(wsp, mode="longtr"):
         # Extra options for Look Locker
         if wsp.FA:
             options["FA"] = wsp.FA
-        if wsp.nphases:
-            options["phases"] = wsp.nphases
+        if wsp.calib_nphases:
+            options["phases"] = wsp.calib_nphases
         if wsp.lfa:
             options["LFA"] = wsp.lfa
         
@@ -737,12 +751,11 @@ class CalibOptions(OptionCategory):
         group.add_option("--tis", help="Comma separated list of inversion times, e.group. --tis 0.2,0.4,0.6")
         group.add_option("--fa", help="Flip angle (in degrees) for Look-Locker readouts", type=float)
         group.add_option("--lfa", help="Lower flip angle (in degrees) for dual FA calibration", type=float)
-        # FIXME conflicts with AslImage group.add_option("--nphases", help="Number of phases (repetitions) of higher FA", type=int)
+        group.add_option("--calib-nphases", help="Number of phases (repetitions) of higher FA", type=int)
         group.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
         groups.append(group)
 
         #group = IgnorableOptionGroup(parser, "Coil sensitivity correction, either using existing sensitivity image or reference images collected using same parameters", ignore=self.ignore)
-        #group.add_option("--cact", help="Image from coil used for actual ASL acquisition (default: calibration image - only in longtr mode)", type="image")
         #groups.append(group)
 
         #group = IgnorableOptionGroup(parser, "CSF masking options (only for --tissref csf)", ignore=self.ignore)
@@ -762,7 +775,7 @@ def main():
         parser = AslOptionParser(usage="oxasl_calib -i <perfusion image> -c <calibration image> --calib-method <voxelwise|refregion> -o <output filename> [options]")
         parser.add_category(CalibOptions())
         parser.add_category(GenericOptions(output_type="file"))
-        options, _ = parser.parse_args()
+        options, _ = parser.parse_args(sys.argv)
         
         if not options.perf:
             sys.stderr.write("Perfusion input file not specified\n")
