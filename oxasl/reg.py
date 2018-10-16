@@ -109,6 +109,13 @@ def reg_asl2struc(wsp, flirt=True, bbr=False):
         wsp.log.write(" - Structural->ASL transform\n")
         wsp.log.write(str(wsp.reg.struc2asl) + "\n")
 
+        page = wsp.report.page("asl2struc")
+        page.heading("ASL -> Structural registration", level=0)
+        page.heading("asl2struc", level=1)
+        page.matrix(wsp.reg.asl2struc)
+        page.heading("struc2asl", level=1)
+        page.matrix(wsp.reg.struc2asl)
+
 def reg_struc2std(wsp, fnirt=False):
     """
     Determine structural -> standard space registration
