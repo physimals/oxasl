@@ -81,8 +81,8 @@ def init(wsp):
     if wsp.structural.brain is not None and wsp.structural.brain_mask is None:
         # FIXME - for now get the mask by binarising the brain image but gives slightly
         # different results compared to using the mask returned by BET
-        wsp.structural.brain_mask = fsl.fslmaths(wsp.structural.brain).bin().run()
-
+        wsp.structural.brain_mask = (wsp.structural.brain != 0).astype(np.int)
+        
 def segment(wsp):
     """
     Segment the structural image
