@@ -27,6 +27,35 @@ class AslOptionParser(OptionParser):
         OptionParser.__init__(self, usage=usage, version=version, option_class=_ImageOption, **kwargs)
         self._categories = defaultdict(list)
 
+    def parse_args(self, argv):
+        options, args = OptionParser.parse_args(self, argv)
+        if options.optfile:
+            # When an option file is specifeid, extract the options, build
+            # a new argv vector and re-parse it. This is the only way to ensure
+            # that options in the file work identically to CLI options.
+            new_argv = self._add_from_file(argv, options.optfile)
+            return OptionParser.parse_args(self, new_argv)
+        else:
+            return options, args
+
+    def _add_from_file(self, argv, optfile):
+        new_argv = list(argv)
+        with open(optfile, "r") as f:
+            optlines = f.readlines()
+
+        for line in optlines:
+            line = line[:line.find("#")].strip()
+            if line:
+                line = line.lstrip("-").replace(":", " ").replace("=", " ")
+                kv = line.split(None, 1)
+                key = "-" + kv[0]
+                if len(kv[0]) > 1:
+                    key = "-" + key
+                new_argv.append(key)
+                if len(kv) == 2:
+                    new_argv.append(kv[1])
+        return new_argv
+
     def add_category(self, category):
         """ 
         Add an OptionCategory to the parser
@@ -105,8 +134,9 @@ class GenericOptions(OptionCategory):
 
     def groups(self, parser):
         group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
-        group.add_option("-o", "--output", dest="output", help="Output %s" % self.output_type, default=None)
-        group.add_option("-m", "--mask", dest="mask", help="Brain mask image in native ASL space", default=None, type="image")
+        group.add_option("--output", "-o", help="Output %s" % self.output_type, default=None)
+        group.add_option("--mask", "-m", help="Brain mask image in native ASL space", default=None, type="image")
+        group.add_option("--optfile", help="File containing additional options")
         group.add_option("--debug", help="Debug mode", action="store_true", default=False)
         return [group, ]
 
