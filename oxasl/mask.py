@@ -64,7 +64,7 @@ def generate_mask(wsp):
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
         wsp.rois.mask_src = "regfrom"
-        wsp.rois.mask = fsl.fslmaths(wsp.reg.regfrom).bin().run()
+        wsp.rois.mask = (wsp.reg.regfrom > 0).astype(np.int)
         mask_source = "generated from brain extracted registration ASL image"
     
     wsp.log.write("\nGenerated ASL data mask\n")
