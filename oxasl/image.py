@@ -23,7 +23,7 @@ class AslImageOptions(OptionCategory):
 
     def groups(self, parser):
         group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
-        group.add_option(self.fname_opt, dest="asldata", help="ASL data file")
+        group.add_option("--asldata", self.fname_opt, help="ASL data file")
         group.add_option("--iaf", help="input ASl format: diff=differenced,tc=tag-control,ct=control-tag,mp=multiphase,ve=vessel-encoded")
         group.add_option("--order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, l=labelling (tag/control/phases etc). First character is fastest varying")
         group.add_option("--tis", help="TIs as comma-separated list")

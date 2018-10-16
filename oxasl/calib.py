@@ -334,7 +334,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     -----------------------------
 
      - ``calib`` : Image containing voxelwise M0 map
-     - ``ref_mask`` : Reference region mask in calibration image space. Technically this is not required
+     - ``refmask`` : Reference region mask in calibration image space. Technically this is not required
                       as the brain mask will be used if not specified, however it is strongly recommended.
      
     Optional workspace attributes
@@ -428,15 +428,15 @@ def get_m0_refregion(wsp, mode="longtr"):
     else:
         brain_mask = np.ones(wsp.calib.shape[:3])
 
-    if wsp.ref_mask is not None:
-        wsp.log.write(" - Using supplied reference tissue mask: %s\n" % wsp.ref_mask.name)
-        wsp.calibration.ref_mask = wsp.ref_mask
-        ref_mask = wsp.calibration.ref_mask.data
+    if wsp.refmask is not None:
+        wsp.log.write(" - Using supplied reference tissue mask: %s\n" % wsp.refmask.name)
+        wsp.calibration.refmask = wsp.refmask
+        refmask = wsp.calibration.refmask.data
     elif wsp.tissref.lower() in ("csf", "wm", "gm"):
-        get_tissref_mask(wsp)
-        ref_mask = wsp.calibration.ref_mask.data
+        get_tissrefmask(wsp)
+        refmask = wsp.calibration.refmask.data
         
-    nonzero = np.count_nonzero(ref_mask)
+    nonzero = np.count_nonzero(refmask)
     if nonzero < 1:
         raise ValueError("Reference mask does not contain any unmasked voxels")
     else:
@@ -458,20 +458,20 @@ def get_m0_refregion(wsp, mode="longtr"):
             calib_data /= sens_data
         
         # Mask M0 map with tissue reference
-        calib_data[ref_mask == 0] = 0
+        calib_data[refmask == 0] = 0
         
         # calcualte T1 of reference region (if a T1 image has been supplied)
         if t1r_img:
-            t1r = np.mean(t1r.data[ref_mask != 0])
+            t1r = np.mean(t1r.data[refmask != 0])
             wsp.log.write(" - Calculated T1 of reference tissue: %f\n" % t1r)
 
         # calcualte T2 of reference region (if a T2 image has been supplied)
         if t2r_img:
-            t2r = np.mean(t2r.data[ref_mask != 0])
+            t2r = np.mean(t2r.data[refmask != 0])
             wsp.log.write(" - Calculated T2 of reference tissue: %f\n" % t2r)
 
         # calculate M0_ref value
-        m0 = np.mean(calib_data[ref_mask != 0])
+        m0 = np.mean(calib_data[refmask != 0])
         wsp.log.write(" - mean of reference tissue: %f\n" % m0)
         m0 = m0 / (1 - math.exp(- (tr - taq) / t1r))
         wsp.log.write(" - M0 of reference tissue: %f\n" % m0)
@@ -482,7 +482,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         # FIXME this is not functional at the moment
         options = {
             "data" : wsp.calib,
-            "mask" : ref_mask,
+            "mask" : refmask,
             "method" : "vb",
             "noise" : "white",
             "model" : "satrecov",
@@ -524,7 +524,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         mean_m0 = fabber_result["mean_M0t"]
         
         # Calculate M0 value - this is mean M0 of CSF at the TE of the sequence
-        m0_value = np.mean(mean_m0.data[ref_mask != 0])
+        m0_value = np.mean(mean_m0.data[refmask != 0])
 
         wsp.log.write(" - M0 of reference tissue: %f\n" % m0_value)
 
@@ -579,7 +579,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     
     return float(m0)
 
-def get_tissref_mask(wsp):
+def get_tissrefmask(wsp):
     """
     Calculate the CSF mask
     """
@@ -663,11 +663,11 @@ def get_tissref_mask(wsp):
 
     # Threshold reference mask conservatively to select only reference tissue
     wsp.log.write(" - Thresholding reference mask\n")
-    wsp.calibration.ref_mask = Image((wsp.calibration.refpve_calib.data > 0.9).astype(np.int), header=wsp.calibration.refpve_calib.header)
+    wsp.calibration.refmask = Image((wsp.calibration.refpve_calib.data > 0.9).astype(np.int), header=wsp.calibration.refpve_calib.header)
 
     page.text("Reference Mask (thresholded at 0.9")
-    page.image("ref_mask", LightboxImage(wsp.calibration.ref_mask, bgimage=wsp.calib))
-    page.text("Number of voxels in reference region: %i" % np.count_nonzero(wsp.calibration.ref_mask.data))
+    page.image("refmask", LightboxImage(wsp.calibration.refmask, bgimage=wsp.calib))
+    page.text("Number of voxels in reference region: %i" % np.count_nonzero(wsp.calibration.refmask.data))
 
 TISS_DEFAULTS = {
     "csf" : [4.3, 750, 400, 1.15],
@@ -705,11 +705,11 @@ class CalibOptions(OptionCategory):
     def groups(self, parser):
         groups = []
         group = IgnorableOptionGroup(parser, "Calibration", ignore=self.ignore)
-        group.add_option("-c", dest="calib", help="Calibration image", type="image")
-        group.add_option("-i", dest="perf", help="Perfusion image for calibration, in same image space as calibration image", type="image")
-        group.add_option("--calib-method", "--cmethod", dest="calib_method", help="Calibration method: voxelwise or refregion")
-        group.add_option("--alpha", dest="calib_alpha", help="Inversion efficiency", type=float, default=1.0)
-        group.add_option("--cgain", dest="calib_gain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
+        group.add_option("--calib", "-c", help="Calibration image", type="image")
+        group.add_option("--perf", "-i", help="Perfusion image for calibration, in same image space as calibration image", type="image")
+        group.add_option("--calib-method", "--cmethod", help="Calibration method: voxelwise or refregion")
+        group.add_option("--calib-alpha", "--alpha", help="Inversion efficiency", type=float, default=1.0)
+        group.add_option("--calib-gain", "--cgain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
         group.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
         groups.append(group)
 
@@ -725,11 +725,9 @@ class CalibOptions(OptionCategory):
         group.add_option("--t1r", help="T1 of reference tissue (defaults: csf 4.3, gm 1.3, wm 1.0 s)", type=float, default=None)
         group.add_option("--t2r", help="T2 of reference tissue (defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50  ms)", type=float, default=None)
         group.add_option("--t2b", help="T2(*) of blood (default T2/T2*: 150/50 ms)", type=float, default=None)
-        group.add_option("--refmask", dest="ref_mask", help="Reference tissue mask in perfusion/calibration image space", type="image")
+        group.add_option("--refmask", help="Reference tissue mask in perfusion/calibration image space", type="image")
         group.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
         group.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
-        #group.add_option("--Mo", dest="mo", help="Save calculated M0 value to specified file")
-        #group.add_option("--om", dest="om", help="Save CSF mask to specified file")
         groups.append(group)
         
         group = IgnorableOptionGroup(parser, "longtr mode (calibration image is a control image with a long TR)", ignore=self.ignore)

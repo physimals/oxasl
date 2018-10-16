@@ -80,8 +80,8 @@ def main():
     """
     try:
         parser = AslOptionParser(usage="asl_preproc -i <filename> [options]")
-        parser.add_option("-o", dest="output", help="Output file", default=None)
-        parser.add_option("--debug", dest="debug", help="Debug mode", action="store_true", default=False)
+        parser.add_option("--output", "-o", help="Output file", default=None)
+        parser.add_option("--debug", help="Debug mode", action="store_true", default=False)
         
         parser.add_category(AslImageOptions())
         parser.add_category(AslPreprocOptions())

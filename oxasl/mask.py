@@ -84,7 +84,7 @@ def main():
     """
     try:
         parser = AslOptionParser(usage="asl_mask -i <asl_image> [options...]", version=__version__)
-        parser.add_option("-c", "--calib", dest="calib", help="Calibration image", default=None)
+        parser.add_option("--calib", "-c", help="Calibration image", default=None)
         parser.add_option("--use-pwi", help="Use the perfusion weighted average rather than the timeseries mean", action="store_true", default=False)
         parser.add_category(image.AslImageOptions())
         parser.add_category(struc.StructuralImageOptions())

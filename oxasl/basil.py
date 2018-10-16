@@ -502,34 +502,30 @@ class BasilOptions(OptionCategory):
         groups = []
         
         group = IgnorableOptionGroup(parser, "BASIL options", ignore=self.ignore)
-        group.add_option("--optfile", "-@", dest="optfile", help="If specified, file containing additional Fabber options (e.g. --ti1=1.8)")
-        groups.append(group)
-
-        group = IgnorableOptionGroup(parser, "Extended options", ignore=self.ignore)
-        group.add_option("--infertau", dest="infertau", help="Infer bolus duration", action="store_true", default=False)
-        group.add_option("--inferart", dest="inferart", help="Infer macro vascular (arterial) signal component", action="store_true", default=False)
-        group.add_option("--inferpc", dest="inferpc", help="Infer pre-capillary signal component", action="store_true", default=False)
-        group.add_option("--infert1", dest="infert1", help="Include uncertainty in T1 values", action="store_true", default=False)
-        group.add_option("--artonly", dest="artonly", help="Remove tissue component and infer only arterial component", action="store_true", default=False)
-        group.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
-        group.add_option("--spatial", dest="spatial", help="Add step that implements adaptive spatial smoothing on CBF", action="store_true", default=False)
-        group.add_option("--fast", dest="fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
+        group.add_option("--infertau", help="Infer bolus duration", action="store_true", default=False)
+        group.add_option("--inferart", help="Infer macro vascular (arterial) signal component", action="store_true", default=False)
+        group.add_option("--inferpc", help="Infer pre-capillary signal component", action="store_true", default=False)
+        group.add_option("--infert1", help="Include uncertainty in T1 values", action="store_true", default=False)
+        group.add_option("--artonly", help="Remove tissue component and infer only arterial component", action="store_true", default=False)
+        group.add_option("--fixbat",  help="Fix bolus arrival time", action="store_false", default=True)
+        group.add_option("--spatial", help="Add step that implements adaptive spatial smoothing on CBF", action="store_true", default=False)
+        group.add_option("--fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
         group.add_option("--noiseprior", help="Use an informative prior for the noise estimation", action="store_true", default=False)
         group.add_option("--noisesd", help="Set a custom noise std. dev. for the nosie prior", type=float)
         groups.append(group)
 
         group = IgnorableOptionGroup(parser, "Model options", ignore=self.ignore)
-        group.add_option("--disp", dest="disp", help="Model for label dispersion", default="none")
-        group.add_option("--exch", dest="exch", help="Model for tissue exchange (residue function)", default="mix")
+        group.add_option("--disp", help="Model for label dispersion", default="none")
+        group.add_option("--exch", help="Model for tissue exchange (residue function)", default="mix")
         groups.append(group)
 
         group = IgnorableOptionGroup(parser, "Partial volume correction / CBF estimation (enforces --spatial)", ignore=self.ignore)
-        group.add_option("--pgm", dest="pgm", help="Gray matter PV map", type="image")
-        group.add_option("--pwm", dest="pwm", help="White matter PV map", type="image")
+        group.add_option("--pgm", help="Gray matter PV map", type="image")
+        group.add_option("--pwm", help="White matter PV map", type="image")
         groups.append(group)
 
         group = IgnorableOptionGroup(parser, "Special options", ignore=self.ignore)
-        group.add_option("--t1im", dest="t1im", help="Voxelwise T1 tissue estimates", type="image")
+        group.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
         groups.append(group)
 
         return groups
