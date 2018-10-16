@@ -128,27 +128,10 @@ def main():
             parser.add_category(oxasl_ve.VeaslOptions())
         parser.add_category(GenericOptions())
 
-        options, args = parser.parse_args(sys.argv)
-
+        options, args = parser.parse_args()
         if not options.output:
             options.output = "oxasl"
         
-        # Deal with case where asldata is given as separate files
-        if len(args) > 1 and options.asldata is None:
-            merged_data = None
-            for idx, fname in enumerate(args[1:]):
-                img = Image(fname)
-                shape = list(img.shape)
-                if img.ndim == 3:
-                    shape += [1,]
-                if merged_data is None:
-                    merged_data = np.zeros(shape[:3] + [shape[3] * len(args[1:])])
-                merged_data[..., idx*shape[3]:(idx+1)*shape[3]] = img.data
-            merged_img = Image(merged_data, header=img.header)
-            temp_asldata = tempfile.NamedTemporaryFile(prefix="oxasl", delete=True)
-            options.asldata = temp_asldata.name
-            merged_img.save(options.asldata)
-
         # Some oxasl command-line specific defaults
         if options.calib is not None and options.calib_method is None:
             if options.struc is not None:
