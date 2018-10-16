@@ -3,9 +3,11 @@ Classes for parsing command line options for ASL tools
 
 Copyright (c) 2008-2018 University of Oxford
 """
+import sys
 from optparse import OptionGroup, OptionParser, Option, OptionValueError
 from collections import defaultdict
 from copy import copy
+import tempfile
 
 import numpy as np
 
@@ -27,16 +29,34 @@ class AslOptionParser(OptionParser):
         OptionParser.__init__(self, usage=usage, version=version, option_class=_ImageOption, **kwargs)
         self._categories = defaultdict(list)
 
-    def parse_args(self, argv):
-        options, args = OptionParser.parse_args(self, argv)
+    def parse_args(self, argv=None, values=None):
+        if argv is None:
+            argv = sys.argv[1:]
+        options, args = OptionParser.parse_args(self, argv, values)
         if options.optfile:
             # When an option file is specifeid, extract the options, build
             # a new argv vector and re-parse it. This is the only way to ensure
             # that options in the file work identically to CLI options.
             new_argv = self._add_from_file(argv, options.optfile)
-            return OptionParser.parse_args(self, new_argv)
-        else:
-            return options, args
+            options, args = OptionParser.parse_args(self, new_argv, values)
+
+        # Deal with case where asldata is given as separate files
+        if len(args) > 1 and options.asldata is None:
+            merged_data = None
+            for idx, fname in enumerate(args[1:]):
+                img = Image(fname)
+                shape = list(img.shape)
+                if img.ndim == 3:
+                    shape += [1,]
+                if merged_data is None:
+                    merged_data = np.zeros(shape[:3] + [shape[3] * len(args[1:])])
+                merged_data[..., idx*shape[3]:(idx+1)*shape[3]] = img.data
+            merged_img = Image(merged_data, header=img.header)
+            temp_asldata = tempfile.NamedTemporaryFile(prefix="oxasl", delete=True)
+            options.asldata = temp_asldata.name
+            merged_img.save(options.asldata)
+
+        return options, args
 
     def _add_from_file(self, argv, optfile):
         new_argv = list(argv)
