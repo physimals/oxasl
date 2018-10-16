@@ -81,7 +81,7 @@ def init(wsp):
     if wsp.structural.brain is not None and wsp.structural.brain_mask is None:
         # FIXME - for now get the mask by binarising the brain image but gives slightly
         # different results compared to using the mask returned by BET
-        wsp.structural.brain_mask = (wsp.structural.brain != 0).astype(np.int)
+        wsp.structural.brain_mask = Image((wsp.structural.brain.data != 0).astype(np.int), header=wsp.structural.struc.header)
         
 def segment(wsp):
     """
@@ -106,8 +106,12 @@ def segment(wsp):
                 wsp.log.write(" - Bias field extracted sucessfully\n")
             except PathError:
                 wsp.log.write(" - No bias field found")
-        elif wsp.fastdir:
+        elif wsp.fastsrc:
             raise NotImplementedError("Specifying FAST output directory")
+            img = os.path.split(wsp.fastsrc)[1]
+            wsp.structural.csf_pv = os.path.join(wsp.fastsrc, "%s_pve_0" % img)
+            wsp.structural.gm_pv = os.path.join(wsp.fastsrc, "%s_pve_1" % img)
+            wsp.structural.wm_pv = os.path.join(wsp.fastsrc, "%s_pve_2" % img)
         elif wsp.structural.struc:
             wsp.log.write(" - Running FAST\n")
             page.text("FAST run to segment structural image")
