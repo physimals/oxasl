@@ -57,11 +57,11 @@ def init(wsp):
         biascorr = os.path.join(wsp.fslanat, "T1_biascorr")
         biascorr_brain = os.path.join(wsp.fslanat, "T1_biascorr_brain")
         if glob.glob(biascorr + ".*") and glob.glob(biascorr_brain + ".*"):
-            wsp.log.write(" - Using bias-corrected structural images")
+            wsp.log.write(" - Using bias-corrected structural images\n")
             wsp.structural.struc = Image(biascorr)
             wsp.structural.brain = Image(biascorr_brain)
         else:
-            wsp.log.write(" - Using non bias-corrected structural images")
+            wsp.log.write(" - Using non bias-corrected structural images\n")
             wsp.structural.struc = Image(os.path.join(wsp.fslanat, "T1"))
             wsp.structural.brain = Image(os.path.join(wsp.fslanat, "T1_brain"))
     elif wsp.struc:
@@ -81,7 +81,7 @@ def init(wsp):
     if wsp.structural.brain is not None and wsp.structural.brain_mask is None:
         # FIXME - for now get the mask by binarising the brain image but gives slightly
         # different results compared to using the mask returned by BET
-        wsp.structural.brain_mask = (wsp.structural.brain != 0).astype(np.int)
+        wsp.structural.brain_mask = Image((wsp.structural.brain.data != 0).astype(np.int), header=wsp.structural.struc.header)
         
 def segment(wsp):
     """
