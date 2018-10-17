@@ -148,12 +148,12 @@ def reg_struc2std(wsp, fnirt=False):
     if wsp.reg.struc2std is None:
         struc.init(wsp)
         wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
-        flirt_result = fsl.flirt(wsp.structural.struc, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
+        flirt_result = fsl.flirt(wsp.structural.brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
         wsp.reg.struc2std = flirt_result["omat"]
         
         if fnirt:
             wsp.log.write(" - Registering structural image to standard space using FNIRT\n")
-            fnirt_result = fsl.fnirt(wsp.structural.struc, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
+            fnirt_result = fsl.fnirt(wsp.structural.brain, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
             wsp.reg.struc2std = fnirt_result["cout"]
     
     if isinstance(wsp.reg.struc2std, Image):
@@ -162,6 +162,14 @@ def reg_struc2std(wsp, fnirt=False):
         wsp.reg.std2struc = invwarp_result["out"]
     else:
         wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
+
+def std2struc(wsp, img, **kwargs):
+    # FIXME what if warp provided ->std space
+    return transform(wsp, img, wsp.reg.std2struc, wsp.structural.struc, **kwargs)
+
+def struc2std(wsp, img, **kwargs):
+    # FIXME what if warp provided ->std space
+    pass
 
 def struc2asl(wsp, img, **kwargs):
     """
@@ -305,10 +313,10 @@ class RegOptions(OptionCategory):
 
         group = IgnorableOptionGroup(parser, "Registration", ignore=self.ignore)
         group.add_option("--regfrom", help="Registration image (e.g. perfusion weighted image)", type="image")
-        group.add_option("--omat", help="Output file for transform matrix", default=None)
-        group.add_option("--bbr", dest="do_bbr", help="Include BBR registration step using EPI_REG", action="store_true", default=False)
-        group.add_option("--flirt", dest="do_flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
-        group.add_option("--flirtsch", help="user-specified FLIRT schedule for registration")
+        #group.add_option("--omat", help="Output file for transform matrix", default=None)
+        #group.add_option("--bbr", dest="do_bbr", help="Include BBR registration step using EPI_REG", action="store_true", default=False)
+        #group.add_option("--flirt", dest="do_flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
+        #group.add_option("--flirtsch", help="user-specified FLIRT schedule for registration")
         groups.append(group)
         
         #group = IgnorableOptionGroup(parser, "Extra BBR registration refinement", ignore=self.ignore)
@@ -317,12 +325,6 @@ class RegOptions(OptionCategory):
         #groups.append(group)
 
         #group = IgnorableOptionGroup(parser, "Distortion correction using fieldmap (see epi_reg)", ignore=self.ignore)
-        #g.add_option("--fmap", dest="fmap", help="fieldmap image (in rad/s)")
-        #g.add_option("--fmapmag", dest="fmapmag", help="fieldmap magnitude image - wholehead extracted")
-        #g.add_option("--fmapmagbrain", dest="fmapmagbrain", help="fieldmap magnitude image - brain extracted")
-        #g.add_option("--wmseg", dest="wmseg", help="white matter segmentation of T1 image")
-        #g.add_option("--echospacing", dest="echospacing", help="Effective EPI echo spacing (sometimes called dwell time) - in seconds", type="float")
-        #g.add_option("--pedir", dest="pedir", help="phase encoding direction, dir = x/y/z/-x/-y/-z")
         #g.add_option("--nofmapreg", dest="nofmapreg", help="do not perform registration of fmap to T1 (use if fmap already registered)", action="store_true", default=False)
         #groups.append(group)
 

@@ -297,21 +297,34 @@ class AslImage(Image):
         """
         if order is None:
             order = self.order
-        idx = 0
-        first = True
-        for comp in order[::-1]:
-            if not first:
-                idx *= self._get_ncomp(comp, ti_idx)
-            idx += self._get_comp(comp, label_idx, ti_idx, rpt_idx)
-            first = False
-        return idx
+        if len(order) < 3: order = "l" + order
 
-    def _get_comp(self, comp_id, tag, ti, rpt):
-        ret = {"t": ti, "r" : rpt, "l" : tag}
-        if comp_id in ret: 
-            return ret[comp_id]
-        else:
-            raise RuntimeError("Unknown ordering character: %s" % comp_id)
+        # Not yet found a simple way to do this which works for variable repeats
+        # without crude iteration!
+        ti_pos, rpt_pos, label_pos = order.index("t"), order.index("r"), order.index("l")
+        its = [0, 0, 0]
+        vol_idx = 0
+        while 1:
+            ti, rpt, label = its[ti_pos], its[rpt_pos], its[label_pos]
+            if (ti, rpt, label) == (ti_idx, rpt_idx, label_idx):
+                return vol_idx
+            its[0] += 1
+            if its[0] == self._get_ncomp(order[0], ti):
+                its[0] = 0
+                its[1] += 1
+            if its[1] == self._get_ncomp(order[1], ti):
+                its[1] = 0
+                its[2] += 1
+            if its[2] == self._get_ncomp(order[2], ti):
+                # Normally this is the end but we might have run out of 
+                # repeats but not run out of TIs
+                pass
+            else:
+                vol_idx += 1
+            if vol_idx > self.nvols:
+                break
+
+        raise ValueError("No volume for supplied TI, label and repeat")
 
     def _get_ncomp(self, comp_id, ti):
         ret = {"t": self.ntis, "r" : self.rpts[ti], "l" : self.ntc}
@@ -342,7 +355,7 @@ class AslImage(Image):
             raise ValueError("Data is not differenced but output_order does not contain labelling")
         elif iaf != self.iaf and (iaf not in ("tc", "ct") or self.iaf not in ("tc", "ct")):
             raise ValueError("Can't change data format from '%s' to '%s'" % (self.iaf, iaf))
-            
+        
         input_data = self.data
         if input_data.ndim == 3:
             input_data = input_data[..., np.newaxis]
@@ -444,6 +457,7 @@ class AslImage(Image):
             data = self
             out_order = "rt"
         
+        self.summary()
         # Reorder so repeats are together saving original order. Note that
         # rt and tr are equivalent in the output but we want to preserve
         # whatever it was beforehand

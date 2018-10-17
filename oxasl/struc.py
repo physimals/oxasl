@@ -57,11 +57,11 @@ def init(wsp):
         biascorr = os.path.join(wsp.fslanat, "T1_biascorr")
         biascorr_brain = os.path.join(wsp.fslanat, "T1_biascorr_brain")
         if glob.glob(biascorr + ".*") and glob.glob(biascorr_brain + ".*"):
-            wsp.log.write(" - Using bias-corrected structural images")
+            wsp.log.write(" - Using bias-corrected structural images\n")
             wsp.structural.struc = Image(biascorr)
             wsp.structural.brain = Image(biascorr_brain)
         else:
-            wsp.log.write(" - Using non bias-corrected structural images")
+            wsp.log.write(" - Using non bias-corrected structural images\n")
             wsp.structural.struc = Image(os.path.join(wsp.fslanat, "T1"))
             wsp.structural.brain = Image(os.path.join(wsp.fslanat, "T1_brain"))
     elif wsp.struc:

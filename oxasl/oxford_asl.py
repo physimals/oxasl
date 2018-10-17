@@ -96,6 +96,9 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--fixbolus", dest="infertau", help="Fix bolus duration", action="store_false", default=True)
         g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
         g.add_option("--spatial-off", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
+        if oxasl_enable:
+            g.add_option("--use-enable", help="Use ENABLE preprocessing step", action="store_true", default=False)
+
         ret.append(g)
         g = IgnorableOptionGroup(parser, "Acquisition/Data specific")
         g.add_option("--bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
@@ -123,9 +126,12 @@ def main():
         parser.add_category(struc.StructuralImageOptions())
         parser.add_category(OxfordAslOptions())
         parser.add_category(calib.CalibOptions(ignore=["perf", "tis"]))
+        parser.add_category(reg.RegOptions())
         parser.add_category(corrections.DistcorrOptions())
         if oxasl_ve:
             parser.add_category(oxasl_ve.VeaslOptions())
+        if oxasl_enable:
+            parser.add_category(oxasl_enable.EnableOptions(ignore=["regfrom",]))
         parser.add_category(GenericOptions())
 
         options, args = parser.parse_args()
@@ -141,7 +147,7 @@ def main():
         if options.debug:
             options.save_all = True
 
-        wsp = Workspace(savedir=options.output, separate_input=True, auto_asldata=True, **vars(options))
+        wsp = Workspace(savedir=options.output, auto_asldata=True, **vars(options))
         #wsp.asldata = AslImage(options.asldata, **parser.filter(vars(options), "image"))
 
         oxasl(wsp)
@@ -201,6 +207,11 @@ def oxasl_preproc(wsp):
 
     mask.generate_mask(wsp)
 
+    if oxasl_enable and wsp.use_enable:
+        wsp.sub("enable")
+        oxasl_enable.enable(wsp.enable)
+        wsp.corrected.asldata = wsp.enable.asldata_enable
+
     if wsp.calib:
         calib.calculate_m0(wsp)
 
@@ -251,6 +262,7 @@ def redo_reg(wsp, pwi):
     Re-do ASL->structural registration using BBR and perfusion image
     """
     wsp.reg.regfrom_orig = wsp.reg.regfrom
+    wsp.reg.regto_orig = wsp.reg.regto
     new_regfrom = np.copy(pwi.data)
     new_regfrom[new_regfrom < 0] = 0
     wsp.reg.regfrom = Image(new_regfrom, header=pwi.header)
@@ -313,9 +325,10 @@ def output_trans(wsp):
     for suffix in ("", "_calib"):
         for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit"):
             native_output = getattr(wsp.native, output + suffix)
-            if native_output is not None:
+            # Don't transform 4D output (e.g. modelfit) - too large!
+            if native_output is not None and native_output.ndim == 3:
                 if wsp.reg.asl2struc is not None:
-                    setattr(wsp.struct, output, reg.asl2struc(wsp, native_output))
+                    setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output))
 
 def do_cleanup(wsp):
     """
