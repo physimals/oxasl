@@ -340,6 +340,90 @@ def test_perf_weighted_tr():
     assert list(data.shape) == [5, 5, 5] 
     assert np.all(np.mean(d, -1) == data)
 
+def test_vol_idx_tr():
+    d = np.zeros([5, 5, 5, 8])
+    img = AslImage(name="asldata", image=d, tis=[1, 2], order='tr')
+    assert img.get_vol_index(0, 0, 0) == 0
+    assert img.get_vol_index(0, 1, 0) == 1
+    assert img.get_vol_index(0, 0, 1) == 2
+    assert img.get_vol_index(0, 1, 1) == 3
+    assert img.get_vol_index(0, 0, 2) == 4
+    assert img.get_vol_index(0, 1, 2) == 5
+    assert img.get_vol_index(0, 0, 3) == 6
+    assert img.get_vol_index(0, 1, 3) == 7
+    
+def test_vol_idx_rt():
+    d = np.zeros([5, 5, 5, 8])
+    img = AslImage(name="asldata", image=d, tis=[1, 2], order='rt')
+    assert img.get_vol_index(0, 0, 0) == 0
+    assert img.get_vol_index(0, 1, 0) == 4
+    assert img.get_vol_index(0, 0, 1) == 1
+    assert img.get_vol_index(0, 1, 1) == 5
+    assert img.get_vol_index(0, 0, 2) == 2
+    assert img.get_vol_index(0, 1, 2) == 6
+    assert img.get_vol_index(0, 0, 3) == 3
+    assert img.get_vol_index(0, 1, 3) == 7
+    
+def test_vol_idx_lrt():
+    d = np.zeros([5, 5, 5, 8])
+    img = AslImage(name="asldata", image=d, tis=[1, 2], iaf="tc", order='lrt')
+    assert img.get_vol_index(0, 0, 0) == 0
+    assert img.get_vol_index(1, 0, 0) == 1
+    assert img.get_vol_index(0, 1, 0) == 4
+    assert img.get_vol_index(1, 1, 0) == 5
+    assert img.get_vol_index(0, 0, 1) == 2
+    assert img.get_vol_index(1, 0, 1) == 3
+    assert img.get_vol_index(0, 1, 1) == 6
+    assert img.get_vol_index(1, 1, 1) == 7
+    
+def test_vol_idx_ltr():
+    d = np.zeros([5, 5, 5, 8])
+    img = AslImage(name="asldata", image=d, tis=[1, 2], iaf="tc", order='ltr')
+    assert img.get_vol_index(0, 0, 0) == 0
+    assert img.get_vol_index(1, 0, 0) == 1
+    assert img.get_vol_index(0, 1, 0) == 2
+    assert img.get_vol_index(1, 1, 0) == 3
+    assert img.get_vol_index(0, 0, 1) == 4
+    assert img.get_vol_index(1, 0, 1) == 5
+    assert img.get_vol_index(0, 1, 1) == 6
+    assert img.get_vol_index(1, 1, 1) == 7
+       
+def test_vol_idx_var_rpts_rt():
+    d = np.zeros([5, 5, 5, 7])
+    img = AslImage(name="asldata", image=d, tis=[1, 2], rpts=[3, 4], iaf="diff", order='rt')
+    assert img.get_vol_index(0, 0, 0) == 0
+    assert img.get_vol_index(0, 0, 1) == 1
+    assert img.get_vol_index(0, 0, 2) == 2
+    assert img.get_vol_index(0, 1, 0) == 3
+    assert img.get_vol_index(0, 1, 1) == 4
+    assert img.get_vol_index(0, 1, 2) == 5
+    assert img.get_vol_index(0, 1, 3) == 6
+       
+def test_vol_idx_var_rpts_tr():
+    d = np.zeros([5, 5, 5, 7])
+    img = AslImage(name="asldata", image=d, tis=[1, 2], rpts=[3, 4], iaf="diff", order='tr')
+    assert img.get_vol_index(0, 0, 0) == 0
+    assert img.get_vol_index(0, 1, 0) == 1
+    assert img.get_vol_index(0, 0, 1) == 2
+    assert img.get_vol_index(0, 1, 1) == 3
+    assert img.get_vol_index(0, 0, 2) == 4
+    assert img.get_vol_index(0, 1, 2) == 5
+    assert img.get_vol_index(0, 1, 3) == 6
+       
+def test_vol_idx_var_rpts_lrt():
+    d = np.zeros([5, 5, 5, 10])
+    img = AslImage(name="asldata", image=d, tis=[1, 2], rpts=[3, 2], iaf="tc", order='lrt')
+    assert img.get_vol_index(0, 0, 0) == 0
+    assert img.get_vol_index(1, 0, 0) == 1
+    assert img.get_vol_index(0, 0, 1) == 2
+    assert img.get_vol_index(1, 0, 1) == 3
+    assert img.get_vol_index(0, 0, 2) == 4
+    assert img.get_vol_index(1, 0, 2) == 5
+    assert img.get_vol_index(0, 1, 0) == 6
+    assert img.get_vol_index(1, 1, 0) == 7
+    assert img.get_vol_index(0, 1, 1) == 8
+    assert img.get_vol_index(1, 1, 1) == 9
+    
 def test_split_epochs():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
