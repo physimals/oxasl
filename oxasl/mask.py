@@ -3,7 +3,10 @@ Functions for generating a suitable mask for ASL data
 """
 import sys
 
+import numpy as np
+
 import fsl.wrappers as fsl
+from fsl.data.image import Image
 
 from oxasl import __version__, AslImage, Workspace, image, reg, struc
 from oxasl.options import AslOptionParser, GenericOptions
@@ -64,7 +67,7 @@ def generate_mask(wsp):
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
         wsp.rois.mask_src = "regfrom"
-        wsp.rois.mask = (wsp.reg.regfrom > 0).astype(np.int)
+        wsp.rois.mask = Image((wsp.reg.regfrom.data > 0).astype(np.int), header=wsp.reg.regfrom.header)
         mask_source = "generated from brain extracted registration ASL image"
     
     wsp.log.write("\nGenerated ASL data mask\n")
