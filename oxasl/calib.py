@@ -15,7 +15,6 @@ import traceback
 import numpy as np
 import scipy.ndimage
 
-import fsl.wrappers as fsl
 from fsl.data.image import Image
 
 from oxasl import Workspace, struc, reg
@@ -212,7 +211,6 @@ def _edge_correct(m0, brain_mask):
     brain_mask = brain_mask.data
 
     # Median smoothing
-    #fslmaths $Mo -fmedian -mas $tempdir/mask -ero $tempdir/calib_ero
     m0 = scipy.ndimage.median_filter(m0, size=3)
 
     # Erode mask using 3x3x3 structuring element
@@ -522,16 +520,6 @@ def get_m0_refregion(wsp, mode="longtr"):
             options["fixa"] = True
 
         # Do fabber within the tissue reference mask with a sensible T1 prior mean
-
-        if sens_corr:
-            wsp.log.write(" - Apply sensitivity image to data for reference tisse M0 estimation\n")
-            # apply sensitivity map to calibration image - ONLY for the reference tissue calculations
-            # fslmaths $calib -div $temp_calib/sens $temp_calib/calib_senscorr
-        else:
-            pass
-            # no sensitivity correction required, but copy image over ready for next command
-            # imcp $calib $temp_calib/calib_senscorr
-
         wsp.log.write(" - Running FABBER within reference tissue mask\n")
         from .wrappers import fabber
         fabber_result = fabber(options)
@@ -608,49 +596,26 @@ def get_tissrefmask(wsp):
 
     if wsp.tissref == "csf" and not wsp.csfmaskingoff:
         wsp.log.write(" - Doing automatic ventricle selection using standard atlas\n")
-        page.heading("Automatic ventricle selection", level=1)
         # By deafult now we do FNRIT transformation of ventricle mask
         # FIXME disabled as not being used in ASL_CALIB at present
         #wsp.stdmaskfnirt = wsp.ifnone("stdmaskfnirt", True)
         
         # Select ventricles based on standard space atlas
+        page.heading("Automatic ventricle selection", level=1)
+        page.text("Standard space ventricles mask (from Harvard-Oxford atlas) eroded by 1 pixel")
         from fsl.data.atlases import AtlasRegistry
         atlases = AtlasRegistry()
         atlases.rescanAtlases()
         atlas = atlases.loadAtlas("harvardoxford-subcortical", loadSummary=False, resolution=2)
         ventricles = ((atlas.data[..., 2] + atlas.data[..., 13]) > 0.1).astype(np.int)
         wsp.calibration.ventricles = Image(scipy.ndimage.binary_erosion(ventricles, structure=np.ones([3, 3, 3]), border_value=1).astype(np.int), header=atlas.header)
-        page.text("Standard space ventricles mask (from Harvard-Oxford atlas) eroded by 1 pixel")
         std_img = Image(os.path.join(os.environ["FSLDIR"], "data", "standard", 'MNI152_T1_2mm_brain'))
         page.image("ventricles_std", LightboxImage(wsp.calibration.ventricles, bgimage=std_img))
 
-        # Register structural image to std space using FLIRT
-        #
-        # FIXME should be in reg - what if warp provided ->std space
-        if wsp.reg.struc2std is None:
-            wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
-            flirt_result = fsl.flirt(wsp.structural.brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
-            wsp.reg.struc2std = flirt_result["omat"]
-            wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
-
-        if not wsp.stdmaskfnirt:
-            # FIXME use struc as ref?
-            wsp.log.write(" - Registering standard space ventricle mask to structural using FLIRT\n")
-            flirt_result = fsl.applyxfm(wsp.calibration.ventricles, mat=wsp.reg.std2struc, ref=wsp.calibration.refpve, out=fsl.LOAD, interp="trilinear")
-            wsp.calibration.ventricles_struc = flirt_result["out"]
-        else:
-            wsp.log.write(" - Registering standard space ventricle mask to structural using FNIRT\n")
-            fnirt_result = fsl.fnirt(wsp.structural.brain, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
-            wsp.reg.struc2std_warp = fnirt_result["cout"]
-        
-            # Calculate the inverse warp using INVWARP and apply to standard space ventricle mask
-            # Using refpve as reference for applywarp as this is the image we apply the mask to, not the structural
-            invwarp_result = fsl.invwarp(wsp.reg.struc2std_warp, wsp.structural.brain, out=fsl.LOAD)
-            wsp.reg.std2struc_warp = invwarp_result["out"]
-            warp_result = fsl.applywarp(wsp.calibration.ventricles, wsp.calibration.refpve, warp=wsp.reg.std2struc_warp, out=fsl.LOAD, interp="nn")
-            wsp.calibration.ventricles_struc = warp_result["out"]
-        
         page.heading("Structural space ventricles mask", level=1)
+        reg.reg_struc2std(wsp)
+        # FIXME nearest neighbour interpolation?
+        wsp.calibration.ventricles_struc = reg.std2struc(wsp, wsp.calibration.ventricles)
         page.text("This is the above image transformed into structural space. The transformation was obtained by registering the structural image to the standard brain image")
         page.image("ventricles_struc", LightboxImage(wsp.calibration.ventricles_struc, bgimage=wsp.structural.brain))
 
@@ -666,10 +631,8 @@ def get_tissrefmask(wsp):
         page.image("refpve_post", LightboxImage(wsp.calibration.refpve, bgimage=wsp.structural.brain))
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
-    # New conversion using applywarp, supersmapling and integration
-    result = fsl.applywarp(wsp.calibration.refpve, ref=wsp.asldata, out=fsl.LOAD, premat=wsp.reg.struc2asl, super=True, interp="spline", superlevel=4)
-    #result = fsl.applyxfm(wsp.calibration.refpve, ref=wsp.asldata, mat=wsp.reg.struc2asl, out=fsl.LOAD)
-    wsp.calibration.refpve_calib = result["out"]
+    # FIXME different interpolation options used here in oxford_asl
+    wsp.calibration.refpve_calib = reg.struc2asl(wsp, wsp.calibration.refpve)
     #wsp.calibration.refpve_calib.data[wsp.calibration.refpve_calib.data < 0.001] = 0 # Better for display
     page.heading("Reference region in ASL space", level=1)
     page.text("Partial volume map")
