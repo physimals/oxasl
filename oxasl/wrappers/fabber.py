@@ -5,7 +5,7 @@ from __future__ import absolute_import
 
 import sys
 import os
-import StringIO
+from six import StringIO
 
 import numpy as np
 import nibabel as nib
@@ -24,7 +24,7 @@ class Tee(object):
     """
 
     def __init__(self):
-        self._streams = [StringIO.StringIO(),]
+        self._streams = [StringIO(),]
 
     def add(self, stream):
         """ 
