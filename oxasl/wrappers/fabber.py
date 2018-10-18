@@ -5,7 +5,7 @@ from __future__ import absolute_import
 
 import sys
 import os
-import StringIO
+from six import StringIO
 
 import numpy as np
 import nibabel as nib
@@ -24,7 +24,7 @@ class Tee(object):
     """
 
     def __init__(self):
-        self._streams = [StringIO.StringIO(),]
+        self._streams = [StringIO(),]
 
     def add(self, stream):
         """ 
@@ -155,13 +155,14 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
     ret = _Results(cmd_output)
     try:
         fab = Fabber()
+        ret["paramnames"] = fab.get_model_params(options)
         if log.get("cmd", None):
             log["cmd"].write("fabber <options>\n")
-
         if progress:
             progress = percent_progress(progress)
         run = fab.run(options, progress)
         stdout.write(run.log)
+        ret["logfile"] = run.log
 
         # Write output data or save it as required
         for data_name, data in run.data.items():
@@ -191,7 +192,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
 
     return ret
 
-@wutils.fileOrImage('input', 'output', 'valim', 'varim')
+@wutils.fileOrImage('mvn', 'output', 'valim', 'varim', 'mask')
 @wutils.fslwrapper
 def mvntool(mvn, param, **kwargs):
     """
@@ -202,9 +203,14 @@ def mvntool(mvn, param, **kwargs):
 
     For other arguments, see command line tool for now
     """
-    asrt.assertIsNifti(input)
+    asrt.assertIsNifti(mvn)
+
+    valmap = {
+        'write' : wutils.SHOW_IF_TRUE,
+        'new' : wutils.SHOW_IF_TRUE,
+    }
 
     cmd = ['mvntool', '--input={}'.format(mvn), '--param={}'.format(param)]
-    cmd += wutils.applyArgStyle('--=', **kwargs)
+    cmd += wutils.applyArgStyle('--=', valmap=valmap, **kwargs)
 
     return cmd

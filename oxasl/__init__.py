@@ -19,7 +19,7 @@ ordering of label/control image etc). It also has methods which act directly
 on the data, for example performing tag-control subtraction, or generation of
 a perfusion-weighted image.
 
-    img = AslImage("mpld.nii.gz", plds=[0.25, 0.5, 0.75, 1.0], order='prt')
+    img = AslImage("mpld.nii.gz", plds=[0.25, 0.5, 0.75, 1.0], iaf="tc", order='lrt')
     diffdata = img.diff()
     pwi = img.perf_weighted()
 
@@ -47,12 +47,19 @@ for passing to FSL Python wrapper commands.
 
     wsp = Workspace()
     wsp.log.write("Hello World\n")
-    wsp.mask = fslmaths(img).bin().run(log=wsp.fsllog)
+    wsp.rois.mask = fslmaths(img).bin().run(log=wsp.fsllog)
 
 Module functions
 ~~~~~~~~~~~~~~~~
 Other modules typically contains one or more functions which operate on a 
 workspace, in some cases with additional parameters (but not always).
+
+Module functions operate under the general rule that data stored directly
+as a workspace attribute is unprocessed, user-supplied data. Derived data
+is then stored in a sub-workspace. Module functions will usually create
+a sub-workspace to store their own output in, for example the ``struc`` module 
+places it's output (brain extractions, segmentations) in the wsp.structural 
+sub-workspace.
 
 For example the ``calib`` module contains the ``calibrate`` function which
 calibrates a perfusion image to physical units using either voxelwise or reference 
@@ -74,18 +81,32 @@ label-control subtraction:
 
     oxasl_preproc -i asldata.nii.gz --nplds=5 --diff -o asldata_diff.nii.gz
 
+Current ASL processing modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ - :mod:`basil` - ASL Bayesian Model fitting using the Fabber code
+ - :mod:`calib` - Calibration of perfusion data using voxelwise or reference region methods
+ - :mod:`corrections` - Calculate and apply corrections (motion, distortion)
+ - :mod:`mask` - Calculation of a suitable mask for brain data
+ - :mod:`oxford_asl` - Unified processing pipeline for ASL brain data
+ - :mod:`preproc` - Basic ASL preprocessing (label-control subtraction, etc)
+ - :mod:`reg` - Registration between ASL, structural and standard spaces
+
+Other modules
+~~~~~~~~~~~~~
+
+ - :mod:`image` - Definition of the main AslImage class
+ - :mod:`reporting` - Generation of HTML reports from processing operations
+ - :mod:`workspace` - Definition of the Workspace class
 """
 
 from ._version import __version__, __timestamp__
 
-from .image import AslImage, AslImageOptions
-from .preproc import AslPreprocOptions, preprocess
+from .image import AslImage
 from .workspace import Workspace
 
 __all__ = [
     "__version__",
     "AslImage",
-    "AslImageOptions", 
-    "AslPreprocOptions",
     "Workspace",
 ]

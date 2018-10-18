@@ -1,11 +1,10 @@
-import pytest
 import numpy as np
 
-from oxasl import AslImage, preprocess
+from oxasl import AslImage, preproc
 
 def test_preproc_none():
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
+    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
     orig.summary()
 
     proc = preprocess(orig)
@@ -20,7 +19,7 @@ def test_preproc_none():
 
 def test_preproc_diff():
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
+    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
 
     proc = preprocess(orig, diff=True)
     assert proc.ntis == orig.ntis
@@ -33,9 +32,9 @@ def test_preproc_diff():
 
 def test_preproc_reorder_diff():
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
+    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
     
-    proc = preprocess(orig, diff=True, reorder="ptr")
+    proc = preprocess(orig, diff=True, reorder="ltr")
     assert proc.ntis == orig.ntis
     assert proc.tis == orig.tis
     assert proc.have_plds == orig.have_plds
@@ -46,7 +45,7 @@ def test_preproc_reorder_diff():
 
 def test_preproc_diff_reorder():
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
+    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
     
     proc = preprocess(orig, diff=True, reorder="tr")
     assert proc.ntis == orig.ntis
@@ -59,7 +58,7 @@ def test_preproc_diff_reorder():
 
 def test_preproc_smooth():
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
+    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
     
     proc = preprocess(orig, smooth=True, fwhm=1.5)
     assert proc.ntis == orig.ntis
@@ -72,7 +71,7 @@ def test_preproc_smooth():
 
 def test_preproc_moco():
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="prt")
+    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
     
     proc = preprocess(orig, mc=True)
     assert proc.ntis == orig.ntis
@@ -82,5 +81,3 @@ def test_preproc_moco():
     assert proc.name == orig.name + "_mc"
     assert proc.ntc == orig.ntc
     assert proc.order == orig.order
-
-

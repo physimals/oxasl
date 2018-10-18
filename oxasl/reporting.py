@@ -29,6 +29,7 @@ import datetime
 import shutil
 import tempfile
 import warnings
+import subprocess
 
 import six
 import numpy as np
@@ -59,7 +60,7 @@ class LightboxImage(object):
         if img is not None:
             nonzero_slices = [idx for idx in range(shape[2]) if np.count_nonzero(img.data[:, :, idx]) > 0]
             if nonzero_slices:
-               return min(nonzero_slices), max(nonzero_slices)
+                return min(nonzero_slices), max(nonzero_slices)
         else:
             return 0, shape[2]-1
 
@@ -72,7 +73,7 @@ class LightboxImage(object):
             if img is None:
                 continue
             if not isinstance(img, Image):
-                raise ValueError("Images must be instances of fsl.data.Image: %s" % img)
+                raise ValueError("%s: Images must be instances of fsl.data.Image: %s" % (fname, img))
             if shape is None:
                 shape = img.shape
             if img.ndim != 3:
@@ -103,7 +104,7 @@ class LightboxImage(object):
                 if issubclass(data.dtype.type, np.integer):
                     cmap = "Set1"
                 else:
-                    cmap= "viridis"
+                    cmap = "viridis"
 
                 if self._mask:
                     data = np.ma.masked_array(data, self._mask.data[:, :, slice_idx].T == 0)
@@ -120,16 +121,20 @@ class ReportPage(object):
     Simple helper class for creating documents containing ReStructuredText
     """
 
-    def __init__(self):
+    def __init__(self, name, report, **kwargs):
+        self._name = name
+        self._report = report
         self._content = ""
         self._heading_chars = "=-~+"
         self.extension = ".rst"
-        
-    def image(self, fname):
+        self._prepared = False
+
+    def image(self, name, img_obj):
         """
         Add a block-level image
         """
-        self._content += ".. image:: %s\n\n" % fname
+        self._report.add(name, img_obj)
+        self._content += ".. image:: %s%s\n\n" % (name, img_obj.extension)
         
     def text(self, txt):
         """
@@ -224,7 +229,7 @@ class Report(object):
         self.title = title
         self.extension = ""
 
-    def generate_html(self, dest_dir, build_dir=None):
+    def generate_html(self, dest_dir, build_dir=None, log=sys.stdout):
         """
         Generate an HTML report
         """
@@ -248,8 +253,15 @@ class Report(object):
             with open(os.path.join(build_dir, "conf.py"), "w") as conffile:
                 conffile.write(REPORT_CONF)
 
-            os.system('sphinx-build -M html "%s" "%s"' % (build_dir, os.path.join(build_dir, "_build")))
-
+            try:
+                result = subprocess.check_output(['sphinx-build', '-M', 'html', build_dir, os.path.join(build_dir, "_build")])
+            except OSError:
+                log.write("WARNING: sphinx-build not found, HTML report will not be generated")
+                return
+            except subprocess.CalledProcessError:
+                log.write("WARNING: sphinx-build failed, HTML report will not be generated")
+                return
+                
             if os.path.exists(dest_dir):
                 if not os.path.isdir(dest_dir):
                     raise ValueError("Report destination directory %s exists but is not a directory" % dest_dir)
@@ -275,6 +287,11 @@ class Report(object):
         for fname, content in self._files.items():
             content.tofile(os.path.join(build_dir, fname))
 
+    def page(self, name, overwrite=False, **kwargs):
+        page = ReportPage(name, report=self, **kwargs)
+        self.add(name, page, overwrite)
+        return page
+
     def add(self, name, content, overwrite=False):
         """
         Add content to a report
@@ -283,16 +300,22 @@ class Report(object):
         :param content: Content object which has ``extension`` attribute and supports ``tofile()`` method
         :param overwrite: If True, and content already exists with the same ``name`` and extension, 
                           replace content. Otherwise an exception is thrown.
+
+        :return: Name given to the object in the report. If ``overwrite=True`` this will be the same as ``name``
         """
         fname = name + content.extension
-        if not overwrite and fname in self._files:
-            raise ValueError("Content with file name '%s' already exists and overwrite=False" % fname)
+        if not overwrite:
+            idx = 2
+            while fname in self._files:
+                name = name + "_%i" % idx
+                fname = name + content.extension
 
         self._files[fname] = content
         if isinstance(content, ReportPage):
             self._contents.append(name)
         if isinstance(content, Report):
             self._contents.append(name + "/index")
+        return name
 
     def _timings(self, indexfile):
         if self._start_time:
@@ -356,12 +379,9 @@ def main():
     Simple command line for testing
     """
     report = Report()
-    report.add("lbox", LightboxImage(*[Image(fname) for fname in sys.argv[1:]]))
-
-    page = ReportPage()
-    page.image("lbox.png")
-    report.add("test", page)
-
+    page = report.page("test")
+    page.image("lbox", LightboxImage(*[Image(fname) for fname in sys.argv[1:]]))
+    
     report.generate_html("testreport")
 
 if __name__ == "__main__":
