@@ -6,7 +6,7 @@ FIXME need sensitivity correction tests
 FIXME need test with edge correction
 """
 import math
-import StringIO
+from six import StringIO
 
 import pytest
 import numpy as np
@@ -209,7 +209,7 @@ def test_shorttr_corr_not1():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    log = StringIO.StringIO()
+    log = StringIO()
     wsp = Workspace(calib=calib_img, calib_method="voxelwise", tr=TR, log=log)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data

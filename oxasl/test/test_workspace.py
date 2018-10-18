@@ -6,7 +6,7 @@ FIXME missing uncache
 import os
 import shutil
 import tempfile
-import StringIO
+from six import StringIO
 
 import numpy as np
 import pytest
@@ -35,7 +35,7 @@ def test_ctor_attributes():
 
 def test_log():
     """ Check that the log is picked up """
-    log = StringIO.StringIO()
+    log = StringIO()
     wsp = Workspace(log=log)
     wsp.log.write("hello")
     assert(log.getvalue() == "hello")
@@ -141,7 +141,7 @@ def test_savedir_created():
     """ Test save dirs are created if they don't already exist """
     tempdir = tempfile.mktemp("_oxasl")
     try:
-        log = StringIO.StringIO()
+        log = StringIO()
         wsp = Workspace(savedir=tempdir, log=log)
         assert(wsp.savedir) == tempdir
         assert(os.path.isdir(tempdir))
@@ -153,7 +153,7 @@ def test_savedir_created_multilevel():
     """ Test multi-level save dirs are created if they don't already exist """
     tempdir = os.path.join(tempfile.mktemp("_oxasl"), "extra", "levels")
     try:
-        log = StringIO.StringIO()
+        log = StringIO()
         wsp = Workspace(savedir=tempdir, log=log)
         assert(wsp.savedir) == tempdir
         assert(os.path.isdir(tempdir))
@@ -165,7 +165,7 @@ def test_savedir_sub():
     """ Test sub-workspace have subdirs created """
     tempdir = tempfile.mktemp("_oxasl")
     try:
-        log = StringIO.StringIO()
+        log = StringIO()
         wsp = Workspace(savedir=tempdir, log=log)
         wsp.sub("quark")
         path = os.path.join(tempdir, "quark")
@@ -336,7 +336,7 @@ def test_savedir_already_exists():
     """
     tempdir = tempfile.mkdtemp("_oxasl")
     try:
-        log = StringIO.StringIO()
+        log = StringIO()
         wsp = Workspace(savedir=tempdir, log=log)
         assert("WARNING" in log.getvalue())
         assert("already exists" in log.getvalue())
@@ -347,7 +347,7 @@ def test_fsllog_default():
     """
     Test the FSL logging context created
     """
-    log = StringIO.StringIO()
+    log = StringIO()
     wsp = Workspace(log=log)
     assert(isinstance(wsp.fsllog, dict))
     assert(wsp.fsllog.get("stdout", None) is None)
@@ -358,7 +358,7 @@ def test_fsllog_debug():
     """
     Test the FSL logging context created in debug mode
     """
-    log = StringIO.StringIO()
+    log = StringIO()
     wsp = Workspace(debug=True, log=log)
     assert(isinstance(wsp.fsllog, dict))
     assert(wsp.fsllog.get("stdout", None) == log)

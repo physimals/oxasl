@@ -4,8 +4,6 @@ Tests for BASIL module
 FIXME need more multi-step tests
 FIXME need to test more error conditions
 """
-import StringIO
-
 import pytest
 import numpy as np
 

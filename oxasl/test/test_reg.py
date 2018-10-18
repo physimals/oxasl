@@ -6,7 +6,6 @@ FIXME need sensitivity correction tests
 FIXME need test with edge correction
 """
 import math
-import StringIO
 
 import pytest
 import numpy as np
