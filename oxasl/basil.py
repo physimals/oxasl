@@ -241,7 +241,6 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
                 datamax = np.amax(wsp.diffdata_mean.data, 3)
             else:
                 datamax = wsp.diffdata_mean.data
-            #datamax = fslmaths(wsp.diffdata_mean).Tmax().run()
             brain_mag = np.mean(datamax.data[wsp.rois.mask.data != 0])
             # this will correspond to whole brain CBF (roughly) - about 0.5 of GM
             noisesd = math.sqrt(brain_mag * 2 / snr)
