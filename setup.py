@@ -2,9 +2,13 @@
 import os
 import subprocess
 import re
+import shutil
 
 from setuptools import setup
 from setuptools import find_packages
+from setuptools import Command
+
+from sphinx.setup_command import BuildDoc
 
 def git_version():
     # Full version includes the Git commit hash
@@ -33,10 +37,7 @@ def set_metadata(module_dir, version_str, timestamp_str):
 with open('requirements.txt', 'rt') as f:
     requirements = [l.strip() for l in f.readlines()]
 
-# Generate a list of all of the packages that are in your project.
-packages = find_packages()
-
-rootdir = os.path.join(os.path.abspath(os.path.dirname(__file__)))
+rootdir = os.path.abspath(os.path.dirname(__file__))
 _, stdv = git_version()
 timestamp = git_timestamp()
 set_metadata(rootdir, stdv, timestamp)
@@ -48,10 +49,22 @@ setup(
     author='Martin Craig',
     author_email='martin.craig@eng.ox.ac.uk',
     license='',
-    packages=packages,
+    packages=find_packages(),
     package_data={'oxasl.gui': ['banner.png']},
     version=stdv,
     install_requires=requirements,
+    cmdclass={
+        'doc' : BuildDoc,
+    },
+    # these are optional and override conf.py settings
+    command_options={
+        'doc': {
+            'version': ('setup.py', stdv),
+            'release': ('setup.py', stdv),
+            'source_dir': ('setup.py', 'doc'),
+            'build_dir': ('setup.py', 'doc'),
+        }
+    },
     entry_points={
         'console_scripts' : [
             "oxasl_preproc=oxasl.preproc:main", 

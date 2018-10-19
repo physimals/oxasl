@@ -4,3 +4,5 @@ build
 .pytest_cache
 dist
 oxasl.egg-info
+doc/html
+doc/doctrees
