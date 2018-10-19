@@ -2,3 +2,5 @@ oxasl/_version.py
 build
 *.pyc
 .pytest_cache
+dist
+oxasl.egg-info
