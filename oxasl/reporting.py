@@ -30,6 +30,7 @@ import shutil
 import tempfile
 import warnings
 import subprocess
+import csv
 
 import six
 import numpy as np
@@ -191,9 +192,7 @@ class ReportPage(object):
             self._content += "    :header: " + ",".join(['"%s"' % h for h in headers]) + "\n"
         self._content += "\n"
 
-        import io
-        import csv
-        csvtxt = io.BytesIO()
+        csvtxt = six.StringIO()
         writer = csv.writer(csvtxt)
         for row in tabdata:
             writer.writerow(row)

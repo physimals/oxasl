@@ -126,7 +126,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
 
     # Replace fsl.Image objects with the underlying nibabel object. The Fabber
     # Python API can already handle Numpy arrays, nibabel images and filenames
-    for key in options.keys():
+    for key in list(options.keys()):
         value = options[key]
         if isinstance(value, Image):
             options[key] = value.nibImage
