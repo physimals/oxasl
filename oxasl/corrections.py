@@ -156,7 +156,7 @@ def get_cblip_correction(wsp):
     
     # Run TOPUP to calculate correction
     wsp.topup.calib_blipped = Image(np.stack((wsp.calib.data, wsp.cblip.data), axis=-1), header=wsp.calib.header)
-    topup_result = fsl.topup(imain=wsp.topup.calib_blipped, datain=wsp.topup.params, config="b02b0.cnf", out=fsl.LOAD, iout=fsl.LOAD, fout=fsl.LOAD)
+    topup_result = fsl.topup(imain=wsp.topup.calib_blipped, datain=wsp.topup.params, config="b02b0.cnf", out=fsl.LOAD, iout=fsl.LOAD, fout=fsl.LOAD, log=wsp.fsllog)
     wsp.topup.fieldcoef, wsp.topup.movpar = topup_result["out_fieldcoef"], topup_result["out_movpar"]
     wsp.topup.iout = topup_result["iout"]
     wsp.topup.fout = topup_result["fout"]
@@ -219,12 +219,12 @@ def get_fieldmap_correction(wsp):
         "nofmapreg" : wsp.ifnone("nofmapreg", False),
     }
     
-    result = epi_reg(epi=wsp.asldata.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, **epi_reg_opts)
+    result = epi_reg(epi=wsp.asldata.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, log=wsp.fsllog, **epi_reg_opts)
     wsp.fieldmap.warp_struc = result["out_warp"]
     wsp.fieldmap.asl2struc = result["out"]
     wsp.fieldmap.struc2asl = np.linalg.inv(wsp.fieldmap.asl2struc)
 
-    result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.asldata, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True)
+    result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.asldata, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True, log=wsp.fsllog)
     wsp.fieldmap.warp = result["out"]
         
     page = wsp.report.page("fmap")
@@ -281,7 +281,12 @@ def get_motion_correction(wsp):
     wsp.log.write("\nCalculating Motion Correction\n")
     # If available, use the calibration image as reference since this will be most consistent if the data has a range 
     # of different TIs and background suppression etc. This also removes motion effects between asldata and calibration image
-    if wsp.input.calib:
+    if wsp.input.regfrom is not None:
+        wsp.log.write(" - Using user-specified regfrom as reference\n")
+        ref_source = "User specified: %s" % (wsp.input.regfrom.name)
+        mcflirt_result = fsl.mcflirt(wsp.input.asldata, reffile=wsp.input.regfrom, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
+        mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
+    elif wsp.input.calib is not None:
         wsp.log.write(" - Using calibration image as reference\n")
         ref_source = "calibration image: %s" % wsp.input.calib.name
         wsp.moco.ref = wsp.input.calib
@@ -440,9 +445,10 @@ def apply_corrections(wsp):
             kwargs["warp%i" % (idx+1)] = warp
                 
         wsp.log.write("   - Converting all warps to single transform and extracting Jacobian\n")
-        result = fsl.convertwarp(ref=wsp.asldata, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, **kwargs)
+        result = fsl.convertwarp(ref=wsp.asldata, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
         wsp.corrected.total_warp = result["out"]
         jacobian = result["jacobian"]
+        wsp.corrected.jacobian = jacobian
         wsp.corrected.total_jacobian = Image(np.mean(jacobian.data, 3), header=jacobian.header)
 
     if not warps and moco_mats is None:
@@ -476,13 +482,13 @@ def apply_corrections(wsp):
             movpar_file.close()
             # TOPUP does not do the jacboian magntiude correction - so only okay if using voxelwise calibration
             wsp.corrected.calib_pretopup = wsp.corrected.calib
-            wsp.corrected.calib = fsl.applytopup(wsp.corrected.calib, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac")["out"]
+            wsp.corrected.calib = fsl.applytopup(wsp.corrected.calib, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
             wsp.corrected.cblip_pretopup = wsp.corrected.cblip
-            wsp.corrected.cblip = fsl.applytopup(wsp.corrected.cblip, datain=wsp.topup.params, index=2, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac")["out"]
+            wsp.corrected.cblip = fsl.applytopup(wsp.corrected.cblip, datain=wsp.topup.params, index=2, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
             if wsp.cref:
-                wsp.corrected.cref = fsl.applytopup(wsp.corrected.cref, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac")["out"]
+                wsp.corrected.cref = fsl.applytopup(wsp.corrected.cref, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
             wsp.corrected.asldata_pretopup = wsp.corrected.asldata
-            post_topup = fsl.applytopup(wsp.corrected.asldata, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac")["out"]
+            post_topup = fsl.applytopup(wsp.corrected.asldata, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
             wsp.corrected.asldata = wsp.corrected.asldata.derived(post_topup.data)
             #if wsp.calib_method != "voxel":
             #    wsp.log.write("WARNING: Using TOPUP does not correct for magntiude using the jocbian in distortion correction")
@@ -523,7 +529,7 @@ def correct_img(wsp, img, linear_mat):
      - ``total_warp``      : Combined warp image
      - ``jacobian``        : Jacobian associated with warp image
     """
-    warp_result = fsl.applywarp(img, ref=wsp.corrected.asldata, out=fsl.LOAD, warp=wsp.corrected.total_warp, premat=linear_mat, super=True, superlevel="a", interp="trilinear", paddingsize=1, rel=True)
+    warp_result = fsl.applywarp(img, ref=wsp.corrected.asldata, out=fsl.LOAD, warp=wsp.corrected.total_warp, premat=linear_mat, super=True, superlevel="a", interp="trilinear", paddingsize=1, rel=True, log=wsp.fsllog)
     img = warp_result["out"]
     if wsp.corrected.total_jacobian is not None:
         wsp.log.write("   - Correcting for local volume scaling using Jacobian\n")
