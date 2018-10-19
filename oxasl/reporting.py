@@ -35,8 +35,11 @@ import csv
 import six
 import numpy as np
 
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
+try:
+    from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+    from matplotlib.figure import Figure
+except:
+    Figure = None
 
 from fsl.data.image import Image
 
@@ -69,6 +72,10 @@ class LightboxImage(object):
         """
         Write image to a file
         """
+        if Figure is None:
+            warnings.warn("matplotlib not installed - cannot generate images")
+            return
+
         shape = None
         for img in [self._img, self._bgimage, self._mask]:
             if img is None:
