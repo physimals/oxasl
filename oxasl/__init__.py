@@ -102,8 +102,12 @@ Other modules
  - :mod:`workspace` - Definition of the Workspace class
 """
 
-from ._version import __version__, __timestamp__
-
+try:
+    from ._version import __version__, __timestamp__
+except:
+    __version__ = "unknown"
+    __timestamp__ = "unknown"
+    
 from .image import AslImage
 from .workspace import Workspace
 

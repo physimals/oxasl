@@ -13,7 +13,7 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from ._version import __version__
+from oxasl import __version__
 
 class AslOptionParser(OptionParser):
     """
