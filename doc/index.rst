@@ -8,6 +8,8 @@ Welcome to oxasl's documentation!
    workspace
    image
    reg
+   struc
+   corrections
 
 .. automodule:: oxasl
 
