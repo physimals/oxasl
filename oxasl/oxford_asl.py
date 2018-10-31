@@ -162,9 +162,15 @@ def oxasl(wsp):
     """
     Main oxasl pipeline script
     """
-    wsp.log.write("OXASL - running\n")
-    wsp.log.write("Version: %s\n" % __version__)
-    wsp.log.write("Input ASL data: %s\n" % wsp.asldata.name)
+    wsp.log.write("OXASL version: %s\n" % __version__)
+    if oxasl_ve:
+        wsp.log.write(" - Found plugin: oxasl_ve\n")
+    if oxasl_enable:
+        wsp.log.write(" - Found plugin: oxasl_enable\n")
+    if oxasl_deblur:
+        wsp.log.write(" - Found plugin: oxasl_deblur\n")
+
+    wsp.log.write("\nInput ASL data: %s\n" % wsp.asldata.name)
     wsp.asldata.summary(wsp.log)
 
     oxasl_preproc(wsp)
