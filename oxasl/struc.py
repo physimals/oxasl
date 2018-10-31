@@ -65,7 +65,7 @@ def init(wsp):
             wsp.structural.struc = Image(os.path.join(wsp.fslanat, "T1"))
             wsp.structural.brain = Image(os.path.join(wsp.fslanat, "T1_brain"))
     elif wsp.struc:
-        wsp.log.write(" - Using structural image provided: %s\n" % wsp.structural.name)
+        wsp.log.write(" - Using structural image provided by user: %s\n" % wsp.struc.name)
         wsp.structural.struc = wsp.struc
     #elif wsp.structural.struc_lores
     #    wsp.log.write("Low-resolution tructural image: %s\n" % wsp.structural.struc_lores.name)
