@@ -41,15 +41,15 @@ class AslOptionParser(OptionParser):
             options, args = OptionParser.parse_args(self, new_argv, values)
 
         # Deal with case where asldata is given as separate files
-        if len(args) > 1 and options.asldata is None:
+        if args and options.asldata is None:
             merged_data = None
-            for idx, fname in enumerate(args[1:]):
+            for idx, fname in enumerate(args):
                 img = Image(fname)
                 shape = list(img.shape)
                 if img.ndim == 3:
                     shape += [1,]
                 if merged_data is None:
-                    merged_data = np.zeros(shape[:3] + [shape[3] * len(args[1:])])
+                    merged_data = np.zeros(shape[:3] + [shape[3] * len(args)])
                 merged_data[..., idx*shape[3]:(idx+1)*shape[3]] = img.data
             merged_img = Image(merged_data, header=img.header)
             temp_asldata = tempfile.NamedTemporaryFile(prefix="oxasl", delete=True)
