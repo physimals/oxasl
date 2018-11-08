@@ -55,7 +55,6 @@ from __future__ import print_function
 import sys
 import os
 import traceback
-import tempfile
 
 import numpy as np
 
@@ -134,7 +133,7 @@ def main():
             parser.add_category(oxasl_enable.EnableOptions(ignore=["regfrom",]))
         parser.add_category(GenericOptions())
 
-        options, args = parser.parse_args()
+        options, _ = parser.parse_args()
         if not options.output:
             options.output = "oxasl"
         
