@@ -62,11 +62,11 @@ class Workspace(object):
 
         # Defaults - these can be overridden by kwargs but might be
         # already defined in parent workspace
-        if self.log is None:
+        if "log" in kwargs or self.log is None:
             self.log = kwargs.pop("log", sys.stdout)
-        if self.debug is None:
+        if "debug" in kwargs or self.debug is None:
             self.debug = kwargs.pop("debug", False)
-        if self.report is None:
+        if "report" in kwargs or self.report is None:
             self.report = kwargs.pop("report", Report())
         
         # Default log configuration for FSL wrapper commands
