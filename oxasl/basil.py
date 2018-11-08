@@ -253,7 +253,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
     options.update(kwargs)
    
     # Additional optional workspace arguments
-    for attr in ("t1", "t1b", "bat", "tau", "taus", "bolus", "FA", "mask", "pwm", "pgm", "batsd"):
+    for attr in ("t1", "t1b", "bat", "FA", "mask", "pwm", "pgm", "batsd"):
         value = getattr(wsp, attr)
         if value is not None:
             options[attr] = value
