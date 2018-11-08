@@ -262,8 +262,8 @@ class AslImage(Image):
         if len(self.taus) == 1:
             self.taus = self.taus * self.ntis
         if len(self.taus) != self.ntis:
-            raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs" % (self.ntis, len(self.taus)))
-            
+            raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs" % (len(self.taus), self.ntis))
+           
         # Labelling type. CASL/pCASL normally associated with PLDs but can pass TIs instead. 
         # However we would not expect PLDs for a non-CASL aquisition so this generates a warning
         #
@@ -406,10 +406,14 @@ class AslImage(Image):
             tis = [self.tis[ti_idx],]
         else:
             tis = None
+        if self.taus is not None:
+            taus = self.taus[ti_idx]
+        else:
+            taus = None
         
         if not name:
             name = self.name + "_ti%i" % ti_idx
-        return self.derived(image=output_data, name=name, order=order, tis=tis, ntis=1, rpts=nrpts)
+        return self.derived(image=output_data, name=name, order=order, tis=tis, taus=taus, ntis=1, rpts=nrpts)
         
     def diff(self, name=None):
         """
@@ -596,7 +600,7 @@ class AslImage(Image):
             name = self.name
         name = name + suffix
         derived_kwargs = {"nenc" : self.ntc}
-        for attr in ("iaf", "order", "ntis", "tis", "rpts", "phases",
+        for attr in ("iaf", "order", "ntis", "tis", "rpts", "taus", "phases",
                      "casl", "sliceband", "slicedt", "artsupp"):
             derived_kwargs[attr] = getattr(self, attr, None)
         derived_kwargs.update(kwargs)
