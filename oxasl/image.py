@@ -600,8 +600,16 @@ class AslImage(Image):
             name = self.name
         name = name + suffix
         derived_kwargs = {"nenc" : self.ntc}
-        for attr in ("iaf", "order", "ntis", "tis", "rpts", "taus", "phases",
-                     "casl", "sliceband", "slicedt", "artsupp"):
+        DERIVED_ATTRS = ["iaf", "order", "rpts", "taus", "phases",
+                         "casl", "sliceband", "slicedt", "artsupp"]
+        if self.have_plds:
+            DERIVED_ATTRS.append("plds")
+            DERIVED_ATTRS.append("nplds")
+        else:
+            DERIVED_ATTRS.append("tis")
+            DERIVED_ATTRS.append("ntis")
+
+        for attr in DERIVED_ATTRS:
             derived_kwargs[attr] = getattr(self, attr, None)
         derived_kwargs.update(kwargs)
         try:

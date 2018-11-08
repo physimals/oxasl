@@ -557,3 +557,25 @@ def test_split_epochs_reorder_overlap():
         # Epoch 3 is TIs 1212, data 2637, mean across repeats 2.5, 6.5
         for z in range(data.shape[3]):
             assert np.all(data[..., z] == idx+0.5+4*z)
+
+def test_derived():
+    d1 = np.random.rand(5, 5, 5, 8)
+    d2 = np.random.rand(5, 5, 5, 8)
+    img = AslImage(name="d1", image=d1, plds=[1, 2], iaf="ct", ibf="tis", casl=True, bolus=[3, 4])
+    assert img.ntis == 2
+    assert img.have_plds
+    assert img.plds == [1, 2]
+    assert img.tis == [4, 6]
+    assert img.rpts == [2, 2]
+    assert img.ntc == 2
+    assert img.order == "lrt"
+    
+    img2 = img.derived(d2, name="d2")
+    assert img2.ntis == 2
+    assert img2.have_plds
+    assert img2.plds == [1, 2]
+    assert img2.tis == [4, 6]
+    assert img2.rpts == [2, 2]
+    assert img2.ntc == 2
+    assert img2.order == "lrt"
+    
