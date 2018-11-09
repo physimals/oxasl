@@ -562,21 +562,35 @@ class AslImage(Image):
         """
         Write a summary of the data to a file stream
         """
-        ti_str = "TIs "
-        if self.have_plds: ti_str = "PLDs"
         log.write("Data shape                    : %s\n" % str(self.shape))
-        log.write("%s                          : %s\n" % (ti_str, str(self.tis)))
-        log.write("Number of repeats at each TI  : %s\n" % str(self.rpts))
-        log.write("Label-Control                 : ")
-        if self.ntc == 2:
-            if self.iaf == "tc": log.write("Label-control pairs\n")
-            else: log.write("Control-Label pairs\n")
+
+        if self.iaf == "tc": 
+            log.write("Label-control pairs\n")
+        elif self.iaf == "ct":
+            log.write("Control-Label pairs\n")
         elif self.iaf == "mp":
-            log.write("Multiple phases (%s)" % str(self.phases))
+            log.write("Multiple phases               : %s" % str(self.phases))
         elif self.iaf == "ve":
-            log.write("Vessel encoded (%i encoding cycles)" % self.ntc)
+            log.write("Vessel encoded                : %i encoding cycles" % self.ntc)
         else:
             log.write("Already differenced\n")
+
+        log.write("Labelling                     : %s\n" % "CASL/pCASL" if self.casl else "PASL")
+
+        if self.have_plds:
+            log.write("PLDs                          : %s\n" % str(self.plds))
+        else:
+            log.write("TIs                           : %s\n" % str(self.tis))
+        
+        log.write("Repeats at each TI            : %s\n" % str(self.rpts))
+        if self.taus:
+            log.write("Bolus durations               : %s\n" % str(self.taus))
+        if self.slicedt:
+            log.write("Time per slice                : %f\n" % self.slicedt)
+        if self.sliceband:
+            log.write("Slices per band               : %f\n" % self.sliceband)
+        if self.artsupp:
+            log.write("Arterial suppression was used")
 
     def derived(self, image, name=None, suffix="", **kwargs):
         """
