@@ -402,10 +402,12 @@ class AslImage(Image):
         nrpts = self.rpts[ti_idx]
         nvols = nrpts * self.ntc
         output_data = reordered.data[:, :, :, start:start+nvols]
-        if self.tis is not None:
+        tis, plds = None, None
+        if self.have_plds and self.plds is not None:
+            plds = [self.plds[ti_idx],]
+        elif not self.have_plds and self.tis is not None:
             tis = [self.tis[ti_idx],]
-        else:
-            tis = None
+
         if self.taus is not None:
             taus = self.taus[ti_idx]
         else:
@@ -413,7 +415,7 @@ class AslImage(Image):
         
         if not name:
             name = self.name + "_ti%i" % ti_idx
-        return self.derived(image=output_data, name=name, order=order, tis=tis, taus=taus, ntis=1, rpts=nrpts)
+        return self.derived(image=output_data, name=name, order=order, tis=tis, plds=plds, taus=taus, ntis=1, rpts=nrpts)
         
     def diff(self, name=None):
         """
@@ -460,8 +462,7 @@ class AslImage(Image):
         else:
             data = self
             out_order = "rt"
-        
-        self.summary()
+
         # Reorder so repeats are together saving original order. Note that
         # rt and tr are equivalent in the output but we want to preserve
         # whatever it was beforehand
@@ -563,7 +564,6 @@ class AslImage(Image):
         """
         ti_str = "TIs "
         if self.have_plds: ti_str = "PLDs"
-        #fsl.Image.summary(self, log)
         log.write("Data shape                    : %s\n" % str(self.shape))
         log.write("%s                          : %s\n" % (ti_str, str(self.tis)))
         log.write("Number of repeats at each TI  : %s\n" % str(self.rpts))
@@ -599,7 +599,7 @@ class AslImage(Image):
         if name is None:
             name = self.name
         name = name + suffix
-        derived_kwargs = {"nenc" : self.ntc}
+
         DERIVED_ATTRS = ["iaf", "order", "rpts", "taus", "phases",
                          "casl", "sliceband", "slicedt", "artsupp"]
         if self.have_plds:
@@ -609,9 +609,12 @@ class AslImage(Image):
             DERIVED_ATTRS.append("tis")
             DERIVED_ATTRS.append("ntis")
 
+        derived_kwargs = {}
         for attr in DERIVED_ATTRS:
-            derived_kwargs[attr] = getattr(self, attr, None)
-        derived_kwargs.update(kwargs)
+            derived_kwargs[attr] = kwargs.get(attr, getattr(self, attr, None))
+        if self.iaf == "ve":
+            derived_kwargs["nenc"] = self.ntc
+
         try:
             return AslImage(image=image, name=name, header=self.header, **derived_kwargs)
         except ValueError as exc:
