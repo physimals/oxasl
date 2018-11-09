@@ -565,28 +565,33 @@ class AslImage(Image):
         log.write("Data shape                    : %s\n" % str(self.shape))
 
         if self.iaf == "tc": 
-            log.write("Label-control pairs\n")
+            label_type = "Label-control pairs"
         elif self.iaf == "ct":
-            log.write("Control-Label pairs\n")
+            label_type = "Control-Label pairs"
         elif self.iaf == "mp":
-            log.write("Multiple phases               : %s" % str(self.phases))
+            label_type = "Multiphase"
         elif self.iaf == "ve":
-            log.write("Vessel encoded                : %i encoding cycles" % self.ntc)
+            label_type = "Vessel encoded"
         else:
-            log.write("Already differenced\n")
+            label_type = "Already differenced"
+        log.write("Label type                    : %s\n" % label_type)
+
+        if self.iaf == "mp":
+            log.write("Phases                        : %s\n" % str(self.phases))
+        elif self.iaf == "ve":
+            log.write("Encoding cycles               : %s\n" % self.ntc)
 
         log.write("Labelling                     : %s\n" % "CASL/pCASL" if self.casl else "PASL")
-
         if self.have_plds:
-            log.write("PLDs                          : %s\n" % str(self.plds))
+            log.write("PLDs (s)                      : %s\n" % str(self.plds))
         else:
-            log.write("TIs                           : %s\n" % str(self.tis))
+            log.write("TIs (s)                       : %s\n" % str(self.tis))
         
         log.write("Repeats at each TI            : %s\n" % str(self.rpts))
         if self.taus:
-            log.write("Bolus durations               : %s\n" % str(self.taus))
+            log.write("Bolus durations (s)           : %s\n" % str(self.taus))
         if self.slicedt:
-            log.write("Time per slice                : %f\n" % self.slicedt)
+            log.write("Time per slice                : %f\n s" % self.slicedt)
         if self.sliceband:
             log.write("Slices per band               : %f\n" % self.sliceband)
         if self.artsupp:
