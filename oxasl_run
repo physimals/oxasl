@@ -1,0 +1,21 @@
+#!/usr/bin/env fslpython
+"""
+Temporary wrapper script for oxasl
+
+Only required when running from the bundle package
+"""
+
+import sys
+import os
+
+# Use modules and fabber libraries in the same dir as wrapper script if present
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, script_dir)
+os.environ["FSLDEVDIR"] = script_dir
+
+from oxasl.oxford_asl import main
+
+try:
+    main()
+except RuntimeError as e:
+    print("Error: %s" % e)
