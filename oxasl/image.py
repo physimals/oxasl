@@ -4,6 +4,7 @@ Subclass of fsl.data.image.Image which represents ASL data
 
 import sys
 import warnings
+import six
 
 import numpy as np
 
@@ -119,18 +120,14 @@ class AslImage(Image):
         rpts = kwargs.pop("rpts", kwargs.pop("nrpts", None))
         phases = kwargs.pop("phases", None)
         nphases = kwargs.pop("nphases", None)
-        nenc = kwargs.pop("nenc", None)
+        nenc = kwargs.pop("nenc", kwargs.pop("ntc", None))
         
-        if self.ndim == 4:
-            self.nvols = self.shape[3]
-        elif self.ndim == 3:
-            self.nvols = 1
-        else:
+        if self.ndim not in (3, 4):
             raise ValueError("3D or 4D data expected")
 
         # Determine the data format and ordering
         #
-        # Sets the attributes: iaf (str), order (str)
+        # Sets the metadata: iaf (str), order (str)
         if not iaf:
             if order is not None and "l" in order:
                 warnings.warn("Data format was not specified - assuming TC pairs")
@@ -167,16 +164,15 @@ class AslImage(Image):
             if char not in ('l', 'r', 't'):
                 raise ValueError("Unrecognized character in data ordering: '%s'" % char)
 
-        self.order = order.lower()
-        self.iaf = iaf.lower()
+        self.setMeta("order", order.lower())
+        self.setMeta("iaf", iaf.lower())
 
         # Determine the number of labelling images present. This may be label/control
         # pairs, a set of multiple phases, vessel encoding cycles or already differenced data
         #
-        # Sets the attributes: ntc (int), phases (list or None)
-        self.phases = None
+        # Sets the metadata: ntc (int), phases (list or None)
         if self.iaf in ("tc", "ct"):
-            self.ntc = 2
+            ntc = 2
         elif self.iaf == "mp":
             if phases is None and nphases is None:
                 raise ValueError("Multiphase data specified but number of phases not given")
@@ -187,14 +183,16 @@ class AslImage(Image):
                 phases = [pidx * 360 / nphases for pidx in range(nphases)]
 
             if isinstance(phases, str): phases = [float(ph) for ph in phases.split(",")]
-            self.phases = phases
-            self.ntc = len(phases)
+            phases = phases
+            ntc = len(phases)
         elif self.iaf == "ve":
             if nenc is None:
                 raise ValueError("Vessel encoded data specified but number of encoding cycles not given")
-            self.ntc = nenc
+            ntc = nenc
         else:
-            self.ntc = 1
+            ntc = 1
+        self.setMeta("ntc", ntc)
+        self.setMeta("phases", phases)
 
         # Determine the number and type of delay images present. These may be given as TIs or PLDs.
         #
@@ -202,31 +200,32 @@ class AslImage(Image):
         # were provided, the TIs are derived by adding on the bolus duration
         #
         # Sets the attributes tis (list), ntis (int), have_plds (bool), plds (list)
-        if (tis is not None and plds is not None) or (ntis is not None and nplds is not None) or \
-           (tis is not None and nplds is not None) or (plds is not None and ntis is not None):
+        if tis is not None and plds is not None:
             raise ValueError("Cannot specify PLDs and TIs at the same time")
 
-        self.have_plds = False
-
+        have_plds = False
         if nplds is not None:
             ntis = nplds
-            self.have_plds = True
+            have_plds = True
         
         if plds is not None:
             tis = plds
-            self.have_plds = True
+            have_plds = True
 
         if ntis is None and tis is None:
             raise ValueError("Number of TIs/PLDs not specified")
         elif tis is not None:
-            if isinstance(tis, str): tis = [float(ti) for ti in tis.split(",")]
+            if isinstance(tis, six.string_types): tis = [float(ti) for ti in tis.split(",")]
             ntis = len(tis)
             if ntis is not None and len(tis) != ntis:
                 raise ValueError("Number of TIs/PLDs specified as: %i, but a list of %i TIs/PLDs was given" % (ntis, len(tis)))
-        self.tis = tis
-        self.ntis = int(ntis)
-        if self.have_plds:
-            self.plds = tis
+
+        self.setMeta("ntis", int(ntis))
+        self.setMeta("have_plds", have_plds)
+        if have_plds: 
+            self.setMeta("plds", tis)
+        else:
+            self.setMeta("tis", tis)
 
         if ibf_guessed and len(self.tis) > 1:
             warnings.warn("Data order was not specified for multi-TI data - assuming blocks of repeats")
@@ -248,42 +247,71 @@ class AslImage(Image):
                 raise ValueError("%i TIs specified, inconsistent with %i variable repeats" % (self.ntis, len(rpts)))        
             elif sum(rpts) * self.ntc != self.nvols:
                 raise ValueError("Data contains %i volumes, inconsistent with %i labelling images and total of %i repeats" % (self.nvols, self.ntc, sum(rpts)))        
-        self.rpts = rpts
+        self.setMeta("rpts", rpts)
 
         # Bolus durations should be a sequence same length as TIs/PLDs
         #
         # Sets the attributes taus (list)
-        self.taus = kwargs.pop("bolus", kwargs.pop("taus", kwargs.pop("tau", None)))
-        if self.taus is None:
-            self.taus = 1.8
-        if isinstance(self.taus, str): self.taus = [float(tau) for tau in self.taus.split(",")]
-        elif isinstance(self.taus, (float, int)): self.taus = [float(self.taus),] * self.ntis
+        taus = kwargs.pop("bolus", kwargs.pop("taus", kwargs.pop("tau", None)))
+        if taus is None:
+            taus = 1.8
+        if isinstance(taus, str): taus = [float(tau) for tau in taus.split(",")]
+        elif isinstance(taus, (float, int)): taus = [float(taus),] * self.ntis
 
-        if len(self.taus) == 1:
-            self.taus = self.taus * self.ntis
-        if len(self.taus) != self.ntis:
-            raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs" % (len(self.taus), self.ntis))
-           
+        if len(taus) == 1:
+            taus = taus * ntis
+        if len(taus) != self.ntis:
+            raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs" % (len(taus), self.ntis))
+        self.setMeta("taus", taus)
+
         # Labelling type. CASL/pCASL normally associated with PLDs but can pass TIs instead. 
         # However we would not expect PLDs for a non-CASL aquisition so this generates a warning
         #
         # If PLDs were provided, TIs are derived by adding the bolus duration to the PLDs
         #
         # Sets the attributes casl (bool), updates tis (list)
-        self.casl = kwargs.pop("casl", None)
-        if self.casl is None: 
-            self.casl = self.have_plds
+        casl = kwargs.pop("casl", None)
+        if casl is None: 
+            casl = self.have_plds
         if self.have_plds:
-            if not self.casl:
+            if not casl:
                 warnings.warn("PLDs specified but aquisition was not CASL/pCASL - will treat these as TIs")
-            else:
-                self.tis = [pld + tau for pld, tau in zip(self.plds, self.taus)]
+        self.setMeta("casl", casl)
 
         # Other acquisition parameters
-        self.slicedt = kwargs.pop("slicedt", 0)
-        self.sliceband = kwargs.pop("sliceband", None)
-        self.artsupp = kwargs.pop("artsupp", False)
+        self.setMeta("slicedt", kwargs.pop("slicedt", 0))
+        self.setMeta("sliceband", kwargs.pop("sliceband", None))
+        self.setMeta("artsuff", kwargs.pop("artsupp", False))
 
+    def __getattr__(self, name):
+        return self.getMeta(name, None)
+
+    @property
+    def nvols(self):
+        if self.ndim == 4:
+            return self.shape[3]
+        else:
+            return 1
+
+    @property
+    def sliceband(self):
+        sb = self.getMeta("sliceband", None)
+        if sb is not None:
+            return int(sb)
+        else:
+            return None
+
+    @property
+    def tis(self):
+        if self.casl and self.have_plds:
+            return [pld + tau for pld, tau in zip(self.plds, self.taus)]
+        else:
+            return self.getMeta("tis", self.getMeta("plds"))
+
+    @property
+    def nphases(self):
+        return self.getMeta("ntc", None)
+        
     def get_vol_index(self, label_idx, ti_idx, rpt_idx, order=None):
         """
         Get the volume index for a specified label, TI and repeat index
@@ -591,7 +619,7 @@ class AslImage(Image):
         if self.taus:
             log.write("Bolus durations (s)           : %s\n" % str(self.taus))
         if self.slicedt:
-            log.write("Time per slice                : %f\n s" % self.slicedt)
+            log.write("Time per slice (s)            : %f\n" % self.slicedt)
         if self.sliceband:
             log.write("Slices per band               : %f\n" % self.sliceband)
         if self.artsupp:
