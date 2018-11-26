@@ -2,4 +2,4 @@ numpy
 nibabel
 six
 pyaml
-fslpy=1.13
+fslpy==1.13
