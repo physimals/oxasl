@@ -330,6 +330,21 @@ def test_mean_across_repeats_tr():
     for znew, zold in enumerate([3, 4]):
         assert np.all(data[..., znew] == zold)
 
+def test_mean_across_repeats_var_rpts():
+    d = np.random.rand(5, 5, 5, 86)
+    #for z in range(8): d[..., z] = z
+    img = AslImage(name="asldata", image=d, tis=[1, 2, 3, 4, 5], rpts=[6, 6, 6, 10, 15], iaf="tc", order='lrt')
+    img = img.mean_across_repeats()
+    assert img.ntis == 5
+    assert img.tis == [1, 2, 3, 4, 5]
+    assert img.rpts == [1, 1, 1, 1, 1]
+    assert img.ntc == 1
+    assert img.order == "rt"
+    data = img.nibImage.get_data()
+    assert list(data.shape) == [5, 5, 5, 5] 
+    #for znew, zold in enumerate([3, 4]):
+    #    assert np.all(data[..., znew] == zold)
+
 def test_perf_weighted_tr():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
