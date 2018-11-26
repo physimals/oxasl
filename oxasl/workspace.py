@@ -1,12 +1,31 @@
 """
-Workspace for executing FSL commands
+Workspace to store images and data associated with a processing pipeline
+
+This class is conceptually simple - you can store pretty much any data by setting
+an attribute on the workspace and retrieve the resulting data as the same attribute.
+The workspace is backed by a directory and image data is save to files rather than
+store in memory.
+
+This hides considerable complexity. Here are a few of the issues:
+
+ - To ensure that image data really is kicked out of memory we create an ImageProxy
+   object for each image. This simply stores the filename and metadata associated
+   with an image. ``__getattribute__`` is overridden to return ImageProxy attributes
+   as the underlying Image.
+
+ - There is a special ImageProxy for an AslImage. This might go away if we can
+   represent the full state of an AslImage using metadata alone.
+
 """
 
 import os
 import sys
 import errno
-import six
+import glob
+import shutil
+import tempfile
 
+import six
 import numpy as np
 import yaml
 
@@ -14,6 +33,35 @@ from fsl.data.image import Image
 
 from oxasl import AslImage
 from oxasl.reporting import Report
+
+class ImageProxy(object):
+    """
+    Reference to a saved Image and it's metadata
+    """
+    def __init__(self, fname, md=None):
+        self._fname = fname
+        self._md = md
+
+    def img(self):
+        """
+        Return an Image object by loading from the file
+        """
+        img = Image(self._fname, loadData=False)
+        if self._md:
+            for key, value in self._md:
+                img.setMeta(key, value)
+        return img
+
+class AslImageProxy(ImageProxy):
+    """
+    Reference to a saved AslImage and it's metadata
+    """
+
+    def img(self):
+        """
+        Return an AslImage object from the file and stored metadata
+        """
+        return AslImage(self._fname, loadData=False, **self._md)
 
 class Workspace(object):
     """
@@ -27,12 +75,17 @@ class Workspace(object):
         options, args = parser.parse_args(sys.argv)
         wsp = Workspace(**vars(options))
 
-    A workspace may optionally be associated with a physical directory. In this
-    case certain types of objects will automatically be saved to the workspace.
+    A workspace is always associated with a physical directory. Certain types of 
+    objects are automatically be saved to the workspace. If no save directory
+    is specified a temporary directory is created
+
     Supported types are currently:
 
          - ``fsl.data.image.Image`` - Saved as Nifti
          - 2D Numpy array - Saved as ASCII matrix
+
+    All other attributes are serialized to YAML and stored in a special
+    ``_oxasl.yml`` file.
 
     To avoid saving a particular item, use the ``add`` method rather than
     directly setting an attribute, as it supports a ``save`` option.
@@ -43,7 +96,9 @@ class Workspace(object):
         Create workspace
 
         :param savedir: If specified, use this path to save data. Will be created
-                        if it does not not already exist
+                        if it does not not already exist. If not specified a temporary
+                        directory will be created so data can be flushed to disk rather
+                        than held in memory.
         :param separate_input: If True a sub workspace named 'input' will be created
                                and initial data will be stored there. This sub workspace
                                will also be checked by default when attributes are 
@@ -52,12 +107,19 @@ class Workspace(object):
                              from the input keyword arguments
         :param log:     File stream to write log output to (default: sys.stdout)
         """
-        self.savedir = None # Have to set this first otherwise setattr fails!
+        # Have to set this first otherwise setattr fails!
+        if savedir is not None:
+            savedir = os.path.abspath(savedir)
+            create_savedir = True
+        else:
+            savedir = tempfile.mkdtemp(prefix="oxasl_wsp")
+            create_savedir = False
+        self.set_item("savedir", savedir, save=False)
+
         self._parent = parent
         self._defaults = list(defaults)
         self._stuff = {}
-        if savedir is not None:
-            self.savedir = os.path.abspath(savedir)
+        if create_savedir:
             mkdir(savedir, log=self.ifnone("log", kwargs.get("log", sys.stdout)))
 
         # Defaults - these can be overridden by kwargs but might be
@@ -92,18 +154,30 @@ class Workspace(object):
                 raise ValueError("Input ASL file not specified\n")
             input_wsp.asldata = AslImage(self.asldata, **kwargs)
 
+    def __getattribute__(self, name):
+        ret = super(Workspace, self).__getattribute__(name)
+        if isinstance(ret, ImageProxy):
+            return ret.img()
+        else:
+            return ret
+
     def __getattr__(self, name):
         if name in self._defaults:
             return None
+
+        ret = None
         for wsp in self._defaults:
             default_wsp = getattr(self, wsp)
             if isinstance(default_wsp, Workspace):
                 val = getattr(default_wsp, name)
                 if val is not None:
-                    return val
-        if self._parent is not None:
-            return getattr(self._parent, name)
-        return None
+                    ret = val
+                    break
+        
+        if ret is None and self._parent is not None:
+            ret = getattr(self._parent, name)
+        
+        return ret
 
     def __setattr__(self, name, value):
         self.set_item(name, value)
@@ -132,59 +206,56 @@ class Workspace(object):
 
         :param name: Name, must be a valid Python identifier
         :param value: Value to set
-        :param save: If False, do not save item even if savedir defined
+        :param save: If False, do not save item
         :param save_name: If specified, alternative name to use for saving this item
         :param save_fn: If specified, Callable which generates string representation of
                         value suitable for saving the item to a file
         """
-        if value is not None and save and self.savedir:
+        if save:
             if not save_name:
                 save_name = name
 
-            if save_fn is not None:
-                with open(os.path.join(self.savedir, save_name), "w") as tfile:
-                    tfile.write(save_fn(value))
-            elif isinstance(value, Image):
-                # Save as Nifti file
-                fname = os.path.join(self.savedir, save_name)
-                value.save(fname)
-                value.name = save_name
-                if type(value) == Image:
-                    # Create fresh image to avoid data caching
-                    # NB do not want subclasses
-                    value = Image(fname, name=save_name)
+            # Remove any existing file first - it could be left behind if 
+            # the extension is different or the new value is None
+            existing_files = glob.glob(os.path.join(self.savedir, "%s.*" % save_name))
+            for existing_file in existing_files:
+                if os.path.isdir(existing_file):
+                    shutil.rmtree(existing_file)
                 else:
-                    # Release cached data otherwise
-                    value.nibImage.uncache()
-            elif isinstance(value, np.ndarray) and value.ndim == 2:
-                # Save as ASCII matrix
-                with open(os.path.join(self.savedir, save_name), "w") as tfile:
-                    tfile.write(matrix_to_text(value))
-            elif not name.startswith("_") and isinstance(value, (int, float, six.string_types)):
-                # Save other attributes in JSON file
-                self._stuff[name] = value
-                self._save_stuff()
+                    os.remove(existing_file)
+
+            if value is not None:
+                if save_fn is not None:
+                    with open(os.path.join(self.savedir, save_name), "w") as tfile:
+                        tfile.write(save_fn(value))
+                elif isinstance(value, Image):
+                    # Save as Nifti file
+                    fname = os.path.join(self.savedir, save_name)
+                    value.save(fname)
+                    value.name = save_name
+                    # Replace images with ImageProxy objects to avoid excess in-memory storage
+                    if isinstance(value, AslImage):
+                        value = AslImageProxy(fname, md=dict(value.metaItems()))
+                    elif isinstance(value, Image):
+                        value = ImageProxy(fname, md=dict(value.metaItems()))
+                   
+                elif isinstance(value, np.ndarray) and value.ndim == 2:
+                    # Save as ASCII matrix
+                    with open(os.path.join(self.savedir, save_name), "w") as tfile:
+                        tfile.write(matrix_to_text(value))
+                elif not name.startswith("_") and isinstance(value, (int, float, six.string_types)):
+                    # Save other attributes in JSON file
+                    self._stuff[name] = value
+                    self._save_stuff()
 
         super(Workspace, self).__setattr__(name, value)
-
-    def uncache(self):
-        """
-        Release in-memory data for all images in this workspace
-        """
-        for attr in dir(self):
-            val = getattr(self, attr)
-            if isinstance(val, Image):
-                val.nibImage.uncache()
-            elif isinstance(val, Workspace) and val != self and not attr.startswith("_"):
-                val.uncache()
 
     def sub(self, name, parent_default=True, **kwargs):
         """
         Create a sub-workspace, (i.e. a subdir of this workspace)
 
-        This inherits the log configuration from the parent workspace. If
-        a savedir is defined, it will be created with a savedir which is
-        a subdirectory of the original workspace. Additional data may be 
+        This inherits the log configuration from the parent workspace. The savedir 
+        will be a subdirectory of the original workspace. Additional data may be 
         set using keyword arguments. The child-workspace will be available 
         as an attribute on the parent workspace.
         
@@ -192,11 +263,7 @@ class Workspace(object):
         :param parent_default: If True, attribute values default to the parent workspace
                                if not set on the sub-workspace 
         """
-        if self.savedir:
-            savedir = os.path.join(self.savedir, name)
-        else:
-            savedir = None
-        
+        savedir = os.path.join(self.savedir, name)  
         if parent_default and name not in self._defaults:
             parent = self
         else:
