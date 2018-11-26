@@ -146,9 +146,10 @@ def main():
         if options.debug:
             options.save_all = True
 
-        wsp = Workspace(savedir=options.output, auto_asldata=True, **vars(options))
-        #wsp.asldata = AslImage(options.asldata, **parser.filter(vars(options), "image"))
+        if os.path.exists(options.output) and not options.overwrite:
+            raise RuntimeError("Output directory exists - use --overwrite to overwrite it")
 
+        wsp = Workspace(savedir=options.output, auto_asldata=True, **vars(options))
         oxasl(wsp)
 
     except Exception as e:
@@ -181,6 +182,7 @@ def oxasl(wsp):
             raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
         oxasl_ve.model_ve(wsp)
     else:
+        # FIXME support for multiphase data
         raise ValueError("ASL data has format '%s' - not supported by OXASL pipeline" % wsp.asldata.iaf)
 
     do_report(wsp)
