@@ -155,6 +155,7 @@ class GenericOptions(OptionCategory):
     def groups(self, parser):
         group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
         group.add_option("--output", "-o", help="Output %s" % self.output_type, default=None)
+        group.add_option("--overwrite", help="Overwrite output %s if it already exists" % self.output_type, action="store_true", default=False)
         group.add_option("--mask", "-m", help="Brain mask image in native ASL space", default=None, type="image")
         group.add_option("--optfile", help="File containing additional options")
         group.add_option("--debug", help="Debug mode", action="store_true", default=False)
@@ -162,7 +163,7 @@ class GenericOptions(OptionCategory):
 
 def _check_image(option, opt, value):
     try:
-        return Image(value)
+        return Image(value, loadData=False)
     except ValueError:
         raise OptionValueError("option %s: invalid Image value: %r" % (opt, value))
             
