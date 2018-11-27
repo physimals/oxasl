@@ -1,7 +1,5 @@
 """
 Tests for workspace module
-
-FIXME missing uncache
 """
 import os
 import shutil
