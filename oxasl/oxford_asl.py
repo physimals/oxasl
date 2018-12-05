@@ -77,6 +77,7 @@ except ImportError:
 
 from oxasl import Workspace, __version__, image, calib, struc, basil, mask, corrections, reg
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
+from oxasl.reporting import LightboxImage
 
 class OxfordAslOptions(OptionCategory):
     """
@@ -100,10 +101,10 @@ class OxfordAslOptions(OptionCategory):
 
         ret.append(g)
         g = IgnorableOptionGroup(parser, "Acquisition/Data specific")
-        g.add_option("--bat", help="Bolus arrival time (default=0.7 (pASL), 1.3 (cASL)", type=float)
-        g.add_option("--batsd", help="Bolus arrival time standard deviation", type=float)
-        g.add_option("--t1", help="Tissue T1 value", type=float, default=1.3)
-        g.add_option("--t1b", help="Blood T1 value", type=float, default=1.65)
+        g.add_option("--bat", help="Estimated bolus arrival time (s) - default=0.7 (pASL), 1.3 (cASL)", type=float)
+        g.add_option("--batsd", help="Bolus arrival time standard deviation (s)", type=float)
+        g.add_option("--t1", help="Tissue T1 (s)", type=float, default=1.3)
+        g.add_option("--t1b", help="Blood T1 (s)", type=float, default=1.65)
         ret.append(g)
         g = IgnorableOptionGroup(parser, "Output options")
         g.add_option("--save-corrected", help="Save corrected input data", action="store_true", default=False)
@@ -111,6 +112,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--save-basil", help="Save Basil modelling output", action="store_true", default=False)
         g.add_option("--save-calib", help="Save calibration output", action="store_true", default=False)
         g.add_option("--save-all", help="Save all output (enabled when --debug specified)", action="store_true", default=False)
+        g.add_option("--no-report", dest="save_report", help="Don't try to generate an HTML report", action="store_false", default=True)
         ret.append(g)
         return ret
 
@@ -185,11 +187,31 @@ def oxasl(wsp):
         # FIXME support for multiphase data
         raise ValueError("ASL data has format '%s' - not supported by OXASL pipeline" % wsp.asldata.iaf)
 
-    do_report(wsp)
+    if wsp.save_report:
+        do_report(wsp)
+    
     do_cleanup(wsp)
-
     wsp.log.write("\nOutput is %s\n" % wsp.savedir)
     wsp.log.write("OXASL - done\n")
+
+def report_asl(wsp):
+    """
+    Generate a report page about the input ASL data
+    """
+    page = wsp.report.page("asl")
+    page.heading("ASL input data")
+    md_table = [(key, value) for key, value in wsp.asldata.metadata_summary().items()]
+    page.table(md_table)
+    try:
+        # Not all data can generate a PWI
+        img = wsp.asldata.perf_weighted()
+        img_type = "Perfusion-weighted image"
+    except ValueError:
+        img = wsp.asldata.mean()
+        img_type = "Mean ASL data"
+
+    page.heading(img_type, level=1)
+    page.image("asldata", LightboxImage(img))
 
 def oxasl_preproc(wsp):
     """
@@ -198,6 +220,8 @@ def oxasl_preproc(wsp):
     This method requires wsp to be a Workspace containing certain standard information.
     As a minimum, the attribute ``asldata`` must contain an AslImage object.
     """
+    report_asl(wsp)
+
     struc.init(wsp)
     corrections.apply_corrections(wsp)
 
@@ -275,14 +299,12 @@ def redo_reg(wsp, pwi):
     wsp.reg.regfrom = Image(new_regfrom, header=pwi.header)
     wsp.reg.asl2struc_initial = wsp.reg.asl2struc
     wsp.reg.struc2asl_initial = wsp.reg.struc2asl
-    reg.reg_asl2struc(wsp, False, True)
+    reg.reg_asl2struc(wsp, False, True, name="final")
 
 def do_report(wsp):
     """
     Generate HTML report
     """
-    if not wsp.savedir:
-        return
     report_build_dir = None
     if wsp.debug:
         report_build_dir = os.path.join(wsp.savedir, "report_build")
@@ -300,12 +322,12 @@ def output_native(wsp, basil_wsp):
                       attribute is expected to point to the final output workspace
     """
     output_items = {
-        "mean_ftiss" : ("perfusion", 6000, True),
-        "mean_fblood" : ("aCBV", 100, True),
-        "mean_delttiss" : ("arrival", 1, False),
-        "mean_ftisswm" : ("perfusion_wm", 6000, True),
-        "mean_deltwm" : ("arrival_wm", 1, False),
-        "modelfit" : ("modelfit", 1, False),
+        "mean_ftiss" : ("perfusion", 6000, True, "ml/100g/min", "?"),
+        "mean_fblood" : ("aCBV", 100, True, "ml/100g/min", "?"),
+        "mean_delttiss" : ("arrival", 1, False, "s", "?"),
+        "mean_ftisswm" : ("perfusion_wm", 6000, True, "ml/100g/min", "?"),
+        "mean_deltwm" : ("arrival_wm", 1, False, "s", "?"),
+        "modelfit" : ("modelfit", 1, False, "", "?"),
     }
     wsp.sub("native")
     for fabber_output, oxasl_output in output_items.items():
@@ -316,12 +338,40 @@ def output_native(wsp, basil_wsp):
             data[img.data < 0] = 0
             data[wsp.rois.mask.data == 0] = 0
             img = Image(data, header=img.header)
-            name, multiplier, is_perfusion = oxasl_output
+            name, multiplier, is_perfusion, units, norm_range = oxasl_output
             if is_perfusion:
                 img, = corrections.apply_sensitivity_correction(wsp, img)
             setattr(wsp.native, name, img)
             if is_perfusion and wsp.calib is not None:
-                setattr(wsp.native, "%s_calib" % name, calib.calibrate(wsp, img, multiplier=multiplier))
+                alpha = wsp.ifnone("alpha", 0.85 if wsp.asldata.casl else 0.98)
+                img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha)
+                name = "%s_calib" % name
+                setattr(wsp.native, name, img)
+                
+            # Reporting
+            if img.ndim == 3:
+                page = wsp.report.page(name)
+                page.heading("Output image: %s" % name)
+                if name.endswith("_calib"):
+                    page.heading("Calibration", level=1)
+                    page.text("Image was calibrated using supplied M0 image")
+                    page.text("Inversion efficiency: %f" % alpha)
+                    page.text("Multiplier for physical units: %f" % multiplier)
+
+                page.heading("Metrics", level=1)
+                table = []
+                table.append(["Mean within mask", "%.4g %s" % (np.mean(img[wsp.rois.mask.data > 0.5]), units), norm_range])
+                if wsp.structural.struc is not None:
+                    gm_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
+                    wm_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
+                    table.append(["GM mean", "%.4g %s" % (np.mean(img[gm_asl.data > 0.5]), units), norm_range])
+                    table.append(["Pure GM mean", "%.4g %s" % (np.mean(img[gm_asl.data > 0.8]), units), norm_range])
+                    table.append(["WM mean", "%.4g %s" % (np.mean(img[wm_asl.data > 0.5]), units), norm_range])
+                    table.append(["Pure WM mean", "%.4g %s" % (np.mean(img[wm_asl.data > 0.9]), units), norm_range])
+                page.table(table, headers=["Metric", "Value", "Typical"])
+                
+                page.heading("Image", level=1)
+                page.image("%s_img" % name, LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
 
 def output_trans(wsp):
     """
