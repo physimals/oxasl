@@ -67,6 +67,9 @@ def init(wsp):
     elif wsp.struc:
         wsp.log.write(" - Using structural image provided by user: %s\n" % wsp.struc.name)
         wsp.structural.struc = wsp.struc
+        if wsp.wm_seg is not None:
+            wsp.structural.wm_seg = wsp.wm_seg # FIXME user override segmentation
+
     #elif wsp.structural.struc_lores
     #    wsp.log.write("Low-resolution tructural image: %s\n" % wsp.structural.struc_lores.name)
     else:
@@ -83,6 +86,8 @@ def init(wsp):
         # different results compared to using the mask returned by BET
         wsp.structural.brain_mask = Image((wsp.structural.brain.data != 0).astype(np.int), header=wsp.structural.struc.header)
         
+    segment(wsp)
+    
 def segment(wsp):
     """
     Segment the structural image
