@@ -4,8 +4,9 @@ Subclass of fsl.data.image.Image which represents ASL data
 
 import sys
 import warnings
-import six
+import collections
 
+import six
 import numpy as np
 
 from fsl.data.image import Image
@@ -27,15 +28,15 @@ class AslImageOptions(OptionCategory):
         group.add_option("--asldata", self.fname_opt, help="ASL data file")
         group.add_option("--iaf", help="input ASl format: diff=differenced,tc=tag-control,ct=control-tag,mp=multiphase,ve=vessel-encoded")
         group.add_option("--order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, l=labelling (tag/control/phases etc). First character is fastest varying")
-        group.add_option("--tis", help="TIs as comma-separated list")
-        group.add_option("--plds", help="PLDs as comma-separated list - alternative to --tis")
+        group.add_option("--tis", help="TIs (s) as comma-separated list")
+        group.add_option("--plds", help="PLDs (s) as comma-separated list - alternative to --tis")
         group.add_option("--ntis", help="Number of TIs (for use when processing does not require actual values)", type="int")
         group.add_option("--nplds", help="Equivalent to --ntis", type="int")
         group.add_option("--rpts", help="Variable repeats as comma-separated list, one per TI/PLD", default=None)
         group.add_option("--nphases", help="For --iaf=mp, number of phases (assumed to be evenly spaced)", default=None, type="int")
         group.add_option("--nenc", help="For --iaf=ve, number of encoding cycles", type="int", default=8)
         group.add_option("--casl", help="Acquisition was pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
-        group.add_option("--tau", "--taus", "--bolus", help="Bolus duration. Can be single value or comma separated list, one per TI/PLD")
+        group.add_option("--tau", "--taus", "--bolus", help="Bolus duration (s). Can be single value or comma separated list, one per TI/PLD")
         group.add_option("--slicedt", help="Timing difference between slices (ms) for 2D readout", type=float, default=0.0)
         group.add_option("--sliceband", help="Number of slices per pand in multi-band setup", type=int)
         group.add_option("--artsupp", help="Arterial suppression (vascular crushing) was used", action="store_true", default=False)
@@ -590,7 +591,15 @@ class AslImage(Image):
         """
         Write a summary of the data to a file stream
         """
-        log.write("Data shape                    : %s\n" % str(self.shape))
+        for key, value in self.metadata_summary().items():
+            log.write("%s: %s\n" % (key.ljust(30), str(value)))
+            
+    def metadata_summary(self):
+        """
+        Generate a human-readable dictionary of metadata
+        """
+        md = collections.OrderedDict()
+        md["Data shape"] = str(self.shape)
 
         if self.iaf == "tc": 
             label_type = "Label-control pairs"
@@ -602,29 +611,30 @@ class AslImage(Image):
             label_type = "Vessel encoded"
         else:
             label_type = "Already differenced"
-        log.write("Label type                    : %s\n" % label_type)
+        md["Label type"] = label_type
 
         if self.iaf == "mp":
-            log.write("Phases                        : %s\n" % str(self.phases))
+            md["Phases"] = str(self.phases)
         elif self.iaf == "ve":
-            log.write("Encoding cycles               : %s\n" % self.ntc)
+            md["Encoding cycles"] = self.ntc
 
-        log.write("Labelling                     : %s\n" % "CASL/pCASL" if self.casl else "PASL")
+        md["Labelling"] = "CASL/pCASL" if self.casl else "PASL"
         if self.have_plds:
-            log.write("PLDs (s)                      : %s\n" % str(self.plds))
+            md["PLDs (s)"] = str(self.plds)
         else:
-            log.write("TIs (s)                       : %s\n" % str(self.tis))
-        
-        log.write("Repeats at each TI            : %s\n" % str(self.rpts))
-        if self.taus:
-            log.write("Bolus durations (s)           : %s\n" % str(self.taus))
-        if self.slicedt:
-            log.write("Time per slice (s)            : %f\n" % self.slicedt)
-        if self.sliceband:
-            log.write("Slices per band               : %f\n" % self.sliceband)
-        if self.artsupp:
-            log.write("Arterial suppression was used")
+            md["TIs (s)"] = str(self.tis)
 
+        md["Repeats at each TI"] = str(self.rpts)
+        if self.taus:
+            md["Bolus durations (s)"] = str(self.taus)
+        if self.slicedt:
+            md["Time per slice (ms)"] = self.slicedt
+        if self.sliceband:
+            md["Slices per band"] = self.sliceband
+        if self.artsupp:
+            md["Arterial suppression"] = "Was used"
+        return md
+        
     def derived(self, image, name=None, suffix="", **kwargs):
         """
         Create a derived ASL image based on this one, but with different data
