@@ -4,6 +4,7 @@ Functions for generating a suitable mask for ASL data
 import sys
 
 import numpy as np
+import scipy.ndimage
 
 import fsl.wrappers as fsl
 from fsl.data.image import Image
@@ -76,10 +77,11 @@ def generate_mask(wsp):
     page.heading("Masked ASL brain image", level=1)
     page.text("Mask was %s" % mask_source)
     page.text("PW ASL image masked by ASL-space mask")
+
     if wsp.asldata.iaf in ("diff", "tc", "ct"):
-        page.image("mask_img", LightboxImage(wsp.asldata.perf_weighted(), mask=wsp.rois.mask, bgimage=wsp.asldata.perf_weighted()))
+        page.image("mask_outline", LightboxImage(wsp.rois.mask, bgimage=wsp.asldata.perf_weighted(), outline=True))
     else:
-        page.image("mask_img", LightboxImage(wsp.asldata.mean(), mask=wsp.rois.mask, bgimage=wsp.asldata.mean()))
+        page.image("mask_outline", LightboxImage(wsp.rois.mask, bgimage=wsp.asldata.mean(), outline=True))
 
 def main():
     """
