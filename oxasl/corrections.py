@@ -25,6 +25,8 @@ transformation to minimise interpolation of the ASL data
 
 Copyright (c) 2008-2013 Univerisity of Oxford
 """
+from __future__ import unicode_literals
+
 import tempfile
 import shutil
 
@@ -35,8 +37,8 @@ from fsl.data.image import Image
 
 from oxasl import reg, struc
 from oxasl.options import OptionCategory, IgnorableOptionGroup
-from oxasl.reporting import LightboxImage
-from oxasl.wrappers import epi_reg
+from oxasl.reporting import LightboxImage, LineGraph
+from oxasl.wrappers import epi_reg, fnirtfileutils
 
 class DistcorrOptions(OptionCategory):
     """
@@ -69,7 +71,7 @@ class DistcorrOptions(OptionCategory):
         g.add_option("--cref", help="Reference image for sensitivity correction", type="image")
         g.add_option("--cact", help="Image from coil used for actual ASL acquisition (default: calibration image - only in longtr mode)", type="image")
         g.add_option("--isen", help="User-supplied sensitivity correction in ASL space")
-        g.add_option("--senscorr-auto", help="Apply automatic sensitivity correction using bias field from FAST", action="store_true", default=False)
+        g.add_option("--senscorr-auto", "--senscorr", help="Apply automatic sensitivity correction using bias field from FAST", action="store_true", default=False)
         g.add_option("--senscorr-off", help="Do not apply any sensitivity correction", action="store_true", default=False)
         ret.append(g)
 
@@ -288,7 +290,7 @@ def get_motion_correction(wsp):
         mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
     elif wsp.input.calib is not None:
         wsp.log.write(" - Using calibration image as reference\n")
-        ref_source = "calibration image: %s" % wsp.input.calib.name
+        ref_source = "Calibration image"
         wsp.moco.ref = wsp.input.calib
         wsp.moco.input = wsp.input.asldata
         mcflirt_result = fsl.mcflirt(wsp.moco.input, reffile=wsp.moco.ref, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
@@ -298,11 +300,12 @@ def get_motion_correction(wsp):
         wsp.reg.asl2calib = mats[int(float(len(mats))/2)]
         wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
         mats = [np.dot(wsp.reg.calib2asl, mat) for mat in mats]
+        
         wsp.log.write("   ASL middle volume->Calib:\n%s\n" % str(wsp.reg.asl2calib))
         wsp.log.write("   Calib->ASL middle volume:\n%s\n" % str(wsp.reg.calib2asl))
     else:
         wsp.log.write(" - Using ASL data middle volume as reference\n")
-        ref_source = "ASL data %s middle volume: %i" % (wsp.input.asldata.name, int(float(wsp.asldata.shape[3])/2))
+        ref_source = "ASL data middle volume: %i" % int(float(wsp.asldata.shape[3])/2)
         mcflirt_result = fsl.mcflirt(wsp.input.asldata, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
         
@@ -312,11 +315,24 @@ def get_motion_correction(wsp):
 
     page = wsp.report.page("moco")
     page.heading("Motion correction", level=0)
-    page.text("Reference volume: %s" % ref_source)
+    page.heading("Reference volume", level=1)
+    page.text(ref_source)
     page.heading("Motion parameters", level=1)
-    for vol, mat in enumerate(mats):
-        page.text("Volume %i" % vol)
-        page.matrix(mat)
+    moco_params = [reg.get_motion_params(mat) for mat in mats]
+    trans = [p[0] for p in moco_params]
+    abstrans = np.fabs(trans)
+    rot = [p[1] for p in moco_params]
+    absrot = np.fabs(rot)
+    page.table([
+        ["Mean translation", "%.3g mm" % np.mean(trans)],
+        ["Translation std.dev.", "%.3g mm" % np.std(trans)],
+        ["Absolute maximum translation", "%.3g mm (volume %i)" % (np.max(abstrans), np.argmax(abstrans))],
+        ["Mean rotation", "%.3g \N{DEGREE SIGN}" % np.mean(rot)],
+        ["Rotation std.dev.", "%.3g \N{DEGREE SIGN}" % np.std(rot)],
+        ["Absolute maximum rotation", "%.3g \N{DEGREE SIGN} (volume %i)" % (np.max(absrot), np.argmax(absrot))],       
+    ])
+    page.image("moco_trans", LineGraph(trans, "Volume number", "Translation (mm)"))
+    page.image("moco_rot", LineGraph(rot, "Volume number", "Rotation relative to reference (\N{DEGREE SIGN})"))
 
 def get_sensitivity_correction(wsp):
     """
@@ -347,6 +363,7 @@ def get_sensitivity_correction(wsp):
 
     wsp.log.write("\nCalculating Sensitivity correction\n")
     sensitivity = None
+    bias = None
     if wsp.senscorr_off:
         wsp.log.write(" - Sensitivity correction disabled\n")
     elif wsp.isen is not None:
@@ -367,8 +384,8 @@ def get_sensitivity_correction(wsp):
     elif wsp.senscorr_auto and wsp.structural.bias is not None:
         struc.segment(wsp)
         wsp.log.write(" - Sensitivity image calculated from bias field\n")
-        sens = Image(np.reciprocal(wsp.structural.bias.data), header=wsp.structural.bias.header)
-        sensitivity = reg.struc2asl(wsp, sens)
+        bias = reg.struc2asl(wsp, wsp.structural.bias, use_applywarp=True)
+        sensitivity = Image(np.reciprocal(bias.data), header=bias.header)
     else:
         wsp.log.write(" - No source of sensitivity correction was found\n")
 
@@ -384,6 +401,9 @@ def get_sensitivity_correction(wsp):
         page.heading("Sensitivity correction", level=0)
         page.heading("Sensitivity map", level=1)
         page.image("sensitivity", LightboxImage(wsp.senscorr.sensitivity))
+
+    if bias is not None:
+        wsp.senscorr.bias = bias
 
 def apply_corrections(wsp):
     """
@@ -447,10 +467,13 @@ def apply_corrections(wsp):
         wsp.log.write("   - Converting all warps to single transform and extracting Jacobian\n")
         result = fsl.convertwarp(ref=wsp.asldata, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
         wsp.corrected.total_warp = result["out"]
-        jacobian = result["jacobian"]
-        wsp.corrected.jacobian = jacobian
-        wsp.corrected.total_jacobian = Image(np.mean(jacobian.data, 3), header=jacobian.header)
 
+        # Calculation of the jacobian for the warp - method suggested in:
+        # https://www.jiscmail.ac.uk/cgi-bin/webadmin?A2=FSL;d3fee1e5.0908
+        wsp.corrected.warp_coef = fnirtfileutils(wsp.corrected.total_warp, outformat="spline", out=fsl.LOAD, log=wsp.fsllog)["out"]
+        jacobian = fnirtfileutils(wsp.corrected.warp_coef, jac=fsl.LOAD, log=wsp.fsllog)["jac"]
+        wsp.corrected.jacobian = Image(jacobian.data, header=wsp.corrected.total_warp.header)
+        
     if not warps and moco_mats is None:
         wsp.log.write("   - No corrections to apply\n")
     else:
