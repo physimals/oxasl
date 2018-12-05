@@ -6,8 +6,11 @@ Michael Chappell, IBME QuBIc & FMRIB Image Analysis Groups
 
 Copyright (c) 2008-2018 University of Oxford
 """
+from __future__ import unicode_literals
+
 import os
 import sys
+import math
 
 import numpy as np
 
@@ -17,6 +20,7 @@ import fsl.wrappers as fsl
 from oxasl import __version__, Workspace, struc, brain
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.wrappers import epi_reg
+from oxasl.reporting import LightboxImage
 
 def init(wsp):
     """
@@ -59,6 +63,40 @@ def get_regfrom(wsp):
             wsp.log.write(" - Registration reference is mean ASL image (brain extracted)\n")
             wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
 
+def get_motion_params(mat):
+    """
+    Get motion parameters from a Flirt motion correction matrix
+    
+    See http://en.wikipedia.org/wiki/Rotation_matrix for details
+    of the rotation calculation
+
+    :return: magnitude of translation, angle and rotation axis
+    """
+    if tuple(mat.shape) != (4, 4):
+        raise ValueError("Not a 4x4 Flirt matrix")
+
+    # Magnitude of the translation
+    trans = np.linalg.norm(mat[:3, 3])
+
+    # Rotation axis
+    rot_axis = np.array([
+        mat[2, 1] - mat[1, 2],
+        mat[0, 2] - mat[2, 0],
+        mat[1, 0] - mat[0, 1],
+    ], dtype=np.float)
+
+    # Rotation angle - note that we need to check the sign
+    #length = np.linalg.norm(rot_axis)
+    trace = np.trace(mat[:3, :3])
+    costheta = (float(trace)-1) / 2
+    #print(costheta)
+    sintheta = math.sqrt(1-costheta*costheta)
+    theta = math.acos(costheta)
+    test_element = rot_axis[1]*rot_axis[0]*(1-costheta) + rot_axis[2]*sintheta
+    if np.abs(test_element - mat[1, 0]) > np.abs(test_element - mat[0, 1]):
+        theta = -theta
+    return trans, math.degrees(theta), rot_axis
+
 def reg_asl2calib(wsp):
     """
     Register calibration image to ASL space
@@ -72,7 +110,7 @@ def reg_asl2calib(wsp):
         _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.regfrom, wsp.calib)
         wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
 
-def reg_asl2struc(wsp, flirt=True, bbr=False):
+def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
     """
     Registration of ASL images to structural image
     
@@ -109,12 +147,26 @@ def reg_asl2struc(wsp, flirt=True, bbr=False):
         wsp.log.write(" - Structural->ASL transform\n")
         wsp.log.write(str(wsp.reg.struc2asl) + "\n")
 
-        page = wsp.report.page("asl2struc")
-        page.heading("ASL -> Structural registration", level=0)
-        page.heading("asl2struc", level=1)
+        page = wsp.report.page("asl2struc_%s" % name)
+        page.heading("%s ASL -> Structural registration" % name.title(), level=0)
+        page.heading("Transformation parameters", level=1)
+        motion_params = get_motion_params(wsp.reg.asl2struc)
+        page.table([
+            ["Translation magnitude", "%.3g mm" % motion_params[0]],
+            ["Rotation magnitude", "%.3g \N{DEGREE SIGN}" % motion_params[1]],
+        ])
+        page.heading("ASL->Structural transformation matrix", level=1)
         page.matrix(wsp.reg.asl2struc)
-        page.heading("struc2asl", level=1)
+        page.heading("Structural->ASL transformation matrix", level=1)
         page.matrix(wsp.reg.struc2asl)
+
+        if wsp.structural.gm_seg is not None:
+            gm_asl = struc2asl(wsp, wsp.structural.gm_seg, interp="nearestneighbour")
+            page.heading("GM mask aligned with ASL data", level=1)
+            page.image("gm_reg_%s" % name, LightboxImage(gm_asl, bgimage=wsp.reg.regfrom))
+            wm_asl = struc2asl(wsp, wsp.structural.wm_seg, interp="nearestneighbour")
+            page.heading("WM mask aligned with ASL data", level=1)
+            page.image("wm_reg_%s" % name, LightboxImage(wm_asl, bgimage=wsp.reg.regfrom))
 
 def reg_struc2std(wsp, fnirt=False):
     """
@@ -209,6 +261,7 @@ def transform(wsp, img, trans, ref, use_applywarp=False, interp="trilinear", pad
     """
     if trans is None:
         raise ValueError("Transformation matrix not available - has registration been performed?")
+
     if not use_applywarp:
         return fsl.applyxfm(img, ref, trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
     else:
