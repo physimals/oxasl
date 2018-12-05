@@ -106,9 +106,8 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
     if main_data is None:
         raise ValueError("Main data not specified")
 
-    output_dir = options.pop("output", "fabber")
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    if output != LOAD and not os.path.exists(output):
+        os.makedirs(output)
 
     # Get a reference Nibabel image to use when generating output
     if not ref_nii:
