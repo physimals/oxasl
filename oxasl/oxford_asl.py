@@ -93,7 +93,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
         g.add_option("--mc", help="Motion correct data", action="store_true", default=False)
         g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
-        g.add_option("--fixbolus", dest="infertau", help="Fix bolus duration", action="store_false", default=True)
+        g.add_option("--fixbolus", dest="infertau", help="Fix bolus duration", action="store_false")
         g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
         g.add_option("--spatial-off", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
         if oxasl_enable:
@@ -271,7 +271,7 @@ def model_paired(wsp):
         #
         # Partial volume correction is very sensitive to the mask, so recreate it
         # if it came from the structural image as this requires accurate ASL->Struc registration
-        if wsp.mask is None and wsp.struc is not None:
+        if wsp.rois.mask_src == "struc":
             wsp.rois.mask_orig = wsp.rois.mask
             wsp.rois.mask = None
             mask.generate_mask(wsp)
@@ -325,7 +325,7 @@ def output_native(wsp, basil_wsp):
         "mean_ftiss" : ("perfusion", 6000, True, "ml/100g/min", "?"),
         "mean_fblood" : ("aCBV", 100, True, "ml/100g/min", "?"),
         "mean_delttiss" : ("arrival", 1, False, "s", "?"),
-        "mean_ftisswm" : ("perfusion_wm", 6000, True, "ml/100g/min", "?"),
+        "mean_fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "?"),
         "mean_deltwm" : ("arrival_wm", 1, False, "s", "?"),
         "modelfit" : ("modelfit", 1, False, "", "?"),
     }
