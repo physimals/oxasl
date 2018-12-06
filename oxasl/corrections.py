@@ -384,7 +384,7 @@ def get_sensitivity_correction(wsp):
     elif wsp.senscorr_auto and wsp.structural.bias is not None:
         struc.segment(wsp)
         wsp.log.write(" - Sensitivity image calculated from bias field\n")
-        bias = reg.struc2asl(wsp, wsp.structural.bias, use_applywarp=True)
+        bias = reg.struc2asl(wsp, wsp.structural.bias)
         sensitivity = Image(np.reciprocal(bias.data), header=bias.header)
     else:
         wsp.log.write(" - No source of sensitivity correction was found\n")
@@ -552,8 +552,8 @@ def correct_img(wsp, img, linear_mat):
      - ``total_warp``      : Combined warp image
      - ``jacobian``        : Jacobian associated with warp image
     """
-    warp_result = fsl.applywarp(img, ref=wsp.corrected.asldata, out=fsl.LOAD, warp=wsp.corrected.total_warp, premat=linear_mat, super=True, superlevel="a", interp="trilinear", paddingsize=1, rel=True, log=wsp.fsllog)
-    img = warp_result["out"]
+    result = reg.transform(wsp, img, trans=wsp.corrected.total_warp, ref=wsp.corrected.asldata, premat=linear_mat)
+    img = result["out"]
     if wsp.corrected.total_jacobian is not None:
         wsp.log.write("   - Correcting for local volume scaling using Jacobian\n")
         jdata = wsp.corrected.total_jacobian.data
