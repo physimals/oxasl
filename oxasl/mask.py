@@ -4,7 +4,6 @@ Functions for generating a suitable mask for ASL data
 import sys
 
 import numpy as np
-import scipy.ndimage
 
 import fsl.wrappers as fsl
 from fsl.data.image import Image
