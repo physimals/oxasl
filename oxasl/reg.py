@@ -56,7 +56,7 @@ def get_regfrom(wsp):
         elif wsp.asldata.iaf in ("tc", "ct"):
             wsp.log.write(" - Registration reference is mean ASL signal (brain extracted)\n")
             wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
-        elif wsp.calib is not None:
+        elif wsp.calib is not None and wsp.calib.sameSpace(wsp.asldata):
             wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
             wsp.reg.regfrom = brain.brain(wsp, wsp.calib, thresh=0.2)
         else:
@@ -86,10 +86,8 @@ def get_motion_params(mat):
     ], dtype=np.float)
 
     # Rotation angle - note that we need to check the sign
-    #length = np.linalg.norm(rot_axis)
     trace = np.trace(mat[:3, :3])
     costheta = (float(trace)-1) / 2
-    #print(costheta)
     sintheta = math.sqrt(1-costheta*costheta)
     theta = math.acos(costheta)
     test_element = rot_axis[1]*rot_axis[0]*(1-costheta) + rot_axis[2]*sintheta
@@ -161,10 +159,10 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
         page.matrix(wsp.reg.struc2asl)
 
         if wsp.structural.gm_seg is not None:
-            gm_asl = struc2asl(wsp, wsp.structural.gm_seg, interp="nearestneighbour")
+            gm_asl = struc2asl(wsp, wsp.structural.gm_seg, interp="nn")
             page.heading("GM mask aligned with ASL data", level=1)
             page.image("gm_reg_%s" % name, LightboxImage(gm_asl, bgimage=wsp.reg.regfrom))
-            wm_asl = struc2asl(wsp, wsp.structural.wm_seg, interp="nearestneighbour")
+            wm_asl = struc2asl(wsp, wsp.structural.wm_seg, interp="nn")
             page.heading("WM mask aligned with ASL data", level=1)
             page.image("wm_reg_%s" % name, LightboxImage(wm_asl, bgimage=wsp.reg.regfrom))
 
@@ -216,12 +214,17 @@ def reg_struc2std(wsp, fnirt=False):
         wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
 
 def std2struc(wsp, img, **kwargs):
-    # FIXME what if warp provided ->std space
+    """
+    Transform an image from standard space to structural space
+    """
     return transform(wsp, img, wsp.reg.std2struc, wsp.structural.struc, **kwargs)
 
 def struc2std(wsp, img, **kwargs):
-    # FIXME what if warp provided ->std space
-    pass
+    """
+    Transform an image from structural space to standard space
+    """
+    ref = Image(os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"))
+    return transform(wsp, img, wsp.reg.struc2std, ref, **kwargs)
 
 def struc2asl(wsp, img, **kwargs):
     """
@@ -245,27 +248,38 @@ def asl2struc(wsp, img, **kwargs):
     init(wsp)
     return transform(wsp, img, wsp.reg.asl2struc, wsp.structural.struc, **kwargs)
 
-def transform(wsp, img, trans, ref, use_applywarp=False, interp="trilinear", paddingsize=1):
+def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None):
     """
     Transform an image 
 
     :param wsp: Workspace, used for logging only
     :param img: Image to transform
-    :param trans: Transformation matrix (not a warp image)
+    :param trans: Transformation matrix or warp image
     :param ref: Reference image
-    :param use_applywarp: Use 'applywarp' rather than Flirt
+    :param use_flirt: Use flirt to apply the transformation which must be a matrix
     :param interp: Interpolation method
     :param paddingsize: Padding size in pixels
+    :param premat: If trans is a warp, this can be set to a pre-warp affine transformation matrix
 
     :return: Transformed Image object
     """
     if trans is None:
         raise ValueError("Transformation matrix not available - has registration been performed?")
 
-    if not use_applywarp:
+    have_warp = isinstance(trans, Image)
+    if use_flirt and have_warp:
+        raise ValueError("Cannot transform using Flirt when we have a warp")
+    elif use_flirt:
+        if interp == "nn": interp = "nearestneighbour"
         return fsl.applyxfm(img, ref, trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
     else:
-        return fsl.applywarp(img, ref, premat=trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog)["out"]
+        if have_warp:
+            kwargs = {"warp" : trans, "premat" : premat, "rel" : True}
+        elif premat:
+            raise ValueError("Can't set a pre-transformation matrix unless using a warp")
+        else:
+            kwargs = {"premat" : trans}
+        return fsl.applywarp(img, ref, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog, **kwargs)["out"]
         
 def reg_flirt(wsp, img, ref, initial_transform=None):
     """ 
