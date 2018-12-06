@@ -620,7 +620,7 @@ def get_tissrefmask(wsp):
         page.text("This is the above image transformed into structural space. The transformation was obtained by registering the structural image to the standard brain image")
         page.image("ventricles_struc", LightboxImage(wsp.calibration.ventricles_struc, bgimage=wsp.structural.brain))
 
-        wsp.log.write(" - Masking FAST output with standard space derrived ventricle mask\n")
+        wsp.log.write(" - Masking FAST output with standard space derived ventricle mask\n")
         wsp.calibration.refpve_pre_mask = wsp.calibration.refpve
         refpve_data = np.copy(wsp.calibration.refpve.data)
         refpve_data[wsp.calibration.ventricles_struc.data == 0] = 0
