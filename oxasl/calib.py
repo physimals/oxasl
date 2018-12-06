@@ -16,6 +16,7 @@ import numpy as np
 import scipy.ndimage
 
 from fsl.data.image import Image
+from fsl.data.atlases import AtlasRegistry
 
 from oxasl import Workspace, struc, reg
 from oxasl.image import summary
@@ -599,12 +600,11 @@ def get_tissrefmask(wsp):
         wsp.log.write(" - Doing automatic ventricle selection using standard atlas\n")
         # By deafult now we do FNRIT transformation of ventricle mask
         # FIXME disabled as not being used in ASL_CALIB at present
-        #wsp.stdmaskfnirt = wsp.ifnone("stdmaskfnirt", True)
+        #wsp.calibration.struc2stdfnirt = wsp.ifnone("stdmaskfnirt", True)
         
         # Select ventricles based on standard space atlas
         page.heading("Automatic ventricle selection", level=1)
         page.text("Standard space ventricles mask (from Harvard-Oxford atlas) eroded by 1 pixel")
-        from fsl.data.atlases import AtlasRegistry
         atlases = AtlasRegistry()
         atlases.rescanAtlases()
         atlas = atlases.loadAtlas("harvardoxford-subcortical", loadSummary=False, resolution=2)
@@ -632,7 +632,7 @@ def get_tissrefmask(wsp):
         page.image("refpve_post", LightboxImage(wsp.calibration.refpve, bgimage=wsp.structural.brain))
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
-    # FIXME different interpolation options used here in oxford_asl
+    # FIXME calibration image may not be in ASL space! Oxford_asl does not handle this currently
     wsp.calibration.refpve_calib = reg.struc2asl(wsp, wsp.calibration.refpve)
     #wsp.calibration.refpve_calib.data[wsp.calibration.refpve_calib.data < 0.001] = 0 # Better for display
     page.heading("Reference region in ASL space", level=1)
