@@ -22,6 +22,8 @@ Example usage:
     report.add("registration", page)
     report.generate_html("my-report")
 """
+from __future__ import unicode_literals
+
 import sys
 import os
 import math
@@ -34,6 +36,7 @@ import csv
 
 import six
 import numpy as np
+import scipy.ndimage
 
 try:
     from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
@@ -50,14 +53,23 @@ class LightboxImage(object):
 
     def __init__(self, img, bgimage=None, mask=None, **kwargs):
         """
-        :param *imgs: One or more ``fsl.data.Image`` instances. Later images will be 
-                      overlaid onto earlier images
+        :param img: ``fsl.data.Image`` instance
+        :param bgimage: ``fsl.data.Image`` instance which will be used as a greyscale background
+        :param mask: ``fsl.data.Image`` instance which will be used to mask ``img``
+
+        Keyword arguments:
+
         :param zeromask: If True, treat zero values as transparent
+        :param outline: If True, show image as an outline (assumes image is binarised)
+        :param colorbar: If True, display colorbar
         """
         self._img = img
         self._bgimage = bgimage
         self._mask = mask
         self._zeromask = kwargs.get("zeromask", True)
+        self._outline = kwargs.get("outline", False)
+        self._colorbar = kwargs.get("colorbar", False)
+        self._clamp_colors = kwargs.get("clamp_colors", True)
         self.extension = ".png"
 
     def _slicerange(self, img, shape):
@@ -109,19 +121,71 @@ class LightboxImage(object):
             
             if self._img:
                 data = self._img.data[:, :, slice_idx].T
+
                 if issubclass(data.dtype.type, np.integer):
-                    cmap = "Set1"
+                    cmap = "Reds"
+                    vmax, vmin = np.max(self._img.data), np.min(self._img.data)
                 else:
                     cmap = "viridis"
+                    vmax, vmin = np.percentile(self._img.data, 99), np.percentile(self._img.data, 1)
+                    if vmax == vmin:
+                        vmax, vmin = np.max(self._img.data), np.min(self._img.data)
+
+                    if self._clamp_colors:
+                        data = np.clip(data, vmin, vmax)
+
+                if self._outline:
+                    data = (data > 0.5).astype(np.int)
+                    data = data - scipy.ndimage.morphology.binary_erosion(data, structure=np.ones((3, 3)))
 
                 if self._mask:
                     data = np.ma.masked_array(data, self._mask.data[:, :, slice_idx].T == 0)
                 elif self._zeromask:
                     data = np.ma.masked_array(data, data == 0)
                 
-                axes.imshow(data, cmap=cmap)
+                img = axes.imshow(data, vmax=vmax, vmin=vmin, cmap=cmap)
             
+            # Reverse y-axis so anterior is as the top
+            axes.set_ylim(axes.get_ylim()[::-1])
+
         fig.subplots_adjust(wspace=0, hspace=0.05)
+        if self._img and self._colorbar:
+            fig.colorbar(img, ax=fig.axes)
+
+        fig.savefig(fname, bbox_inches='tight')
+        
+class LineGraph(object):
+    """
+    A .png image file showing a line graph
+    """
+
+    def __init__(self, data, xlabel, ylabel, **kwargs):
+        """
+        :param *imgs: One or more ``fsl.data.Image`` instances. Later images will be 
+                      overlaid onto earlier images
+        :param zeromask: If True, treat zero values as transparent
+        """
+        self._data = data
+        self._xlabel = xlabel
+        self._ylabel = ylabel
+        self._figsize = kwargs.get("figsize", (6, 3))
+        self.extension = ".png"
+
+    def tofile(self, fname):
+        """
+        Write image to a file
+        """
+        if Figure is None:
+            warnings.warn("matplotlib not installed - cannot generate graphs")
+            return
+
+        fig = Figure(figsize=self._figsize, dpi=200)
+        FigureCanvas(fig)
+        axes = fig.add_subplot(1, 1, 1)
+        axes.set_xlabel(self._xlabel)
+        axes.set_ylabel(self._ylabel)
+        axes.plot(self._data)
+            
         fig.savefig(fname, bbox_inches='tight')
         
 class ReportPage(object):
@@ -162,18 +226,6 @@ class ReportPage(object):
             self._content += "    " + line + "\n"
         self._content += "\n"
 
-    def _latex_float(self, f, sf=3):
-        """
-        Format float in format suitable for Latex - nicked off StackOverflow!
-        """
-        pyformat = "{0:.%ig}" % sf
-        float_str = pyformat.format(f)
-        if "e" in float_str:
-            base, exponent = float_str.split("e")
-            return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
-        else:
-            return float_str
-
     def matrix(self, mat, sf=3):
         """
         Add a matrix of numbers
@@ -202,9 +254,9 @@ class ReportPage(object):
         csvtxt = six.StringIO()
         writer = csv.writer(csvtxt)
         for row in tabdata:
-            writer.writerow(row)
+            writer.writerow([unicode(s).encode("utf-8") for s in row])
         for line in csvtxt.getvalue().splitlines():
-            self._content += "    " + line + "\n"
+            self._content += "    " + line.decode("utf-8") + "\n"
         self._content += "\n"
 
     def dicttable(self, dictionary):
@@ -216,7 +268,19 @@ class ReportPage(object):
         Write RST content to a file
         """
         with open(fname, "w") as rstfile:
-            rstfile.write(self._content)
+            rstfile.write(self._content.encode("utf-8"))
+
+    def _latex_float(self, f, sf=3):
+        """
+        Format float in format suitable for Latex - nicked off StackOverflow!
+        """
+        pyformat = "{0:.%ig}" % sf
+        float_str = pyformat.format(f)
+        if "e" in float_str:
+            base, exponent = float_str.split("e")
+            return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
+        else:
+            return float_str
 
     def __str__(self):
         return self._content
@@ -291,7 +355,12 @@ class Report(object):
             self._toc(indexfile)
             
         for fname, content in self._files.items():
-            content.tofile(os.path.join(build_dir, fname))
+            try:
+                content.tofile(os.path.join(build_dir, fname))
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+                warnings.warn("Error writing report content %s to file: %s" % (fname, exc))
 
     def page(self, name, overwrite=False, **kwargs):
         page = ReportPage(name, report=self, **kwargs)
