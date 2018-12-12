@@ -552,8 +552,11 @@ def correct_img(wsp, img, linear_mat):
      - ``total_warp``      : Combined warp image
      - ``jacobian``        : Jacobian associated with warp image
     """
-    result = reg.transform(wsp, img, trans=wsp.corrected.total_warp, ref=wsp.corrected.asldata, premat=linear_mat)
-    img = result["out"]
+    if wsp.corrected.total_warp is not None:
+        img = reg.transform(wsp, img, trans=wsp.corrected.total_warp, ref=wsp.corrected.asldata, premat=linear_mat)
+    else:
+        img = reg.transform(wsp, img, trans=linear_mat, ref=wsp.corrected.asldata)
+
     if wsp.corrected.total_jacobian is not None:
         wsp.log.write("   - Correcting for local volume scaling using Jacobian\n")
         jdata = wsp.corrected.total_jacobian.data
