@@ -278,8 +278,8 @@ def model_paired(wsp):
 
         # Generate PVM and PWM maps for Basil
         struc.segment(wsp)
-        wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv, use_applywarp=True)
-        wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv, use_applywarp=True)
+        wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
+        wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
         wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
         basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
         output_native(wsp.output, wsp.basil_pvcorr)
@@ -313,7 +313,16 @@ def do_report(wsp):
     wsp.report.generate_html(report_dir, report_build_dir)
     wsp.log.write(" - Report generated in %s\n" % report_dir)
 
-def output_native(wsp, basil_wsp):
+OUTPUT_ITEMS = {
+    "mean_ftiss" : ("perfusion", 6000, True, "ml/100g/min", "30-50", "10-20"),
+    "mean_fblood" : ("aCBV", 100, True, "ml/100g/min", "", ""),
+    "mean_delttiss" : ("arrival", 1, False, "s", "", ""),
+    "mean_fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "", "10-20"),
+    "mean_deltwm" : ("arrival_wm", 1, False, "s", "", ""),
+    "modelfit" : ("modelfit", 1, False, "", "", ""),
+}
+    
+def output_native(wsp, basil_wsp, report=None):
     """
     Create native space output images
 
@@ -321,16 +330,8 @@ def output_native(wsp, basil_wsp):
     :param basil_wsp: Workspace in which Basil modelling has been run. The ``finalstep``
                       attribute is expected to point to the final output workspace
     """
-    output_items = {
-        "mean_ftiss" : ("perfusion", 6000, True, "ml/100g/min", "?"),
-        "mean_fblood" : ("aCBV", 100, True, "ml/100g/min", "?"),
-        "mean_delttiss" : ("arrival", 1, False, "s", "?"),
-        "mean_fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "?"),
-        "mean_deltwm" : ("arrival_wm", 1, False, "s", "?"),
-        "modelfit" : ("modelfit", 1, False, "", "?"),
-    }
     wsp.sub("native")
-    for fabber_output, oxasl_output in output_items.items():
+    for fabber_output, oxasl_output in OUTPUT_ITEMS.items():
         img = basil_wsp.finalstep.ifnone(fabber_output, None)
         if img is not None:
             # Make negative values = 0 and ensure masked value zeroed
@@ -338,40 +339,62 @@ def output_native(wsp, basil_wsp):
             data[img.data < 0] = 0
             data[wsp.rois.mask.data == 0] = 0
             img = Image(data, header=img.header)
-            name, multiplier, is_perfusion, units, norm_range = oxasl_output
-            if is_perfusion:
+            name, multiplier, calibrate, _, _, _ = oxasl_output
+            if calibrate:
                 img, = corrections.apply_sensitivity_correction(wsp, img)
             setattr(wsp.native, name, img)
-            if is_perfusion and wsp.calib is not None:
+            if calibrate and wsp.calib is not None:
                 alpha = wsp.ifnone("alpha", 0.85 if wsp.asldata.casl else 0.98)
                 img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha)
                 name = "%s_calib" % name
                 setattr(wsp.native, name, img)
-                
-            # Reporting
-            if img.ndim == 3:
-                page = wsp.report.page(name)
-                page.heading("Output image: %s" % name)
-                if name.endswith("_calib"):
-                    page.heading("Calibration", level=1)
-                    page.text("Image was calibrated using supplied M0 image")
-                    page.text("Inversion efficiency: %f" % alpha)
-                    page.text("Multiplier for physical units: %f" % multiplier)
+    
+    output_report(wsp.native, report=report)
+        
+def output_report(wsp, report=None):
+    """
+    Create report pages from output data
 
-                page.heading("Metrics", level=1)
-                table = []
-                table.append(["Mean within mask", "%.4g %s" % (np.mean(img[wsp.rois.mask.data > 0.5]), units), norm_range])
-                if wsp.structural.struc is not None:
-                    gm_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
-                    wm_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
-                    table.append(["GM mean", "%.4g %s" % (np.mean(img[gm_asl.data > 0.5]), units), norm_range])
-                    table.append(["Pure GM mean", "%.4g %s" % (np.mean(img[gm_asl.data > 0.8]), units), norm_range])
-                    table.append(["WM mean", "%.4g %s" % (np.mean(img[wm_asl.data > 0.5]), units), norm_range])
-                    table.append(["Pure WM mean", "%.4g %s" % (np.mean(img[wm_asl.data > 0.9]), units), norm_range])
-                page.table(table, headers=["Metric", "Value", "Typical"])
-                
-                page.heading("Image", level=1)
-                page.image("%s_img" % name, LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
+    :param wsp: Workspace object containing output
+    """
+    if report is None:
+        report = wsp.report
+
+    roi = wsp.rois.mask.data
+    if wsp.structural.struc is not None:
+        gm = reg.struc2asl(wsp, wsp.structural.gm_pv).data
+        wm = reg.struc2asl(wsp, wsp.structural.wm_pv).data
+    
+    for oxasl_name, multiplier, calibrate, units, normal_gm, normal_wm in OUTPUT_ITEMS.values():
+        name = oxasl_name + "_calib"
+        img = getattr(wsp, name)
+        if img is None:
+            name = oxasl_name
+            img = getattr(wsp, name)
+
+        if img is not None and img.ndim == 3:
+            page = report.page(name)
+            page.heading("Output image: %s" % name)
+            if calibrate and name.endswith("_calib"):
+                alpha = wsp.ifnone("alpha", 0.85 if wsp.asldata.casl else 0.98)
+                page.heading("Calibration", level=1)
+                page.text("Image was calibrated using supplied M0 image")
+                page.text("Inversion efficiency: %f" % alpha)
+                page.text("Multiplier for physical units: %f" % multiplier)
+
+            page.heading("Metrics", level=1)
+            data = img.data
+            table = []
+            table.append(["Mean within mask", "%.4g %s" % (np.mean(data[roi > 0.5]), units), ""])
+            if wsp.structural.struc is not None:
+                table.append(["GM mean", "%.4g %s" % (np.mean(data[gm > 0.5]), units), normal_gm])
+                table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[gm > 0.8]), units), normal_gm])
+                table.append(["WM mean", "%.4g %s" % (np.mean(data[wm > 0.5]), units), normal_wm])
+                table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[wm > 0.9]), units), normal_wm])
+            page.table(table, headers=["Metric", "Value", "Typical"])
+            
+            page.heading("Image", level=1)
+            page.image("%s_img" % name, LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
 
 def output_trans(wsp):
     """
