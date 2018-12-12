@@ -253,10 +253,18 @@ class ReportPage(object):
 
         csvtxt = six.StringIO()
         writer = csv.writer(csvtxt)
-        for row in tabdata:
-            writer.writerow([unicode(s).encode("utf-8") for s in row])
-        for line in csvtxt.getvalue().splitlines():
-            self._content += "    " + line.decode("utf-8") + "\n"
+        # Required because csv does not support unicode in python 2
+        if six.PY2:
+            for row in tabdata:
+                writer.writerow([unicode(s).encode("utf-8") for s in row])
+            for line in csvtxt.getvalue().splitlines():
+                self._content += "    " + line.decode("utf-8") + "\n"
+        else:
+            for row in tabdata:
+                writer.writerow([str(s) for s in row])
+            for line in csvtxt.getvalue().splitlines():
+                self._content += "    " + line + "\n"
+
         self._content += "\n"
 
     def dicttable(self, dictionary):
@@ -267,7 +275,7 @@ class ReportPage(object):
         """
         Write RST content to a file
         """
-        with open(fname, "w") as rstfile:
+        with open(fname, "wb") as rstfile:
             rstfile.write(self._content.encode("utf-8"))
 
     def _latex_float(self, f, sf=3):
