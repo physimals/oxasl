@@ -86,7 +86,8 @@ def init(wsp):
         # different results compared to using the mask returned by BET
         wsp.structural.brain_mask = Image((wsp.structural.brain.data != 0).astype(np.int), header=wsp.structural.struc.header)
         
-    segment(wsp)
+    if wsp.structural.struc is not None:
+        segment(wsp)
     
 def segment(wsp):
     """
