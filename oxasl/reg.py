@@ -348,7 +348,7 @@ def reg_bbr(wsp):
     struc.segment(wsp)
 
     wsp.log.write("  - BBR registration using epi_reg\n")
-    result = epi_reg(epi=wsp.reg.regfrom, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight)
+    result = epi_reg(epi=wsp.reg.regfrom, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight, log=wsp.fsllog)
     return result["out.nii.gz"], result["out"]
 
     #OUTPUT
