@@ -160,7 +160,7 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
         if prev_result is not None:
             desc += " - Initialise with step %i" % idx
         step_wsp.log.write(desc + "     ")
-        result = step.run(prev_result, log=wsp.log)
+        result = step.run(prev_result, log=wsp.fsllog["stdout"], progress_log=wsp.log)
         for key, value in result.items():
             setattr(step_wsp, key, value)
 
@@ -435,14 +435,14 @@ class FabberStep(Step):
     """
     A Basil step which involves running Fabber
     """
-    def run(self, prev_output, log=sys.stdout):
+    def run(self, prev_output, progress_log=sys.stdout, log=sys.stdout):
         """
         Run Fabber, initialising it from the output of a previous step
         """
         if prev_output is not None:
             self.options["continue-from-mvn"] = prev_output["finalMVN"]
         from .wrappers import fabber
-        ret = fabber(self.options, output=LOAD, progress=log)
+        ret = fabber(self.options, output=LOAD, progress_log=progress_log, log={"stdout" : log})
         log.write("\n")
         return ret
 
@@ -450,7 +450,7 @@ class PvcInitStep(Step):
     """
     A Basil step which initialises partial volume correction
     """
-    def run(self, prev_output, log=sys.stdout):
+    def run(self, prev_output, progress_log=sys.stdout, log=sys.stdout):
         """
         Update the MVN from a previous step to include initial estimates
         for PVC parameters
@@ -484,8 +484,8 @@ class PvcInitStep(Step):
         mvn = prev_output["finalMVN"]
         from .wrappers import mvntool
         params = prev_output["paramnames"]
-        mvn = mvntool(mvn, params.index("ftiss")+1, output=LOAD, mask=mask, write=True, valim=gmcbf_init, var=0.1)["output"]
-        mvn = mvntool(mvn, params.index("fwm")+1, output=LOAD, mask=mask, write=True, valim=wmcbf_init, var=0.1)["output"]
+        mvn = mvntool(mvn, params.index("ftiss")+1, output=LOAD, mask=mask, write=True, valim=gmcbf_init, var=0.1, log={"stdout" : log})["output"]
+        mvn = mvntool(mvn, params.index("fwm")+1, output=LOAD, mask=mask, write=True, valim=wmcbf_init, var=0.1, log={"stdout" : log})["output"]
         log.write("DONE\n")
         return {"finalMVN" : mvn, "gmcbf_init" : gmcbf_init, "wmcbf_init" : wmcbf_init}
 
