@@ -685,7 +685,7 @@ class CalibOptions(OptionCategory):
         group.add_option("--calib", "-c", help="Calibration image", type="image")
         group.add_option("--perf", "-i", help="Perfusion image for calibration, in same image space as calibration image", type="image")
         group.add_option("--calib-method", "--cmethod", help="Calibration method: voxelwise or refregion")
-        group.add_option("--calib-alpha", "--alpha", help="Inversion efficiency", type=float, default=1.0)
+        group.add_option("--calib-alpha", "--alpha", help="Inversion efficiency", type=float, default=None)
         group.add_option("--calib-gain", "--cgain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
         group.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
         groups.append(group)
