@@ -266,7 +266,7 @@ def get_m0_wholebrain(wsp):
     tr = wsp.ifnone("tr", 3.2)
     te = wsp.ifnone("te", 0)
     taq = wsp.ifnone("taq", 0)
-    wsp.log.write(" - Using TE=%f, TR=%f, TAQ=%f\n" % (te, tr, taq))
+    wsp.log.write(" - Using TE=%f, TR=%f, Readout time (TAQ)=%f\n" % (te, tr, taq))
 
     t2star = wsp.ifnone("t2star", False)
     if t2star:
@@ -362,7 +362,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     tr = wsp.ifnone("tr", 3.2)
     te = wsp.ifnone("te", 0)
     taq = wsp.ifnone("taq", 0)
-    wsp.log.write(" - Acquisition: TE=%f, TR=%f, TAQ=%f\n" % (te, tr, taq))
+    wsp.log.write(" - Acquisition: TE=%f, TR=%f, Readout time (TAQ)=%f\n" % (te, tr, taq))
 
     t2star = wsp.ifnone("t2star", False)
     if t2star:
