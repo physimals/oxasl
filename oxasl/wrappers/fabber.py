@@ -14,7 +14,9 @@ from fsl.data.image import Image
 from fsl.wrappers import LOAD, wrapperutils  as wutils
 import fsl.utils.assertions as asrt
 
-from fabber import Fabber, FabberException, percent_progress
+from fabber import FabberException, percent_progress
+from fabber.api_shlib import FabberShlib as Fabber
+#from fabber.api_cl import FabberCl as Fabber
 
 class Tee(object):
     """
@@ -72,19 +74,20 @@ class _Results(dict):
         return self.__output
 
 
-def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
+def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
     """
     Wrapper for Fabber tool
 
     This is not a 'conventional' FSL command line tool wrapper. Rather it is
-    using the Fabber Python API which interfaces to the C++ code using the
-    pure-C api and Python ctypes.
+    using the Fabber Python API which interfaces to the C++ code using either
+    the pure-C api and Python ctypes or its own CLI wrapper.
 
     The main reason for not using a conventional wrapper is that Fabber
     can take an arbitrary number of inputs including image inputs so the
     @fileOrImage type decorators don't really work well. Also you can't
     tell what image inputs you might have until you query the individual
-    model for its options which is clumsy to do using the CL tool.
+    model for its options. All of this complexity is therefore hidden in 
+    the generic Fabber python API.
     
     Nevertheless we aim to replicate the interface of FSL tools as much as
     possible, e.g. accepting fsl.data.image.Image instances for input
@@ -97,6 +100,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
                    a dictionary instead.
     :param ref_nii: Optional reference Nibabel image to use when writing output
                     files. Not required if main data is FSL or Nibabel image.
+    :param progress_log: File-like stream to logging progress percentage to
     :return: Dictionary of output data items name:image. The image matches the
              type of the main input data unless this was a file in which case
              an fsl.data.image.Image is returned.
@@ -157,10 +161,10 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
         ret["paramnames"] = fab.get_model_params(options)
         if log.get("cmd", None):
             log["cmd"].write("fabber <options>\n")
-        if progress:
-            progress = percent_progress(progress)
-        run = fab.run(options, progress)
-        stdout.write(run.log)
+        progress_cb = None
+        if progress_log:
+            progress_cb = percent_progress(progress_log)
+        run = fab.run(options, progress_cb)
         ret["logfile"] = run.log
 
         # Write output data or save it as required
@@ -186,7 +190,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress=None, **kwargs):
     if ret_exitcode:
         cmd_output.append(int(exception is not None))
 
-    if exception and not ret_exitcode:
+    if exception is not None and not ret_exitcode:
         raise exception
 
     return ret
