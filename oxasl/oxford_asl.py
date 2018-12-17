@@ -340,7 +340,14 @@ def output_native(wsp, basil_wsp, report=None):
         prefixes.append("var")
     for fabber_name, oxasl_output in OUTPUT_ITEMS.items():
         for prefix in prefixes:
-            if prefix:
+            is_variance = prefix == "var"
+            if is_variance:
+                # Variance is not output by Fabber natively so we get it by 
+                # squaring the standard deviation. We also pass the flag
+                # to the calibration routine so it can square the correction
+                # factors
+                fabber_output = "std_%s" % fabber_name
+            elif prefix:
                 fabber_output = "%s_%s" % (prefix, fabber_name)
             else:
                 fabber_output = fabber_name
@@ -357,11 +364,16 @@ def output_native(wsp, basil_wsp, report=None):
                     name = "%s_%s" % (name, prefix)
 
                 if calibrate:
+                    # Anything that needs calibration also requires sensitivity correction
                     img, = corrections.apply_sensitivity_correction(wsp, img)
+
+                if is_variance:
+                    img = Image(np.square(img.data), header=img.header)
                 setattr(wsp.native, name, img)
+
                 if calibrate and wsp.calib is not None:
                     alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf == "ve" else 0.85 if wsp.asldata.casl else 0.98)
-                    img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=name.endswith("_var"))
+                    img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=is_variance)
                     name = "%s_calib" % name
                     setattr(wsp.native, name, img)
     
