@@ -112,6 +112,8 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--save-basil", help="Save Basil modelling output", action="store_true", default=False)
         g.add_option("--save-calib", help="Save calibration output", action="store_true", default=False)
         g.add_option("--save-all", help="Save all output (enabled when --debug specified)", action="store_true", default=False)
+        g.add_option("--output-std", help="Output standard deviation of estimated variables", action="store_true", default=False)
+        g.add_option("--output-var", "--vars", help="Output variance of estimated variables", action="store_true", default=False)
         g.add_option("--no-report", dest="save_report", help="Don't try to generate an HTML report", action="store_false", default=True)
         ret.append(g)
         return ret
@@ -314,11 +316,11 @@ def do_report(wsp):
     wsp.log.write(" - Report generated in %s\n" % report_dir)
 
 OUTPUT_ITEMS = {
-    "mean_ftiss" : ("perfusion", 6000, True, "ml/100g/min", "30-50", "10-20"),
-    "mean_fblood" : ("aCBV", 100, True, "ml/100g/min", "", ""),
-    "mean_delttiss" : ("arrival", 1, False, "s", "", ""),
-    "mean_fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "", "10-20"),
-    "mean_deltwm" : ("arrival_wm", 1, False, "s", "", ""),
+    "ftiss" : ("perfusion", 6000, True, "ml/100g/min", "30-50", "10-20"),
+    "fblood" : ("aCBV", 100, True, "ml/100g/min", "", ""),
+    "delttiss" : ("arrival", 1, False, "s", "", ""),
+    "fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "", "10-20"),
+    "deltwm" : ("arrival_wm", 1, False, "s", "", ""),
     "modelfit" : ("modelfit", 1, False, "", "", ""),
 }
     
@@ -331,23 +333,37 @@ def output_native(wsp, basil_wsp, report=None):
                       attribute is expected to point to the final output workspace
     """
     wsp.sub("native")
-    for fabber_output, oxasl_output in OUTPUT_ITEMS.items():
-        img = basil_wsp.finalstep.ifnone(fabber_output, None)
-        if img is not None:
-            # Make negative values = 0 and ensure masked value zeroed
-            data = np.copy(img.data)
-            data[img.data < 0] = 0
-            data[wsp.rois.mask.data == 0] = 0
-            img = Image(data, header=img.header)
-            name, multiplier, calibrate, _, _, _ = oxasl_output
-            if calibrate:
-                img, = corrections.apply_sensitivity_correction(wsp, img)
-            setattr(wsp.native, name, img)
-            if calibrate and wsp.calib is not None:
-                alpha = wsp.ifnone("alpha", 0.85 if wsp.asldata.casl else 0.98)
-                img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha)
-                name = "%s_calib" % name
+    prefixes = ["", "mean"]
+    if wsp.output_std:
+        prefixes.append("std")
+    if wsp.output_var:
+        prefixes.append("var")
+    for fabber_name, oxasl_output in OUTPUT_ITEMS.items():
+        for prefix in prefixes:
+            if prefix:
+                fabber_output = "%s_%s" % (prefix, fabber_name)
+            else:
+                fabber_output = fabber_name
+            
+            img = basil_wsp.finalstep.ifnone(fabber_output, None)
+            if img is not None:
+                # Make negative values = 0 and ensure masked value zeroed
+                data = np.copy(img.data)
+                data[img.data < 0] = 0
+                data[wsp.rois.mask.data == 0] = 0
+                img = Image(data, header=img.header)
+                name, multiplier, calibrate, _, _, _ = oxasl_output
+                if prefix and prefix != "mean":
+                    name = "%s_%s" % (name, prefix)
+
+                if calibrate:
+                    img, = corrections.apply_sensitivity_correction(wsp, img)
                 setattr(wsp.native, name, img)
+                if calibrate and wsp.calib is not None:
+                    alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf == "ve" else 0.85 if wsp.asldata.casl else 0.98)
+                    img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=name.endswith("_var"))
+                    name = "%s_calib" % name
+                    setattr(wsp.native, name, img)
     
     output_report(wsp.native, report=report)
         
@@ -402,7 +418,7 @@ def output_trans(wsp):
     """
     if wsp.reg.asl2struc is not None:
         wsp.sub("struct")
-    for suffix in ("", "_calib"):
+    for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
         for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit"):
             native_output = getattr(wsp.native, output + suffix)
             # Don't transform 4D output (e.g. modelfit) - too large!
