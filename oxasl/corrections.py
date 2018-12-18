@@ -226,7 +226,7 @@ def get_fieldmap_correction(wsp):
     wsp.fieldmap.asl2struc = result["out"]
     wsp.fieldmap.struc2asl = np.linalg.inv(wsp.fieldmap.asl2struc)
 
-    result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.asldata, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True, log=wsp.fsllog)
+    result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.nativeref, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True, log=wsp.fsllog)
     wsp.fieldmap.warp = result["out"]
         
     page = wsp.report.page("fmap")
@@ -438,6 +438,7 @@ def apply_corrections(wsp):
         wsp.sub("corrected")
 
     wsp.corrected.asldata = wsp.input.asldata
+    wsp.corrected.nativeref = wsp.input.asldata.mean()
     wsp.corrected.calib = single_volume(wsp, wsp.input.calib)
     wsp.corrected.cref = single_volume(wsp, wsp.input.cref)
     wsp.corrected.cact = single_volume(wsp, wsp.input.cact)
@@ -465,7 +466,7 @@ def apply_corrections(wsp):
             kwargs["warp%i" % (idx+1)] = warp
                 
         wsp.log.write("   - Converting all warps to single transform and extracting Jacobian\n")
-        result = fsl.convertwarp(ref=wsp.asldata, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
+        result = fsl.convertwarp(ref=wsp.nativeref, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
         wsp.corrected.total_warp = result["out"]
 
         # Calculation of the jacobian for the warp - method suggested in:
@@ -553,9 +554,9 @@ def correct_img(wsp, img, linear_mat):
      - ``jacobian``        : Jacobian associated with warp image
     """
     if wsp.corrected.total_warp is not None:
-        img = reg.transform(wsp, img, trans=wsp.corrected.total_warp, ref=wsp.corrected.asldata, premat=linear_mat)
+        img = reg.transform(wsp, img, trans=wsp.corrected.total_warp, ref=wsp.nativeref, premat=linear_mat)
     else:
-        img = reg.transform(wsp, img, trans=linear_mat, ref=wsp.corrected.asldata)
+        img = reg.transform(wsp, img, trans=linear_mat, ref=wsp.nativeref)
 
     if wsp.corrected.total_jacobian is not None:
         wsp.log.write("   - Correcting for local volume scaling using Jacobian\n")

@@ -234,7 +234,7 @@ def struc2asl(wsp, img, **kwargs):
     :return: Transformed Image object in ASL (native) space
     """
     init(wsp)
-    return transform(wsp, img, wsp.reg.struc2asl, wsp.reg.regfrom, **kwargs)
+    return transform(wsp, img, wsp.reg.struc2asl, wsp.nativeref, **kwargs)
 
 def asl2struc(wsp, img, **kwargs):
     """
