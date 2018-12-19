@@ -49,7 +49,7 @@ def get_regfrom(wsp):
     """
     init(wsp)
     if wsp.reg.regfrom is None:
-        wsp.log.write("\nGetting image to use for ASL->structural registration)\n")
+        wsp.log.write("\nGetting the ASL image to use for registration)\n")
         if wsp.regfrom is not None:
             wsp.log.write(" - Registration reference image supplied by user\n")
             wsp.reg.regfrom = wsp.regfrom

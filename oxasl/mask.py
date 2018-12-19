@@ -45,7 +45,6 @@ def generate_mask(wsp):
         return
         
     wsp.sub("rois")
-    reg.get_regfrom(wsp)
 
     # Reporting
     page = wsp.report.page("mask")
@@ -66,6 +65,7 @@ def generate_mask(wsp):
         mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
+        reg.get_regfrom(wsp)
         wsp.rois.mask_src = "regfrom"
         wsp.rois.mask = Image((wsp.reg.regfrom.data != 0).astype(np.int), header=wsp.reg.regfrom.header)
         mask_source = "generated from brain extracted registration ASL image"
