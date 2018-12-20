@@ -113,6 +113,7 @@ def get_motion_params(mat):
     except:
         warnings.warn("Error extracting motion parameters from transformation matrix - check registration/moco looks OK!")
         traceback.print_exc()
+        return 1, 0, [0, 0, 1]
 
 def reg_asl2calib(wsp):
     """
