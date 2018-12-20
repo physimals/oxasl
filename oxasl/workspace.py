@@ -218,6 +218,8 @@ class Workspace(object):
             # Remove any existing file first - it could be left behind if 
             # the extension is different or the new value is None
             existing_files = glob.glob(os.path.join(self.savedir, "%s.*" % save_name))
+            if not isinstance(value, Workspace):
+                existing_files += glob.glob(os.path.join(self.savedir, save_name))
             for existing_file in existing_files:
                 if os.path.isdir(existing_file):
                     shutil.rmtree(existing_file)
@@ -247,6 +249,7 @@ class Workspace(object):
                     # Save other attributes in JSON file
                     self._stuff[name] = value
                     self._save_stuff()
+                
 
         super(Workspace, self).__setattr__(name, value)
 
