@@ -112,7 +112,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--save-basil", help="Save Basil modelling output", action="store_true", default=False)
         g.add_option("--save-calib", help="Save calibration output", action="store_true", default=False)
         g.add_option("--save-all", help="Save all output (enabled when --debug specified)", action="store_true", default=False)
-        g.add_option("--output-std", help="Output standard deviation of estimated variables", action="store_true", default=False)
+        g.add_option("--output-stddev", "--output-std", help="Output standard deviation of estimated variables", action="store_true", default=False)
         g.add_option("--output-var", "--vars", help="Output variance of estimated variables", action="store_true", default=False)
         g.add_option("--no-report", dest="save_report", help="Don't try to generate an HTML report", action="store_false", default=True)
         ret.append(g)
@@ -149,6 +149,9 @@ def main():
                 options.calib_method = "voxelwise"
         if options.debug:
             options.save_all = True
+        options.output_native = True
+        options.output_struc = True
+        options.save_mask = True
 
         if os.path.exists(options.output) and not options.overwrite:
             raise RuntimeError("Output directory exists - use --overwrite to overwrite it")
@@ -167,12 +170,9 @@ def oxasl(wsp):
     Main oxasl pipeline script
     """
     wsp.log.write("OXASL version: %s\n" % __version__)
-    if oxasl_ve:
-        wsp.log.write(" - Found plugin: oxasl_ve\n")
-    if oxasl_enable:
-        wsp.log.write(" - Found plugin: oxasl_enable\n")
-    if oxasl_deblur:
-        wsp.log.write(" - Found plugin: oxasl_deblur\n")
+    for plugin in (oxasl_ve, oxasl_deblur, oxasl_enable):
+        if plugin is not None:
+            wsp.log.write(" - Found plugin: %s (version %s)\n" % (plugin.__name__, getattr(plugin, "__version__", "unknown")))
 
     wsp.log.write("\nInput ASL data: %s\n" % wsp.asldata.name)
     wsp.asldata.summary(wsp.log)
@@ -332,9 +332,11 @@ def output_native(wsp, basil_wsp, report=None):
     :param basil_wsp: Workspace in which Basil modelling has been run. The ``finalstep``
                       attribute is expected to point to the final output workspace
     """
+    if not wsp.output_native: return
+
     wsp.sub("native")
     prefixes = ["", "mean"]
-    if wsp.output_std:
+    if wsp.output_stddev:
         prefixes.append("std")
     if wsp.output_var:
         prefixes.append("var")
@@ -377,6 +379,9 @@ def output_native(wsp, basil_wsp, report=None):
                     name = "%s_calib" % name
                     setattr(wsp.native, name, img)
     
+    if wsp.save_mask:
+        wsp.native.mask = wsp.rois.mask
+
     output_report(wsp.native, report=report)
         
 def output_report(wsp, report=None):
@@ -427,11 +432,15 @@ def output_report(wsp, report=None):
 def output_trans(wsp):
     """
     Create transformed output, i.e. in structural and/or standard space
+
+    FIXME std space not implemented yet
     """
+    if not wsp.output_struc: return
+
     if wsp.reg.asl2struc is not None:
         wsp.sub("struct")
     for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
-        for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit"):
+        for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
             native_output = getattr(wsp.native, output + suffix)
             # Don't transform 4D output (e.g. modelfit) - too large!
             if native_output is not None and native_output.ndim == 3:
@@ -441,10 +450,14 @@ def output_trans(wsp):
 def do_cleanup(wsp):
     """
     Remove items from the workspace that are not being output. The
-    corresponding files will be deleted
+    corresponding files will be deleted.
     """
+    if not wsp.save_all:
+        wsp.input = None
+        wsp.rois = None
     if not (wsp.save_all or wsp.save_corrected):
         wsp.corrected = None
+        wsp.senscorr = None
         wsp.distcorr = None
         wsp.moco = None
         wsp.topup = None
@@ -453,5 +466,7 @@ def do_cleanup(wsp):
         wsp.reg = None
     if not (wsp.save_all or wsp.save_basil):
         wsp.basil = None
+    if not (wsp.save_all or wsp.save_struc):
+        wsp.structural = None
     if not (wsp.save_all or wsp.save_calib):
         wsp.calibration = None
