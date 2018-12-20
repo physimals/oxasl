@@ -443,8 +443,8 @@ class FabberStep(Step):
             self.options["continue-from-mvn"] = prev_output["finalMVN"]
         from .wrappers import fabber
         ret = fabber(self.options, output=LOAD, progress_log=progress_log, log={"stdout" : log})
-        if log is not None:
-            log.write("\n")
+        if progress_log is not None:
+            progress_log.write("\n")
         return ret
 
 class PvcInitStep(Step):
