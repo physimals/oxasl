@@ -11,6 +11,8 @@ from __future__ import unicode_literals
 import os
 import sys
 import math
+import warnings
+import traceback
 
 import numpy as np
 
@@ -67,33 +69,50 @@ def get_motion_params(mat):
     """
     Get motion parameters from a Flirt motion correction matrix
     
+    This is done under the assumption that the matrix may contain
+    rotation, translation and possibly minor scaling but no reflection, 
+    shear etc. So the output could be incorrect for some extreme
+    correction matrices, but this probably indicates an error in the
+    registration process. We wrap the whole thing in a try block so
+    if anything goes horribly wrong it does not at least stop the
+    pipeline running
+    
     See http://en.wikipedia.org/wiki/Rotation_matrix for details
-    of the rotation calculation
+    of the rotation calculation.
 
     :return: magnitude of translation, angle and rotation axis
     """
     if tuple(mat.shape) != (4, 4):
         raise ValueError("Not a 4x4 Flirt matrix")
 
-    # Magnitude of the translation
-    trans = np.linalg.norm(mat[:3, 3])
+    try:
+        # Extract scales - last one is the magnitude of the translation
+        scales = np.linalg.norm(mat[:3, :], axis=0)
 
-    # Rotation axis
-    rot_axis = np.array([
-        mat[2, 1] - mat[1, 2],
-        mat[0, 2] - mat[2, 0],
-        mat[1, 0] - mat[0, 1],
-    ], dtype=np.float)
+        # Normalise unit vectors by scaling before extracting rotation
+        mat[:, 0] /= scales[0]
+        mat[:, 1] /= scales[1]
+        mat[:, 2] /= scales[2]
+        
+        # Rotation axis
+        rot_axis = np.array([
+            mat[2, 1] - mat[1, 2],
+            mat[0, 2] - mat[2, 0],
+            mat[1, 0] - mat[0, 1],
+        ], dtype=np.float)
 
-    # Rotation angle - note that we need to check the sign
-    trace = np.trace(mat[:3, :3])
-    costheta = (float(trace)-1) / 2
-    sintheta = math.sqrt(1-costheta*costheta)
-    theta = math.acos(costheta)
-    test_element = rot_axis[1]*rot_axis[0]*(1-costheta) + rot_axis[2]*sintheta
-    if np.abs(test_element - mat[1, 0]) > np.abs(test_element - mat[0, 1]):
-        theta = -theta
-    return trans, math.degrees(theta), rot_axis
+        # Rotation angle - note that we need to check the sign
+        trace = np.trace(mat[:3, :3])
+        costheta = (float(trace)-1) / 2
+        sintheta = math.sqrt(1-costheta*costheta)
+        theta = math.acos(costheta)
+        test_element = rot_axis[1]*rot_axis[0]*(1-costheta) + rot_axis[2]*sintheta
+        if np.abs(test_element - mat[1, 0]) > np.abs(test_element - mat[0, 1]):
+            theta = -theta
+        return scales[-1], math.degrees(theta), rot_axis
+    except:
+        warnings.warn("Error extracting motion parameters from transformation matrix - check registration/moco looks OK!")
+        traceback.print_exc()
 
 def reg_asl2calib(wsp):
     """
