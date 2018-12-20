@@ -14,9 +14,12 @@ from fsl.data.image import Image
 from fsl.wrappers import LOAD, wrapperutils  as wutils
 import fsl.utils.assertions as asrt
 
-from fabber import FabberException, percent_progress
-from fabber.api_shlib import FabberShlib as Fabber
-#from fabber.api_cl import FabberCl as Fabber
+from fabber import FabberException, find_fabber, percent_progress
+corelib, coreexe, libs, exes = find_fabber()
+if corelib:
+    from fabber.api_shlib import FabberShlib as Fabber
+else:
+    from fabber.api_cl import FabberCl as Fabber
 
 class Tee(object):
     """
