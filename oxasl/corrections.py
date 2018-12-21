@@ -291,7 +291,7 @@ def get_motion_correction(wsp):
     elif wsp.input.calib is not None:
         wsp.log.write(" - Using calibration image as reference\n")
         ref_source = "Calibration image"
-        wsp.moco.ref = single_volume(wsp.input.calib)
+        wsp.moco.ref = single_volume(wsp, wsp.input.calib)
         wsp.moco.input = wsp.input.asldata
         mcflirt_result = fsl.mcflirt(wsp.moco.input, reffile=wsp.moco.ref, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
