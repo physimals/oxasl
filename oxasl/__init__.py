@@ -19,7 +19,7 @@ The ``oxasl.image.AslImage`` class represents a captured ASL data file. It
 contains information about the acquisition (number/values of TIs/PLDs, repeats,
 ordering of label/control image etc). It also has methods which act directly
 on the data, for example performing tag-control subtraction, or generation of
-a perfusion-weighted image.
+a perfusion-weighted image.::
 
     img = AslImage("mpld.nii.gz", plds=[0.25, 0.5, 0.75, 1.0], iaf="tc", order='lrt')
     diffdata = img.diff()
@@ -31,21 +31,21 @@ The ``workspace`` module contains the ``Workspace`` class which
 can be used to build a higher-level interface for complex workflows. A 
 workspace is simply an object whose attributes are images, data, etc being
 used as part of the workflow. Unlike a normal object, requesting an attribute
-that does not exist returns None rather than raising an exception.
+that does not exist returns None rather than raising an exception.::
 
     wsp = Workspace()
     print(wsp.asldata) # prints None
 
 A workspace can optionally be associated with a physical directory. If it is,
 then setting attributes causes files to be saved in this directory for supported
-data types, such as images or 2D matrices. 
+data types, such as images or 2D matrices.::
 
     wsp = Workspace(savedir="myoutput")
     wsp.asldata = AslImage("mpld.nii.gz", ntis=1) # Saves myoutput/asldata.nii.gz
 
 A workspace is also associated with 
 a log stream (sys.stdout by default) and a prepared logging dictionary ``fsllog``
-for passing to FSL Python wrapper commands.
+for passing to FSL Python wrapper commands.::
 
     wsp = Workspace()
     wsp.log.write("Hello World\n")
@@ -79,7 +79,7 @@ Most modules include a ``main()`` function which implements a command line
 tool to wrap the module functionality. For example the ``preproc`` module
 implements the ``oxasl_preproc`` command line tool which can be used to
 do simple preprocessing of ASL data, such as the following to perform
-label-control subtraction:
+label-control subtraction::
 
     oxasl_preproc -i asldata.nii.gz --nplds=5 --diff -o asldata_diff.nii.gz
 
