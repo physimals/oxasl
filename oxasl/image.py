@@ -628,7 +628,7 @@ class AslImage(Image):
         if self.taus:
             md["Bolus durations (s)"] = str(self.taus)
         if self.slicedt:
-            md["Time per slice (ms)"] = self.slicedt
+            md["Time per slice (s)"] = self.slicedt
         if self.sliceband:
             md["Slices per band"] = self.sliceband
         if self.artsupp:
