@@ -9,52 +9,62 @@ import scipy
 
 import fsl.wrappers as fsl
 
-from .options import AslOptionParser, OptionCategory, IgnorableOptionGroup
-from .image import AslImage, AslImageOptions
+from oxasl import Workspace, image
+from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 
-def preprocess(asldata, diff=False, reorder=None, mc=False, smooth=False, fwhm=None, ref=None, log=sys.stdout):
+def preprocess(wsp):
     """
     Basic preprocessing of ASL data
 
-    :param asldata: AslImage instance
-    :param diff: If True, perform tag/control subtraction
-    :param reorder: If specified, reorder the data using this ordering string
-    :param mc: If True, perform motion correction using mcflirt
-    :param smooth: If True, perform smoothing
-    :param fwhm: If smooth=True, the full-width-half-maximum for the smoothing kernel
-    :param ref: If mc=True, a reference image for motion correction (default is to use the middle volume)
-    :param log: Output log stream (default: stdout)
+    :param wsp: Workspace object
 
-    :return: AslImage instance
+    Required workspace attributes
+    -----------------------------
+
+     - ``asldata`` : AslImage containing data to preprocess
+
+
+    Optional workspace attributes
+    -----------------------------
+
+     - ``diff`` : If True, perform tag/control subtraction
+     - ``reorder`` : If specified, reorder the data using this ordering string
+     - ``mc`` : If True, perform motion correction using mcflirt
+     - ``smooth`` : If True, perform smoothing
+     - ``fwhm`` : If smooth=True, the full-width-half-maximum for the smoothing kernel
+     - ``ref`` : If mc=True, a reference image for motion correction (default is to use the middle volume)
+     
+    Workspace attributes updated
+    -----------------------------
+
+     - ``asldata_preproc`` : preprocessed AslImage instance
     """
-    log.write("ASL preprocessing...\n")
+    wsp.log.write("ASL preprocessing...\n")
 
-    # Keep original AslImage with info about TIs, repeats, etc
-    orig = asldata
+    wsp.asldata_preproc = wsp.asldata
 
-    if diff: 
-        log.write("  - Tag-control subtraction\n")
-        asldata = asldata.diff()
+    if wsp.diff: 
+        wsp.log.write("  - Tag-control subtraction\n")
+        wsp.asldata_preproc = wsp.asldata_preproc.diff()
         
-    if reorder:
-        log.write("  - Re-ordering to %s\n" % reorder)
+    if wsp.reorder:
+        wsp.log.write("  - Re-ordering to %s\n" % reorder)
         if "l" in reorder.lower() and diff:
             reorder = reorder.replace("l", "")
-        asldata = asldata.reorder(reorder)
+        wsp.asldata_preproc = wsp.asldata_preproc.reorder(reorder)
 
-    if mc: 
-        log.write("  - Motion correction\n")
-        mcimg = fsl.mcflirt(asldata, cost="mutualinfo", out=fsl.LOAD, reffile=ref)["out"]
-        asldata = orig.derived(mcimg.data, suffix="_mc")
+    if wsp.mc: 
+        wsp.log.write("  - Motion correction\n")
+        mcimg = fsl.mcflirt(wsp.asldata_preproc, cost="mutualinfo", out=fsl.LOAD, reffile=wsp.ref)["out"]
+        wsp.asldata_preproc = wsp.asldata_preproc.derived(mcimg.data, suffix="_mc")
 
-    if smooth:
-        sigma = round(fwhm/2.355, 2)
-        log.write("  - Spatial smoothing with FWHM: %f (sigma=%f)\n" % (fwhm, sigma))
-        smoothed = scipy.ndimage.gaussian_filter(asldata.data, sigma=sigma)
-        asldata = asldata.derived(smoothed, suffix="_smooth")
+    if wsp.smooth:
+        wsp.sigma = round(wsp.fwhm / 2.355, 2)
+        wsp.log.write("  - Spatial smoothing with FWHM: %f (sigma=%f)\n" % (wsp.fwhm, wsp.sigma))
+        smoothed = scipy.ndimage.gaussian_filter(wsp.asldata_preproc.data, sigma=wsp.sigma)
+        wsp.asldata_preproc = wsp.asldata_preproc.derived(smoothed, suffix="_smooth")
 
-    log.write("DONE\n\n")
-    return asldata
+    wsp.log.write("DONE\n\n")
 
 class AslPreprocOptions(OptionCategory):
     """
@@ -80,28 +90,19 @@ def main():
     """
     try:
         parser = AslOptionParser(usage="asl_preproc -i <filename> [options]")
-        parser.add_option("--output", "-o", help="Output file", default=None)
-        parser.add_option("--debug", help="Debug mode", action="store_true", default=False)
-        
-        parser.add_category(AslImageOptions())
+        parser.add_category(GenericOptions(output_type="file", ignore=["mask"]))
+        parser.add_category(image.AslImageOptions())
         parser.add_category(AslPreprocOptions())
 
-        options, _ = parser.parse_args(sys.argv)
-        kwopts = vars(options)
-
-        if not options.asldata:
-            sys.stderr.write("Input file not specified\n")
-            parser.print_help()
-            sys.exit(1)
-
-        options.asldata = AslImage(options.asldata, role="Input data", **parser.filter(kwopts, "image"))
-        if options.output is None:
-            options.output = options.asldata.name + "_out"
-        options.asldata.summary()
+        options, _ = parser.parse_args()
+        if not options.output:
+            options.output = "oxasl_preproc_out"
+        wsp = Workspace(auto_asldata=True, **vars(options))
+        
         print("")
-
-        data_preproc = preprocess(options.asldata, **parser.filter(kwopts, "preproc"))
-        data_preproc.save(options.output)
+        wsp.asldata.summary()
+        preprocess(wsp)
+        wsp.asldata_preproc.save(options.output)
 
     except ValueError as exc:
         sys.stderr.write("ERROR: " + str(exc) + "\n")
