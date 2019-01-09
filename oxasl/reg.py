@@ -154,7 +154,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
         get_regfrom(wsp)
         wsp.log.write("\nRegistering ASL data to structural data\n")
         if flirt:
-            wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.regfrom, wsp.structural.struc, wsp.reg.asl2struc)
+            wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.regfrom, wsp.structural.brain, wsp.reg.asl2struc)
         if bbr:
             wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
         
