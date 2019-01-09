@@ -8,7 +8,14 @@ from setuptools import setup
 from setuptools import find_packages
 from setuptools import Command
 
-from sphinx.setup_command import BuildDoc
+kwargs = {
+    'name' : 'oxasl',
+    'description' : 'Python library for manipulating and modelling ASL data',
+    'url' : 'oxasl.readthedocs.io',
+    'author' : 'Martin Craig',
+    'author_email' : 'martin.craig@eng.ox.ac.uk',
+    'license' : '',
+}
 
 def git_version():
     # Full version includes the Git commit hash
@@ -42,29 +49,27 @@ _, stdv = git_version()
 timestamp = git_timestamp()
 set_metadata(rootdir, stdv, timestamp)
 
-setup(
-    name='oxasl',
-    description='Python library for manipulating and modelling ASL data',
-    url='',
-    author='Martin Craig',
-    author_email='martin.craig@eng.ox.ac.uk',
-    license='',
-    packages=find_packages(),
-    package_data={'oxasl.gui': ['banner.png']},
-    version=stdv,
-    install_requires=requirements,
-    cmdclass={
+try:
+    from sphinx.setup_command import BuildDoc
+    kwargs["cmdclass"] = {
         'doc' : BuildDoc,
-    },
-    # these are optional and override conf.py settings
-    command_options={
+    }
+    kwargs["command_options"] = {
         'doc': {
             'version': ('setup.py', stdv),
             'release': ('setup.py', stdv),
             'source_dir': ('setup.py', 'doc'),
             'build_dir': ('setup.py', 'doc'),
         }
-    },
+    }
+except:
+    pass
+
+setup(
+    packages=find_packages(),
+    package_data={'oxasl.gui': ['banner.png']},
+    version=stdv,
+    install_requires=requirements,
     entry_points={
         'console_scripts' : [
             "oxasl_preproc=oxasl.preproc:main", 
@@ -85,5 +90,7 @@ setup(
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
         'Programming Language :: Python :: 3.6',
-        'Topic :: Software Development :: Libraries :: Python Modules'],
+        'Topic :: Software Development :: Libraries :: Python Modules'
+    ],
+    **kwargs
 )
