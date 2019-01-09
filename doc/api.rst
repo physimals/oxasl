@@ -14,7 +14,7 @@ OXASL API
 .. automodule:: oxasl
 
 Indices and tables
-==================
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`

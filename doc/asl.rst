@@ -11,10 +11,10 @@ of perfusion. Analysis of ASL data typically requires the inversion of a kinetic
 model of labeled blood-water inflow along with a separate calculation of the equilibrium 
 magnetization of arterial blood. 
 
-The OXASL toolbox derives from the BASIL package which performs the kinetic modelling
-using Bayesian inference principles. The toolbox was orginally developed for 
+The OXASL toolbox uses the FSL FABBER ASL package which performs the kinetic modelling
+using Bayesian inference principles. The package was orginally developed for 
 multi delay (inversion time) data where it can be used to greatest effect, but 
-is also sufficiently fleixble to deal with the widely used single delay form 
+is also sufficiently flexible to deal with the widely used single delay form 
 of acquisition.
 
 .. note::
@@ -48,4 +48,4 @@ for the model inversion, this provides a number of advantages:
 
 While the first two apply specfically to the case of mulitple delay data, the latter 
 are also applicable to single delay ASL and are only available using the Bayesian 
-technique employed by BASIL.
+technique employed by OXASL.

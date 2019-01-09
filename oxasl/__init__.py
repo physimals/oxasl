@@ -45,7 +45,7 @@ data types, such as images or 2D matrices.::
 
 A workspace is also associated with 
 a log stream (sys.stdout by default) and a prepared logging dictionary ``fsllog``
-for passing to FSL Python wrapper commands.::
+for passing to FSL Python wrapper commands::
 
     wsp = Workspace()
     wsp.log.write("Hello World\n")
