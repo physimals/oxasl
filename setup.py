@@ -11,7 +11,7 @@ from setuptools import Command
 kwargs = {
     'name' : 'oxasl',
     'description' : 'Python library for manipulating and modelling ASL data',
-    'url' : 'oxasl.readthedocs.io',
+    'url' : 'https://oxasl.readthedocs.io/',
     'author' : 'Martin Craig',
     'author_email' : 'martin.craig@eng.ox.ac.uk',
     'license' : '',
