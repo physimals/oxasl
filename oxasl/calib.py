@@ -182,7 +182,8 @@ def get_m0_voxelwise(wsp):
     table = []
     table.append(["Calibration gain", "%.3g" % gain])
     table.append(["Blood/tissue partition coefficient", "%.3g" % pct])
-    table.append(["Sequence TR", "%.3g" % wsp.tr])
+    if wsp.tr is not None:
+        table.append(["Sequence TR", "%.3g" % wsp.tr])
     if shorttr != 1:
         table.append(["Tissue T1", "%.3g" % wsp.t1t])
         table.append(["T1 Correction factor (for short TR)", "%.3g" % shorttr])
@@ -320,8 +321,8 @@ def get_m0_wholebrain(wsp):
     page.heading("Whole-brain M0 calculation")
     page.text("Whole-brain calibration calculates an M0 value for each voxel from the calibration image based on partial volume estimates")  
     page.text("- Calibration gain: %f" % gain)  
-    page.text(" - TR: %f" % wsp.tr)
-    page.text(" - TE: %f" % wsp.te)
+    page.text(" - TR: %f" % tr)
+    page.text(" - TE: %f" % te)
 
     page.heading("M0", level=1)
     page.text("Mean M0 value (within mask): %f" % m0)
