@@ -48,10 +48,10 @@ def preprocess(wsp):
         wsp.asldata_preproc = wsp.asldata_preproc.diff()
         
     if wsp.reorder:
-        wsp.log.write("  - Re-ordering to %s\n" % reorder)
-        if "l" in reorder.lower() and diff:
-            reorder = reorder.replace("l", "")
-        wsp.asldata_preproc = wsp.asldata_preproc.reorder(reorder)
+        wsp.log.write("  - Re-ordering to %s\n" % wsp.reorder)
+        if "l" in wsp.reorder.lower() and wsp.diff:
+            wsp.reorder = wsp.reorder.replace("l", "")
+        wsp.asldata_preproc = wsp.asldata_preproc.reorder(wsp.reorder)
 
     if wsp.mc: 
         wsp.log.write("  - Motion correction\n")

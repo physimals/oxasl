@@ -1,83 +1,89 @@
 import numpy as np
 
-from oxasl import AslImage, preproc
+from oxasl import Workspace, AslImage, preproc
 
 def test_preproc_none():
+    wsp = Workspace()
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
-    orig.summary()
+    wsp.asldata = AslImage(d, name="asldata", tis=[1.5], iaf="tc", order="lrt")
 
-    proc = preprocess(orig)
-    proc.summary()
-    assert orig.name == proc.name
-    assert orig.ntis == proc.ntis
-    assert orig.tis == proc.tis
-    assert orig.have_plds == proc.have_plds
-    assert orig.rpts == proc.rpts
-    assert orig.ntc == proc.ntc
-    assert orig.order == proc.order
+    preproc.preprocess(wsp)
+    assert wsp.asldata.ntis == wsp.asldata_preproc.ntis
+    assert wsp.asldata.tis == wsp.asldata_preproc.tis
+    assert wsp.asldata.have_plds == wsp.asldata_preproc.have_plds
+    assert wsp.asldata.rpts == wsp.asldata_preproc.rpts
+    assert wsp.asldata.ntc == wsp.asldata_preproc.ntc
+    assert wsp.asldata.order == wsp.asldata_preproc.order
 
 def test_preproc_diff():
+    wsp = Workspace()
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
+    wsp.asldata = AslImage(d, name="asldata", tis=[1.5], iaf="tc", order="lrt")
+    wsp.diff = True
 
-    proc = preprocess(orig, diff=True)
-    assert proc.ntis == orig.ntis
-    assert proc.tis == orig.tis
-    assert proc.have_plds == orig.have_plds
-    assert proc.rpts == orig.rpts
-    assert proc.name == orig.name + "_diff"
-    assert proc.ntc == 1
-    assert proc.order == "rt"
+    preproc.preprocess(wsp)
+    assert wsp.asldata_preproc.ntis == wsp.asldata.ntis
+    assert wsp.asldata_preproc.tis == wsp.asldata.tis
+    assert wsp.asldata_preproc.have_plds == wsp.asldata.have_plds
+    assert wsp.asldata_preproc.rpts == wsp.asldata.rpts
+    assert wsp.asldata_preproc.ntc == 1
+    assert wsp.asldata_preproc.order == "rt"
 
 def test_preproc_reorder_diff():
+    wsp = Workspace()
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
-    
-    proc = preprocess(orig, diff=True, reorder="ltr")
-    assert proc.ntis == orig.ntis
-    assert proc.tis == orig.tis
-    assert proc.have_plds == orig.have_plds
-    assert proc.rpts == orig.rpts
-    assert proc.name == orig.name + "_diff_reorder"
-    assert proc.ntc == 1
-    assert proc.order == "tr"
+    wsp.asldata = AslImage(d, name="asldata", tis=[1.5], iaf="tc", order="lrt")
+    wsp.diff = True
+    wsp.reorder = "ltr"
+
+    preproc.preprocess(wsp)
+    assert wsp.asldata_preproc.ntis == wsp.asldata.ntis
+    assert wsp.asldata_preproc.tis == wsp.asldata.tis
+    assert wsp.asldata_preproc.have_plds == wsp.asldata.have_plds
+    assert wsp.asldata_preproc.rpts == wsp.asldata.rpts
+    assert wsp.asldata_preproc.ntc == 1
+    assert wsp.asldata_preproc.order == "tr"
 
 def test_preproc_diff_reorder():
+    wsp = Workspace()
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
+    wsp.asldata = AslImage(d, name="asldata", tis=[1.5], iaf="tc", order="lrt")
+    wsp.diff = True
+    wsp.reorder = "ltr"
     
-    proc = preprocess(orig, diff=True, reorder="tr")
-    assert proc.ntis == orig.ntis
-    assert proc.tis == orig.tis
-    assert proc.have_plds == orig.have_plds
-    assert proc.rpts == orig.rpts
-    assert proc.name == orig.name + "_diff_reorder"
-    assert proc.ntc == 1
-    assert proc.order == "tr"
+    preproc.preprocess(wsp)
+    assert wsp.asldata_preproc.ntis == wsp.asldata.ntis
+    assert wsp.asldata_preproc.tis == wsp.asldata.tis
+    assert wsp.asldata_preproc.have_plds == wsp.asldata.have_plds
+    assert wsp.asldata_preproc.rpts == wsp.asldata.rpts
+    assert wsp.asldata_preproc.ntc == 1
+    assert wsp.asldata_preproc.order == "tr"
 
 def test_preproc_smooth():
+    wsp = Workspace()
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
+    wsp.asldata = AslImage(d, name="asldata", tis=[1.5], iaf="tc", order="lrt")
+    wsp.smooth = True
+    wsp.fwhm = 1.5
     
-    proc = preprocess(orig, smooth=True, fwhm=1.5)
-    assert proc.ntis == orig.ntis
-    assert proc.tis == orig.tis
-    assert proc.have_plds == orig.have_plds
-    assert proc.rpts == orig.rpts
-    assert proc.name == orig.name + "_smooth"
-    assert proc.ntc == orig.ntc
-    assert proc.order == orig.order
+    preproc.preprocess(wsp)
+    assert wsp.asldata_preproc.ntis == wsp.asldata.ntis
+    assert wsp.asldata_preproc.tis == wsp.asldata.tis
+    assert wsp.asldata_preproc.have_plds == wsp.asldata.have_plds
+    assert wsp.asldata_preproc.rpts == wsp.asldata.rpts
+    assert wsp.asldata_preproc.ntc == wsp.asldata.ntc
+    assert wsp.asldata_preproc.order == wsp.asldata.order
 
 def test_preproc_moco():
+    wsp = Workspace()
     d = np.random.rand(5, 5, 5, 6)
-    orig = AslImage(d, name="asldata", tis=[1.5], order="lrt")
+    wsp.asldata = AslImage(d, name="asldata", tis=[1.5], iaf="tc", order="lrt")
+    wsp.mc = True
     
-    proc = preprocess(orig, mc=True)
-    assert proc.ntis == orig.ntis
-    assert proc.tis == orig.tis
-    assert proc.have_plds == orig.have_plds
-    assert proc.rpts == orig.rpts
-    assert proc.name == orig.name + "_mc"
-    assert proc.ntc == orig.ntc
-    assert proc.order == orig.order
+    preproc.preprocess(wsp)
+    assert wsp.asldata_preproc.ntis == wsp.asldata.ntis
+    assert wsp.asldata_preproc.tis == wsp.asldata.tis
+    assert wsp.asldata_preproc.have_plds == wsp.asldata.have_plds
+    assert wsp.asldata_preproc.rpts == wsp.asldata.rpts
+    assert wsp.asldata_preproc.ntc == wsp.asldata.ntc
+    assert wsp.asldata_preproc.order == wsp.asldata.order
