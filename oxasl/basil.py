@@ -160,7 +160,8 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
         if prev_result is not None:
             desc += " - Initialise with step %i" % idx
         step_wsp.log.write(desc + "     ")
-        result = step.run(prev_result, log=wsp.fsllog.get("stdout", None), progress_log=wsp.log)
+        result = step.run(prev_result, log=wsp.fsllog.get("stdout", None), progress_log=wsp.log, cmd_log=wsp.fsllog.get("cmd", None),
+                          fabber_corelib=wsp.fabber_corelib, fabber_libs=wsp.fabber_libs, fabber_coreexe=wsp.fabber_coreexe, fabber_exes=wsp.fabber_exes)
         for key, value in result.items():
             setattr(step_wsp, key, value)
 
@@ -435,14 +436,14 @@ class FabberStep(Step):
     """
     A Basil step which involves running Fabber
     """
-    def run(self, prev_output, progress_log=sys.stdout, log=sys.stdout):
+    def run(self, prev_output, progress_log=sys.stdout, log=sys.stdout, cmd_log=None, **kwargs):
         """
         Run Fabber, initialising it from the output of a previous step
         """
         if prev_output is not None:
             self.options["continue-from-mvn"] = prev_output["finalMVN"]
         from .wrappers import fabber
-        ret = fabber(self.options, output=LOAD, progress_log=progress_log, log={"stdout" : log})
+        ret = fabber(self.options, output=LOAD, progress_log=progress_log, log={"stdout" : log, "cmd" : cmd_log}, **kwargs)
         if progress_log is not None:
             progress_log.write("\n")
         return ret
@@ -451,7 +452,7 @@ class PvcInitStep(Step):
     """
     A Basil step which initialises partial volume correction
     """
-    def run(self, prev_output, progress_log=sys.stdout, log=sys.stdout):
+    def run(self, prev_output, progress_log=sys.stdout, log=sys.stdout, **kwargs):
         """
         Update the MVN from a previous step to include initial estimates
         for PVC parameters
