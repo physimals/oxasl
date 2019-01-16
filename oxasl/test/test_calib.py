@@ -128,8 +128,8 @@ def test_alpha():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="voxelwise", calib_alpha=ALPHA)
-    perf_calib = calib.calibrate(wsp, perf_img)
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise")
+    perf_calib = calib.calibrate(wsp, perf_img, alpha=ALPHA)
     calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
@@ -270,8 +270,8 @@ def test_alpha_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="voxelwise", calib_alpha=ALPHA)
-    perf_calib = calib.calibrate(wsp, perf_img, var=True)
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise",)
+    perf_calib = calib.calibrate(wsp, perf_img, var=True, alpha=ALPHA)
     calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
     assert(perf_calib.shape == perf_img.shape)
@@ -603,8 +603,8 @@ def test_refregion_alpha():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", calib_alpha=ALPHA)
-    perf_calib = calib.calibrate(wsp, perf_img)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm")
+    perf_calib = calib.calibrate(wsp, perf_img, alpha=ALPHA)
     calibrated_d = perf_calib.data
 
     m0_expected =  _expected_m0(np.mean(calib_img.data), 1.0, 50, 0.82, alpha=ALPHA)
