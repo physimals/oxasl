@@ -12,6 +12,8 @@ from fsl.data.image import Image
 from oxasl import AslImage, Workspace
 import oxasl.basil as basil
 
+pytest.skip("skipping basil tests as neeed rewrite", allow_module_level=True)
+
 DEFAULTS = {
     "method" : "vb",
     "noise" : "white",
