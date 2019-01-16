@@ -5,7 +5,7 @@ from __future__ import absolute_import
 
 import sys
 import os
-from six import StringIO
+from six import StringIO, string_types
 
 import numpy as np
 import nibabel as nib
@@ -15,11 +15,8 @@ from fsl.wrappers import LOAD, wrapperutils  as wutils
 import fsl.utils.assertions as asrt
 
 from fabber import FabberException, find_fabber, percent_progress
-corelib, coreexe, libs, exes = find_fabber()
-if corelib:
-    from fabber.api_shlib import FabberShlib as Fabber
-else:
-    from fabber.api_cl import FabberCl as Fabber
+from fabber.api_shlib import FabberShlib
+from fabber.api_cl import FabberCl
 
 class Tee(object):
     """
@@ -108,6 +105,16 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
              type of the main input data unless this was a file in which case
              an fsl.data.image.Image is returned.
     """
+    corelib, coreexe, libs, exes = find_fabber()
+    corelib = kwargs.pop("fabber_corelib", corelib)
+    coreexe = kwargs.pop("fabber_coreexe", coreexe)
+    libs = kwargs.pop("fabber_libs", libs)
+    exes = kwargs.pop("fabber_exes", exes)
+    if corelib:
+        fab = FabberShlib(core_lib=corelib, model_libs=libs)
+    else:
+        fab = FabberCl(core_exe=coreexe, model_exes=exes)
+
     options = dict(options)
     main_data = options.get("data", None)
     if main_data is None:
@@ -160,10 +167,15 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
     cmd_output = []
     ret = _Results(cmd_output)
     try:
-        fab = Fabber()
         ret["paramnames"] = fab.get_model_params(options)
         if log.get("cmd", None):
-            log["cmd"].write("fabber <options>\n")
+            log["cmd"]("Using fabber:\n  core lib=%s\n  core_exe=%s\n  model libs=%s\n  model exes=%s\n" % (corelib, coreexe, libs, exes))
+            log["cmd"].write("fabber ")
+            for key, value in options.items():
+                if not isinstance(value, string_types) and not isinstance(value, (int, float)):
+                    value = str(type(value))
+                log["cmd"].write("--%s=%s " % (key.replace("_", "-"), value))
+            log["cmd"].write("\n")
         progress_cb = None
         if progress_log:
             progress_cb = percent_progress(progress_log)
