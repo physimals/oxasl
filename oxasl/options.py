@@ -166,14 +166,17 @@ def _check_image(option, opt, value):
         return Image(value, loadData=False)
     except ValueError:
         raise OptionValueError("option %s: invalid Image value: %r" % (opt, value))
-            
+
+def load_matrix(fname):
+    matrix = []
+    with open(fname, "r") as f:
+        for line in f.readlines():
+            matrix.append([float(v) for v in line.split()])
+    return np.array(matrix, dtype=np.float)
+
 def _check_matrix(option, opt, value):
     try:
-        matrix = []
-        with open(value, "r") as f:
-            for line in f.readlines():
-                matrix.append([float(v) for v in line.split()])
-        return np.array(matrix, dtype=np.float)
+        return load_matrix(fname)
     except ValueError:
         raise OptionValueError("option %s: invalid matrix value: %r" % (opt, value))
             

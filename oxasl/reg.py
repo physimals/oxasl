@@ -20,7 +20,7 @@ from fsl.data.image import Image
 import fsl.wrappers as fsl
 
 from oxasl import __version__, Workspace, struc, brain
-from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
+from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup, load_matrix
 from oxasl.wrappers import epi_reg
 from oxasl.reporting import LightboxImage
 
@@ -211,9 +211,9 @@ def reg_struc2std(wsp, fnirt=False):
         warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff")
         mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
         if os.path.isfile(warp):
-            wsp.reg.struc2std = warp
+            wsp.reg.struc2std = Image(warp, loadData=False)
         elif os.path.isfile(mat):
-            wsp.reg.struc2std = mat
+            wsp.reg.struc2std = load_matrix(mat)
 
     if wsp.reg.struc2std is None:
         struc.init(wsp)

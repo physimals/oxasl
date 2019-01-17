@@ -521,7 +521,7 @@ def apply_corrections(wsp):
         finally:
             shutil.rmtree(topup_input)
 
-    if wsp.senscorr:
+    if wsp.senscorr and wsp.corrected.calib:
         # Apply sensitivity correction to calibration image only. In principle we could
         # apply it to the ASL image, but in keeping with OXFORD_ASL we apply it to the 
         # perfusion maps instead at output time. Note that this means the sensitivity
