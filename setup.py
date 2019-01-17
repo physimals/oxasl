@@ -10,9 +10,9 @@ import io
 from setuptools import setup
 from setuptools import find_packages
 
-def get_readme(rootdir):
-    """ Get the text of the README file """
-    with io.open(os.path.join(rootdir, 'README.md'), encoding='utf-8') as f:
+def get_filetext(rootdir, filename):
+    """ Get the text of a local file """
+    with io.open(os.path.join(rootdir, filename), encoding='utf-8') as f:
         return f.read()
 
 def git_version():
@@ -76,12 +76,12 @@ kwargs = {
     'name' : 'oxasl',
     'version' : get_version(module_dir),
     'description' : 'Python library for manipulating and modelling ASL data',
-    'long_description' : get_readme(module_dir),
+    'long_description' : get_filetext(module_dir, 'README.md'),
     'long_description_content_type' : 'text/markdown',
     'url' : 'https://oxasl.readthedocs.io/',
     'author' : 'Martin Craig',
     'author_email' : 'martin.craig@eng.ox.ac.uk',
-    'license' : '',
+    'license' : 'Free for non-commercial use',
     'install_requires' : get_requirements(module_dir),
     'packages' : find_packages(),
     'package_data' : {
@@ -102,12 +102,11 @@ kwargs = {
     },
     'classifiers' : [
         'Development Status :: 3 - Alpha',
-        'Intended Audience :: Developers',
+        'Intended Audience :: Science/Research',
         'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.4',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
-        'Topic :: Software Development :: Libraries :: Python Modules'
+        'Programming Language :: Python :: 3',
+        'Topic :: Scientific/Engineering :: Bio-Informatics',
+        'License :: Free for non-commercial use',
     ],
 }
 
