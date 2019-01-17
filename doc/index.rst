@@ -3,7 +3,7 @@
    :scale: 30 %
    :alt: OXASL logo
    :align: right
-   
+
 OXASL - ASL-MRI analysis pipeline
 =================================
 
@@ -29,5 +29,6 @@ OXASL works within an FSL environment which must be installed.
   
    asl
    download
+   walkthrough_cl
    oxasl
    api
