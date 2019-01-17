@@ -169,7 +169,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
     try:
         ret["paramnames"] = fab.get_model_params(options)
         if log.get("cmd", None):
-            log["cmd"]("Using fabber:\n  core lib=%s\n  core_exe=%s\n  model libs=%s\n  model exes=%s\n" % (corelib, coreexe, libs, exes))
+            log["cmd"].write("Using fabber:\n  core lib=%s\n  core_exe=%s\n  model libs=%s\n  model exes=%s\n" % (corelib, coreexe, libs, exes))
             log["cmd"].write("fabber ")
             for key, value in options.items():
                 if not isinstance(value, string_types) and not isinstance(value, (int, float)):
