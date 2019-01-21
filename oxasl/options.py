@@ -176,7 +176,7 @@ def load_matrix(fname):
 
 def _check_matrix(option, opt, value):
     try:
-        return load_matrix(fname)
+        return load_matrix(value)
     except ValueError:
         raise OptionValueError("option %s: invalid matrix value: %r" % (opt, value))
             
