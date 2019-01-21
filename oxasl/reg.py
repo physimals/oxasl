@@ -208,11 +208,13 @@ def reg_struc2std(wsp, fnirt=False):
         return
     
     if wsp.fslanat:
-        warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff")
+        warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff.nii.gz")
         mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
         if os.path.isfile(warp):
+            wsp.log.write(" - Using structural->std nonlinear transformation from FSL_ANAT\n")
             wsp.reg.struc2std = Image(warp, loadData=False)
         elif os.path.isfile(mat):
+            wsp.log.write(" - Using structural->std linear transformation from FSL_ANAT\n")
             wsp.reg.struc2std = load_matrix(mat)
 
     if wsp.reg.struc2std is None:
@@ -228,7 +230,7 @@ def reg_struc2std(wsp, fnirt=False):
     
     if isinstance(wsp.reg.struc2std, Image):
         # Calculate the inverse warp using INVWARP
-        invwarp_result = fsl.invwarp(wsp.structural.struc, wsp.reg.struc2std_warp, out=fsl.LOAD)
+        invwarp_result = fsl.invwarp(wsp.reg.struc2std, wsp.structural.struc, out=fsl.LOAD)
         wsp.reg.std2struc = invwarp_result["out"]
     else:
         wsp.reg.std2struc = np.linalg.inv(wsp.reg.struc2std)
