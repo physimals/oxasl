@@ -51,6 +51,55 @@ def summary(img, log=sys.stdout):
     if hasattr(img, "summary"):
         img.summary(log=log)
 
+def data_order(iaf, ibf, order):
+    """
+    Determine the data format and ordering from options
+
+    :return: Tuple of:
+               - IAF (ASL format, 'tc', 'ct', 'diff', 've' or 'mp')
+               - ordering (sequence of 2 or three chars, 'l'=labelling images,
+                 'r'=repeats, 't'=TIs/PLDs). The characters are in order from
+                 fastest to slowest varying.
+               - Boolean indicating whether the block format needed to be guessed
+    """
+    if not iaf:
+        if order is not None and "l" in order:
+            warnings.warn("Data format was not specified - assuming TC pairs")
+            iaf = "tc"
+        elif not order:
+            warnings.warn("Data format was not specified - assuming differenced")
+            iaf = "diff"
+        else:
+            # Order specified and did not include labelling images so we are entitled
+            # to assume differenced data without a warning
+            iaf = "diff"
+    elif iaf not in ("diff", "tc", "ct", "mp", "ve"):
+        raise ValueError("Unrecognized data format: iaf=%s" % iaf)
+
+    ibf_guessed = False
+    if not order:
+        if not ibf:
+            # Guess but defer warning until we have extracted TIs as it doesn't matter
+            # for single TI data
+            ibf = "rpt"
+            ibf_guessed = True
+
+        order_map = {
+            "rpt" : "tr",
+            "tis" : "rt",
+        }
+        order = order_map.get(ibf.lower(), None)
+        if not order:
+            raise ValueError("Unrecognized data block format: ibf=%s" % ibf)
+
+    if iaf != "diff" and "l" not in order:
+        order = "l" + order
+    for char in order.lower():
+        if char not in ('l', 'r', 't'):
+            raise ValueError("Unrecognized character in data ordering: '%s'" % char)
+
+    return iaf, order, ibf_guessed
+
 class AslImage(Image):
     """
     Subclass of fsl.data.image.Image which adds ASL structure information
@@ -126,45 +175,10 @@ class AslImage(Image):
         if self.ndim not in (3, 4):
             raise ValueError("3D or 4D data expected")
 
-        # Determine the data format and ordering
+        # Determine the data ordering
         #
         # Sets the metadata: iaf (str), order (str)
-        if not iaf:
-            if order is not None and "l" in order:
-                warnings.warn("Data format was not specified - assuming TC pairs")
-                iaf = "tc"
-            elif not order:
-                warnings.warn("Data format was not specified - assuming differenced")
-                iaf = "diff"
-            else:
-                # Order specified and did not include labelling images so we are entitled
-                # to assume differenced data without a warning
-                iaf = "diff"
-        elif iaf not in ("diff", "tc", "ct", "mp", "ve"):
-            raise ValueError("Unrecognized data format: iaf=%s" % iaf)
-
-        ibf_guessed = False
-        if not order:
-            if not ibf:
-                # Guess but defer warning until we have extracted TIs as it doesn't matter
-                # for single TI data
-                ibf = "rpt"
-                ibf_guessed = True
-
-            order_map = {
-                "rpt" : "tr",
-                "tis" : "rt",
-            }
-            order = order_map.get(ibf.lower(), None)
-            if not order:
-                raise ValueError("Unrecognized data block format: ibf=%s" % ibf)
-
-        if iaf != "diff" and "l" not in order:
-            order = "l" + order
-        for char in order.lower():
-            if char not in ('l', 'r', 't'):
-                raise ValueError("Unrecognized character in data ordering: '%s'" % char)
-
+        iaf, order, ibf_guessed = data_order(iaf, ibf, order)
         self.setMeta("order", order.lower())
         self.setMeta("iaf", iaf.lower())
 
