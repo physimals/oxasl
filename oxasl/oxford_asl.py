@@ -451,8 +451,10 @@ def do_cleanup(wsp):
     Remove items from the workspace that are not being output. The
     corresponding files will be deleted.
     """
+    wsp.log.write("\nDoing cleanup\n")
     if not wsp.save_all:
         if not wsp.save_corrected:
+            wsp.log.write(" - Removing corrected data\n")
             wsp.corrected = None
             wsp.senscorr = None
             wsp.distcorr = None
@@ -460,12 +462,16 @@ def do_cleanup(wsp):
             wsp.topup = None
             wsp.fieldmap = None
         if not wsp.save_reg:
+            wsp.log.write(" - Removing registration data\n")
             wsp.reg = None
         if not wsp.save_basil:
+            wsp.log.write(" - Removing model fitting data\n")
             wsp.basil = None
         if not wsp.save_struc:
+            wsp.log.write(" - Removing structural segementation data\n")
             wsp.structural = None
         if not wsp.save_calib:
+            wsp.log.write(" - Removing calibration data\n")
             wsp.calibration = None
         wsp.input = None
         wsp.rois = None
