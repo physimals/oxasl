@@ -505,13 +505,10 @@ def apply_corrections(wsp):
                 movpar_file.write("\t".join([str(val) for val in row]) + "\n")
             movpar_file.close()
             # TOPUP does not do the jacboian magntiude correction - so only okay if using voxelwise calibration
-            wsp.corrected.calib_pretopup = wsp.corrected.calib
             wsp.corrected.calib = fsl.applytopup(wsp.corrected.calib, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
-            wsp.corrected.cblip_pretopup = wsp.corrected.cblip
             wsp.corrected.cblip = fsl.applytopup(wsp.corrected.cblip, datain=wsp.topup.params, index=2, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
             if wsp.cref:
                 wsp.corrected.cref = fsl.applytopup(wsp.corrected.cref, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
-            wsp.corrected.asldata_pretopup = wsp.corrected.asldata
             post_topup = fsl.applytopup(wsp.corrected.asldata, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
             wsp.corrected.asldata = wsp.corrected.asldata.derived(post_topup.data)
             #if wsp.calib_method != "voxel":
@@ -526,7 +523,6 @@ def apply_corrections(wsp):
         # apply it to the ASL image, but in keeping with OXFORD_ASL we apply it to the 
         # perfusion maps instead at output time. Note that this means the sensitivity
         # correction cancels out of the calibrated outputs when using voxelwise calibration
-        wsp.corrected.calib_presens = wsp.corrected.calib
         wsp.corrected.calib, = apply_sensitivity_correction(wsp, wsp.corrected.calib)
 
 def correct_img(wsp, img, linear_mat):
