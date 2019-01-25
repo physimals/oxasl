@@ -243,13 +243,12 @@ class Workspace(object):
                    
                 elif isinstance(value, np.ndarray) and value.ndim == 2:
                     # Save as ASCII matrix
-                    with open(os.path.join(self.savedir, save_name), "w") as tfile:
+                    with open(os.path.join(self.savedir, save_name + ".mat"), "w") as tfile:
                         tfile.write(matrix_to_text(value))
                 elif not name.startswith("_") and isinstance(value, (int, float, six.string_types)):
                     # Save other attributes in JSON file
                     self._stuff[name] = value
                     self._save_stuff()
-                
 
         super(Workspace, self).__setattr__(name, value)
 
