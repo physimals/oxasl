@@ -332,13 +332,21 @@ class Report(object):
                 conffile.write(REPORT_CONF)
 
             try:
-                result = subprocess.check_output(['sphinx-build', '-M', 'html', build_dir, os.path.join(build_dir, "_build")])
-            except OSError:
-                log.write("WARNING: sphinx-build not found, HTML report will not be generated")
-                return
-            except subprocess.CalledProcessError:
-                log.write("WARNING: sphinx-build failed, HTML report will not be generated")
-                return
+                args = ['sphinx-build', '-M', 'html', build_dir, os.path.join(build_dir, "_build")]
+                #result = subprocess.check_output(args)
+                # Different sphinx version have different main API
+                import sphinx
+                if hasattr(sphinx, "main"):
+                    result = sphinx.main(args)
+                else:
+                    result = sphinx.cmd.build.main(args)
+            except (AttributeError, ImportError, OSError):
+                log.write("WARNING: sphinx not found, HTML report will not be generated\n")
+                return False
+            except Exception as exc:
+                log.write("WARNING: sphinx failed, HTML report will not be generated\n")
+                log.write("Message: %s\n" % str(exc))
+                return False
                 
             if os.path.exists(dest_dir):
                 if not os.path.isdir(dest_dir):
@@ -348,6 +356,7 @@ class Report(object):
                     shutil.rmtree(dest_dir)
                 
             shutil.copytree(os.path.join(build_dir, "_build", "html"), dest_dir)
+            return True
         finally:
             if is_temp:
                 shutil.rmtree(build_dir)
