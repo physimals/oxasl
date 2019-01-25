@@ -245,9 +245,6 @@ def oxasl_preproc(wsp):
         oxasl_enable.enable(wsp.enable)
         wsp.corrected.asldata = wsp.enable.asldata_enable
 
-    if wsp.calib:
-        calib.calculate_m0(wsp)
-
 def model_paired(wsp):
     """
     Do model fitting on TC/CT or subtracted data
@@ -263,6 +260,7 @@ def model_paired(wsp):
     """
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
     redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
+
     wsp.sub("output")
 
     if wsp.pvcorr:
@@ -312,8 +310,9 @@ def do_report(wsp):
         report_build_dir = os.path.join(wsp.savedir, "report_build")
     wsp.log.write("\nGenerating HTML report\n")
     report_dir = os.path.join(wsp.savedir, "report")
-    wsp.report.generate_html(report_dir, report_build_dir)
-    wsp.log.write(" - Report generated in %s\n" % report_dir)
+    success = wsp.report.generate_html(report_dir, report_build_dir, log=wsp.log)
+    if success:
+        wsp.log.write(" - Report generated in %s\n" % report_dir)
 
 OUTPUT_ITEMS = {
     "ftiss" : ("perfusion", 6000, True, "ml/100g/min", "30-50", "10-20"),
@@ -409,7 +408,7 @@ def output_report(wsp, report=None):
             page = report.page(name)
             page.heading("Output image: %s" % name)
             if calibrate and name.endswith("_calib"):
-                alpha = wsp.ifnone("alpha", 0.85 if wsp.asldata.casl else 0.98)
+                alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf == "ve" else 0.85 if wsp.asldata.casl else 0.98)
                 page.heading("Calibration", level=1)
                 page.text("Image was calibrated using supplied M0 image")
                 page.text("Inversion efficiency: %f" % alpha)
@@ -453,20 +452,20 @@ def do_cleanup(wsp):
     corresponding files will be deleted.
     """
     if not wsp.save_all:
+        if not wsp.save_corrected:
+            wsp.corrected = None
+            wsp.senscorr = None
+            wsp.distcorr = None
+            wsp.moco = None
+            wsp.topup = None
+            wsp.fieldmap = None
+        if not wsp.save_reg:
+            wsp.reg = None
+        if not wsp.save_basil:
+            wsp.basil = None
+        if not wsp.save_struc:
+            wsp.structural = None
+        if not wsp.save_calib:
+            wsp.calibration = None
         wsp.input = None
         wsp.rois = None
-    if not (wsp.save_all or wsp.save_corrected):
-        wsp.corrected = None
-        wsp.senscorr = None
-        wsp.distcorr = None
-        wsp.moco = None
-        wsp.topup = None
-        wsp.fieldmap = None
-    if not (wsp.save_all or wsp.save_reg):
-        wsp.reg = None
-    if not (wsp.save_all or wsp.save_basil):
-        wsp.basil = None
-    if not (wsp.save_all or wsp.save_struc):
-        wsp.structural = None
-    if not (wsp.save_all or wsp.save_calib):
-        wsp.calibration = None
