@@ -434,17 +434,17 @@ def output_trans(wsp):
 
     FIXME std space not implemented yet
     """
-    if not wsp.output_struc: return
+    if not wsp.output_struc or wsp.reg.asl2struc is None:
+        return
 
-    if wsp.reg.asl2struc is not None:
-        wsp.sub("struct")
+    wsp.sub("struct")
     for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
         for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
             native_output = getattr(wsp.native, output + suffix)
             # Don't transform 4D output (e.g. modelfit) - too large!
             if native_output is not None and native_output.ndim == 3:
                 if wsp.reg.asl2struc is not None:
-                    setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output))
+                    setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output=='mask')))
 
 def do_cleanup(wsp):
     """
