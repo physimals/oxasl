@@ -270,7 +270,7 @@ def asl2struc(wsp, img, **kwargs):
     init(wsp)
     return transform(wsp, img, wsp.reg.asl2struc, wsp.structural.struc, **kwargs)
 
-def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None):
+def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None, mask=False):
     """
     Transform an image 
 
@@ -293,7 +293,7 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
         raise ValueError("Cannot transform using Flirt when we have a warp")
     elif use_flirt:
         if interp == "nn": interp = "nearestneighbour"
-        return fsl.applyxfm(img, ref, trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
+        ret = fsl.applyxfm(img, ref, trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
     else:
         if have_warp:
             kwargs = {"warp" : trans, "premat" : premat, "rel" : True}
@@ -301,8 +301,12 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
             raise ValueError("Can't set a pre-transformation matrix unless using a warp")
         else:
             kwargs = {"premat" : trans}
-        return fsl.applywarp(img, ref, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog, **kwargs)["out"]
-        
+        ret = fsl.applywarp(img, ref, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog, **kwargs)["out"]
+    if mask:
+        # Binarise mask images
+        ret = Image((ret.data > 0).astype(np.int), header=ret.header)
+    return ret
+
 def reg_flirt(wsp, img, ref, initial_transform=None):
     """ 
     Register low resolution ASL or calibration data to a high resolution
