@@ -27,6 +27,7 @@ import tempfile
 
 import six
 import numpy as np
+import pandas as pd
 import yaml
 
 from fsl.data.image import Image
@@ -128,6 +129,10 @@ class Workspace(object):
             self.log = kwargs.pop("log", sys.stdout)
         if "debug" in kwargs or self.debug is None:
             self.debug = kwargs.pop("debug", False)
+        if "log_cmds" in kwargs or self.log_cmds is None:
+            self.log_cmds = kwargs.pop("log_cmds", False)
+        if "log_cmdout" in kwargs or self.log_cmdout is None:
+            self.log_cmdout = kwargs.pop("log_cmdout", False)
         if "report" in kwargs or self.report is None:
             self.report = kwargs.pop("report", Report())
         
@@ -136,8 +141,10 @@ class Workspace(object):
             self.fsllog = kwargs.pop("fsllog", None)
             if not self.fsllog:
                 self.fsllog = {"stderr" : self.log}
-                if self.debug:
-                    self.fsllog.update({"stdout" : self.log, "cmd" : self.log})
+                if self.debug or self.log_cmds:
+                    self.fsllog.update({"cmd" : self.log})
+                if self.debug or self.log_cmdout:
+                    self.fsllog.update({"stdout" : self.log})
 
         # Set kwargs as attributes in input workspace (if configured)
         if input_wsp:
@@ -245,6 +252,9 @@ class Workspace(object):
                     # Save as ASCII matrix
                     with open(os.path.join(self.savedir, save_name + ".mat"), "w") as tfile:
                         tfile.write(matrix_to_text(value))
+                elif not name.startswith("_") and isinstance(value, pd.DataFrame):
+                    # Save data frame in CSV file
+                    value.to_csv(os.path.join(self.savedir, save_name + ".csv"), index=True, header=True)
                 elif not name.startswith("_") and isinstance(value, (int, float, six.string_types)):
                     # Save other attributes in JSON file
                     self._stuff[name] = value

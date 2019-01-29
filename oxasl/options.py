@@ -158,7 +158,9 @@ class GenericOptions(OptionCategory):
         group.add_option("--overwrite", help="Overwrite output %s if it already exists" % self.output_type, action="store_true", default=False)
         group.add_option("--mask", "-m", help="Brain mask image in native ASL space", default=None, type="image")
         group.add_option("--optfile", help="File containing additional options")
-        group.add_option("--debug", help="Debug mode", action="store_true", default=False)
+        group.add_option("--log-cmds", help="Log all external commands run", action="store_true", default=False)
+        group.add_option("--log-cmdout", help="Log the standard output of all external commands run", action="store_true", default=False)
+        group.add_option("--debug", help="Debug mode - log all command output and keep all output files", action="store_true", default=False)
         return [group, ]
 
 def _check_image(option, opt, value):
