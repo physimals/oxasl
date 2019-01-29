@@ -34,6 +34,7 @@ from fsl.data.image import Image
 
 from oxasl import AslImage
 from oxasl.reporting import Report
+from oxasl.utils import Tee
 
 class ImageProxy(object):
     """
@@ -126,7 +127,10 @@ class Workspace(object):
         # Defaults - these can be overridden by kwargs but might be
         # already defined in parent workspace
         if "log" in kwargs or self.log is None:
-            self.log = kwargs.pop("log", sys.stdout)
+            self.log = kwargs.pop("log", None)
+            if self.log is None:
+                logfile = open(os.path.join(self.savedir, "logfile"), "w")
+                self.log = Tee(sys.stdout, logfile)
         if "debug" in kwargs or self.debug is None:
             self.debug = kwargs.pop("debug", False)
         if "log_cmds" in kwargs or self.log_cmds is None:
