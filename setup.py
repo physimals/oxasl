@@ -10,6 +10,8 @@ import io
 from setuptools import setup
 from setuptools import find_packages
 
+MODULE = 'oxasl'
+
 def get_filetext(rootdir, filename):
     """ Get the text of a local file """
     with io.open(os.path.join(rootdir, filename), encoding='utf-8') as f:
@@ -43,7 +45,7 @@ def git_timestamp():
 
 def update_metadata(rootdir, version_str, timestamp_str):
     """ Update the version and timestamp metadata in the module _version.py file """
-    with io.open(os.path.join(rootdir, "oxasl", "_version.py"), "w", encoding='utf-8') as f:
+    with io.open(os.path.join(rootdir, MODULE, "_version.py"), "w", encoding='utf-8') as f:
         f.write("__version__ = '%s'\n" % version_str)
         f.write("__timestamp__ = '%s'\n" % timestamp_str)
 
@@ -61,7 +63,7 @@ def get_version(rootdir):
         update_metadata(rootdir, version, timestamp)
     else:
         # Could not get metadata from Git - use the version file if it exists
-        with open(os.path.join(rootdir, 'oxasl', '_version.py'), encoding='utf-8') as f:
+        with open(os.path.join(rootdir, MODULE, '_version.py'), encoding='utf-8') as f:
             md = f.read()
             match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", md, re.M)
             if match:
