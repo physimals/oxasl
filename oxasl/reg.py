@@ -270,7 +270,29 @@ def asl2struc(wsp, img, **kwargs):
     init(wsp)
     return transform(wsp, img, wsp.reg.asl2struc, wsp.structural.struc, **kwargs)
 
-def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None, mask=False):
+def calib2asl(wsp, img, **kwargs):
+    """
+    Convert an image from calibration space to ASL space
+
+    :param img: Image object in calibration space
+    :return: Transformed Image object in ASL (native) space
+    """
+    init(wsp)
+    return transform(wsp, img, wsp.reg.calib2asl, wsp.nativeref, **kwargs)
+
+def asl2calib(wsp, img, **kwargs):
+    """
+    Convert an image from ASL to calibration space
+
+    Keyword arguments are passed to ``transform``
+
+    :param img: Image object in native (ASL) space
+    :return: Transformed Image object in calibration space
+    """
+    init(wsp)
+    return transform(wsp, img, wsp.reg.asl2calib, wsp.structural.struc, **kwargs)
+
+def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None, mask=False, mask_thresh=0.5):
     """
     Transform an image 
 
@@ -304,7 +326,7 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
         ret = fsl.applywarp(img, ref, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog, **kwargs)["out"]
     if mask:
         # Binarise mask images
-        ret = Image((ret.data > 0).astype(np.int), header=ret.header)
+        ret = Image((ret.data > mask_thresh).astype(np.int), header=ret.header)
     return ret
 
 def reg_flirt(wsp, img, ref, initial_transform=None):
