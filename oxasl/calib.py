@@ -60,7 +60,7 @@ def calculate_m0(wsp):
 
     if wsp.calibration.m0 is None:
         wsp.log.write("\nCalibration - calculating M0\n")
-        if wsp.calib_method == "voxelwise":
+        if wsp.calib_method in ("voxel", "voxelwise"):
             wsp.calibration.m0 = get_m0_voxelwise(wsp)
         elif wsp.calib_method in ("refregion", "single"):
             wsp.calibration.m0 = get_m0_refregion(wsp)
@@ -424,6 +424,7 @@ def get_m0_refregion(wsp, mode="longtr"):
 
     # Check the data and masks
     calib_data = np.copy(wsp.calib.data).astype(np.float)
+    wsp.calibration.calib_img = wsp.calib
     if calib_data.ndim == 4:
         wsp.log.write(" - Taking mean across calibration images\n")
         calib_data = np.mean(calib_data, -1)
@@ -436,7 +437,8 @@ def get_m0_refregion(wsp, mode="longtr"):
     if wsp.refmask is not None:
         wsp.log.write(" - Using supplied reference tissue mask: %s\n" % wsp.refmask.name)
         wsp.calibration.refmask = Image(wsp.refmask.data.astype(np.int), header=wsp.refmask.header)
-        refmask = wsp.calibration.refmask.data
+        wsp.calibration.refmask_trans = reg.calib2asl(wsp, wsp.calibration.refmask, mask=True)
+        refmask = wsp.calibration.refmask_trans.data
     elif wsp.tissref.lower() in ("csf", "wm", "gm"):
         get_tissrefmask(wsp)
         refmask = wsp.calibration.refmask.data
@@ -703,7 +705,7 @@ class CalibOptions(OptionCategory):
         group.add_option("--t1r", help="T1 of reference tissue (s) - defaults: csf 4.3, gm 1.3, wm 1.0", type=float, default=None)
         group.add_option("--t2r", help="T2/T2* of reference tissue (ms) - defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50", type=float, default=None)
         group.add_option("--t2b", help="T2/T2* of blood (ms) - default T2/T2*: 150/50)", type=float, default=None)
-        group.add_option("--refmask", help="Reference tissue mask in perfusion/calibration image space", type="image")
+        group.add_option("--refmask", "--csf", help="Reference tissue mask in calibration image space", type="image")
         group.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
         group.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
         groups.append(group)
