@@ -5,8 +5,8 @@ from __future__ import absolute_import
 
 import sys
 import os
-from six import StringIO, string_types
 
+import six
 import numpy as np
 import nibabel as nib
 
@@ -14,43 +14,9 @@ from fsl.data.image import Image
 from fsl.wrappers import LOAD, wrapperutils  as wutils
 import fsl.utils.assertions as asrt
 
-from fabber import FabberException, find_fabber, percent_progress
-from fabber.api_shlib import FabberShlib
-from fabber.api_cl import FabberCl
+from fabber import Fabber, FabberException, percent_progress
 
-class Tee(object):
-    """
-    Output stream which keeps a string record of everything
-    written to it, and also sends it on to any number of
-    sub-streams
-    """
-
-    def __init__(self):
-        self._streams = [StringIO(),]
-
-    def add(self, stream):
-        """ 
-        Add a sub-stream
-        """
-        if stream:
-            self._streams.append(stream)
-
-    def write(self, text):
-        """
-        Write to all output streams
-        """
-        for stream in self._streams:
-            stream.write(text)
-
-    def flush(self):
-        """
-        Flush all output streams
-        """
-        for stream in self._streams:
-            stream.flush()
-
-    def __str__(self):
-        return self._streams[0].getvalue()
+from oxasl.utils import Tee
 
 def _matching_image(base_img, img):
     if isinstance(base_img, nib.Nifti1Image):
@@ -72,7 +38,6 @@ class _Results(dict):
     def output(self):
         """Access the return value of the decorated function. """
         return self.__output
-
 
 def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
     """
@@ -105,15 +70,8 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
              type of the main input data unless this was a file in which case
              an fsl.data.image.Image is returned.
     """
-    corelib, coreexe, libs, exes = find_fabber()
-    corelib = kwargs.pop("fabber_corelib", corelib)
-    coreexe = kwargs.pop("fabber_coreexe", coreexe)
-    libs = kwargs.pop("fabber_libs", libs)
-    exes = kwargs.pop("fabber_exes", exes)
-    if corelib:
-        fab = FabberShlib(core_lib=corelib, model_libs=libs)
-    else:
-        fab = FabberCl(core_exe=coreexe, model_exes=exes)
+    extra_search_dirs = kwargs.pop("fabber_dirs", ())
+    fab = Fabber(*extra_search_dirs)
 
     options = dict(options)
     main_data = options.get("data", None)
@@ -169,10 +127,10 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
     try:
         ret["paramnames"] = fab.get_model_params(options)
         if log.get("cmd", None):
-            log["cmd"].write("Using fabber:\n  core lib=%s\n  core_exe=%s\n  model libs=%s\n  model exes=%s\n" % (corelib, coreexe, libs, exes))
+            log["cmd"].write("Using fabber:\n  core lib=%s\n  core_exe=%s\n  model libs=%s\n  model exes=%s\n" % (fab.core_lib, fab.core_exe, fab.model_libs, fab.model_exes))
             log["cmd"].write("fabber ")
             for key, value in options.items():
-                if not isinstance(value, string_types) and not isinstance(value, (int, float)):
+                if not isinstance(value, six.string_types) and not isinstance(value, (int, float)):
                     value = str(type(value))
                 log["cmd"].write("--%s=%s " % (key.replace("_", "-"), value))
             log["cmd"].write("\n")
