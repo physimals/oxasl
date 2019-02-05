@@ -114,6 +114,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--save-all", help="Save all output (enabled when --debug specified)", action="store_true", default=False)
         g.add_option("--output-stddev", "--output-std", help="Output standard deviation of estimated variables", action="store_true", default=False)
         g.add_option("--output-var", "--vars", help="Output variance of estimated variables", action="store_true", default=False)
+        g.add_option("--output-mni", help="Output in MNI standard space", action="store_true", default=False)
         g.add_option("--no-report", dest="save_report", help="Don't try to generate an HTML report", action="store_false", default=True)
         ret.append(g)
         return ret
@@ -178,6 +179,7 @@ def oxasl(wsp):
     wsp.asldata.summary(wsp.log)
 
     oxasl_preproc(wsp)
+    calib.init(wsp)
 
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
         model_paired(wsp)
@@ -321,6 +323,7 @@ OUTPUT_ITEMS = {
     "fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "", "10-20"),
     "deltwm" : ("arrival_wm", 1, False, "s", "", ""),
     "modelfit" : ("modelfit", 1, False, "", "", ""),
+    "asldata_diff" : ("asldata_diff", 1, False, "", "", ""),
 }
     
 def output_native(wsp, basil_wsp, report=None):
@@ -444,7 +447,7 @@ def output_trans(wsp):
             # Don't transform 4D output (e.g. modelfit) - too large!
             if native_output is not None and native_output.ndim == 3:
                 if wsp.reg.asl2struc is not None:
-                    setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output=='mask')))
+                    setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output == 'mask')))
 
 def do_cleanup(wsp):
     """
