@@ -101,6 +101,11 @@ Notice that:
     fsleyes, you will need to choose a voxel in cotrical gray matter
     (where there will be the largest perfusion signal) e.g. [20,14,13]. 
  
+..note:: 
+    If movie mode does not seem to work in FSLeyes, try turning off
+    ``Synchronise movie updates`` in the View Settings window (accessed
+    by clicking on the spanner icon).
+    
 A Perfusion-Weighted Image
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
