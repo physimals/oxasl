@@ -111,6 +111,11 @@ except:
 from .image import AslImage
 from .workspace import Workspace
 
+# Work around ugly FSL log message
+import logging
+logging.basicConfig()
+logging.getLogger("fsl.utils.platform").setLevel(logging.CRITICAL)
+
 __all__ = [
     "__version__",
     "AslImage",

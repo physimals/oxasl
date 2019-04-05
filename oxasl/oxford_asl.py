@@ -139,6 +139,7 @@ def main():
         parser.add_category(GenericOptions())
 
         options, _ = parser.parse_args()
+        debug = options.debug
         if not options.output:
             options.output = "oxasl"
         
@@ -153,6 +154,9 @@ def main():
         options.output_native = True
         options.output_struc = True
         options.save_mask = True
+
+        if options.asldata is None:
+            raise RuntimeError("Input ASL file not specified\n")
 
         if os.path.exists(options.output) and not options.overwrite:
             raise RuntimeError("Output directory exists - use --overwrite to overwrite it")
