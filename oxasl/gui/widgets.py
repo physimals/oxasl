@@ -1,4 +1,10 @@
-import sys
+"""
+oxasl.gui.widgets.py
+
+Useful wx widgets for building the OXASL GUI
+
+Copyright (c) 2019 University of Oxford
+"""
 import os
 import colorsys
 
@@ -10,7 +16,10 @@ matplotlib.use('WXAgg')
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-import numpy as np
+from fsl.data.image import Image
+
+class OptionError(RuntimeError):
+    pass
 
 class TabPage(wx.Panel):
     """
@@ -178,6 +187,14 @@ class TabPage(wx.Panel):
             self.run.update()
             if hasattr(self, "preview"): self.preview.run = self.run
 
+    def image(self, label, fname):
+        if not os.path.exists(fname):
+            raise OptionError("%s - no such file or directory" % label)
+        try:
+            return Image(fname)
+        except:
+            raise OptionError("%s - invalid image file" % label)
+
 class NumberChooser(wx.Panel):
     """
     Widget for choosing a floating point number
@@ -253,7 +270,7 @@ class NumberList(wx.grid.Grid):
     def GetValues(self):
         try:
             return [float(self.GetCellValue(0, c)) for c in range(self.n)]
-        except ValueError as e:
+        except ValueError:
             raise RuntimeError("Non-numeric values in number list")
             
     def set_size(self, n):
@@ -268,7 +285,7 @@ class NumberList(wx.grid.Grid):
         self.resize_cols()
 
     def resize_cols(self):
-        w, h = self.GetClientSize()
+        w, _ = self.GetClientSize()
         cw = w / self.n
         for i in range(self.n):
             self.SetColSize(i, cw)
@@ -325,14 +342,11 @@ class PreviewPanel(wx.Panel):
     def update(self, evt):
         """
         Update the preview. This is called explicitly when the user clicks the update
-        button as it involves calling ASL_FILE and may be slow
+        button as it may be slow
         """
         self.data = None
         if self.run is not None:
             self.data = self.run.get_preview_data()
-            # If multi-TI data, take mean over volumes
-            if self.data is not None and len(self.data.shape) == 4:
-                self.data = np.mean(self.data, axis=3)
                 
         if self.data is not None:
             self.view = 0
@@ -361,6 +375,8 @@ class PreviewPanel(wx.Panel):
         self.axes.set_ylim(self.axes.get_ylim()[::-1])
         i.set_cmap("gray")
         self.Layout()
+        self.canvas.draw()
+        self.canvas.Refresh()
 
     def view_change(self, event):
         """
@@ -455,7 +471,7 @@ class AslDataPreview(wx.Panel):
             for i in temp:
                 if t == "t":
                     seq += [i,] * self.n_tis
-                elif t == "p":
+                elif t == "l":
                     if not self.tc_pairs:
                         seq.append(i)
                     elif self.tagfirst:

@@ -1,20 +1,25 @@
-import sys, os
+"""
+oxasl.gui.structure_tab.py
+
+Tab page for specifying the ASL input data
+
+Copyright (c) 2019 University of Oxford
+"""
+import os
 
 import wx
 import wx.grid
 
-from .widgets import TabPage, NumberChooser, NumberList
+from oxasl.image import AslImage
+from oxasl.gui.widgets import TabPage, NumberChooser, NumberList, OptionError
 
 class AslInputOptions(TabPage):
-    """
-    Tab page containing input data options
-    """
 
     def __init__(self, parent, idx, n):
         TabPage.__init__(self, parent, "Input Data", idx, n, name="input")
  
         self.groups = ["PLDs", "Repeats", "Label/Control pairs"]
-        self.abbrevs = ["t", "r", "p"]
+        self.abbrevs = ["t", "r", "l"]
 
         self.section("Data contents")
 
@@ -76,27 +81,54 @@ class AslInputOptions(TabPage):
         self.SetSizer(self.sizer)
         self.next_prev()
 
-    def data(self): return self.data_picker.GetPath()
+    def options(self):
+        options = {
+            "order" : self.preview.order_preview.order,
+            "casl" : self.casl(),
+        }
+
+        if not self.tc_pairs():
+            options["iaf"] = "diff"
+        elif self.tc_ch.GetSelection() == 0:
+            options["iaf"] = "tc"
+        else:
+            options["iaf"] = "ct"
+
+        if options["casl"]:
+            options["plds"] = self.ti_list.GetValues()
+        else:
+            options["tis"] = self.ti_list.GetValues()
+
+        if self.bolus_dur_multi():
+            options["taus"] = self.bolus_dur_list.GetValues()
+        else:
+            options["tau"] = self.bolus_dur_num.GetValue()
+
+        if self.readout_2d():
+            options["slicedt"] = self.time_per_slice_num.GetValue()
+
+        if self.multiband():
+            options["sliceband"] = self.slices_per_band_spin.GetValue()
+
+        asldata = AslImage(self.image("Input data", self.data_picker.GetPath()).data, **options)
+
+        # Update preview widget on successful AslImage construction
+        nrpts = asldata.rpts[0]
+        self.nrepeats_label.SetLabel("%i" % nrpts)
+        self.preview.order_preview.n_tis = asldata.ntis
+        self.preview.order_preview.n_repeats = nrpts
+        self.preview.order_preview.tc_pairs = asldata.iaf in ("tc", "ct")
+        self.preview.order_preview.tagfirst = asldata.iaf == "tc"
+        self.preview.order_preview.Refresh()
+
+        return {"asldata" : asldata}
+        
     def ntis(self): return self.ntis_int.GetValue()
-    def data_order(self): return self.preview.order_preview.order, self.preview.order_preview.tagfirst
+    def casl(self): return self.labelling_ch.GetSelection() == 1
     def tc_pairs(self): return self.tc_ch.checkbox.IsChecked()
-    def labelling(self): return self.labelling_ch.GetSelection()
-    def bolus_dur_type(self): return self.bolus_dur_ch.GetSelection()
-    def bolus_dur(self): 
-        if self.bolus_dur_type() == 0: return [self.bolus_dur_num.GetValue(), ]
-        else: return self.bolus_dur_list.GetValues()
-    def tis(self): 
-        tis = self.ti_list.GetValues()
-        if self.labelling() == 1:
-            # For pASL TI = bolus_dur + PLD
-            bolus_durs = self.bolus_dur()
-            if len(bolus_durs) == 1: bolus_durs *= self.ntis()
-            tis = [pld+bd for pld,bd in zip(tis, bolus_durs)]
-        return tis
-    def readout(self): return self.readout_ch.GetSelection()
-    def time_per_slice(self): return self.time_per_slice_num.GetValue()
+    def bolus_dur_multi(self): return self.bolus_dur_ch.GetSelection() == 1
+    def readout_2d(self): return self.readout_ch.GetSelection() == 1
     def multiband(self): return self.multiband_cb.IsChecked()
-    def slices_per_band(self): return self.slices_per_band_spin.GetValue()
     
     def set_default_dir(self, evt):
         """ 
@@ -126,13 +158,13 @@ class AslInputOptions(TabPage):
         self.ti_list.set_size(self.ntis())
         self.bolus_dur_list.set_size(self.ntis())
 
-        self.time_per_slice_num.Enable(self.readout() != 0)
-        self.multiband_cb.Enable(self.readout() != 0)
-        self.slices_per_band_spin.Enable(self.multiband() and self.readout() != 0)
-        self.slices_per_band_label.Enable(self.multiband() and self.readout() != 0)
+        self.time_per_slice_num.Enable(self.readout_2d())
+        self.multiband_cb.Enable(self.readout_2d())
+        self.slices_per_band_spin.Enable(self.multiband() and self.readout_2d())
+        self.slices_per_band_label.Enable(self.multiband() and self.readout_2d())
 
-        self.bolus_dur_num.Enable(self.bolus_dur_type() == 0)
-        self.bolus_dur_list.Enable(self.bolus_dur_type() == 1)
+        self.bolus_dur_num.Enable(not self.bolus_dur_multi())
+        self.bolus_dur_list.Enable(self.bolus_dur_multi())
 
         self.tc_ch.Enable(self.tc_pairs())
         self.update_groups()

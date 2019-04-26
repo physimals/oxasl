@@ -1,12 +1,15 @@
-import wx
-import wx.grid
+"""
+oxasl.gui.calibration_tab.py
 
-from .widgets import TabPage
+Tab page containing options for calibration
+
+Copyright (c) 2019 University of Oxford
+"""
+import wx
+
+from oxasl.gui.widgets import TabPage
 
 class AslCalibration(TabPage):
-    """ 
-    Tab page containing calibration options
-    """
 
     def __init__(self, parent, idx, n):
         TabPage.__init__(self, parent, "Calibration", idx, n)
@@ -14,8 +17,6 @@ class AslCalibration(TabPage):
         self.calib_cb = self.checkbox("Enable Calibration", bold=True, handler=self.calib_changed)
 
         self.calib_image_picker = self.file_picker("Calibration Image")
-        self.m0_type_ch = self.choice("M0 Type", choices=["Proton Density (long TR)", "Saturation Recovery"])
-
         self.seq_tr_num = self.number("Sequence TR (s)", min=0,max=10,initial=6)
         self.calib_gain_num = self.number("Calibration Gain", min=0,max=5,initial=1)
         self.calib_mode_ch = self.choice("Calibration mode", choices=["Reference Region", "Voxelwise"])
@@ -34,26 +35,37 @@ class AslCalibration(TabPage):
         self.SetSizer(self.sizer)
         self.next_prev()
 
+    def options(self):
+        options = {}
+        if self.calib():
+            options.update({
+                "calib" : self.image("Calibration data", self.calib_image_picker.GetPath()),
+                "calib_gain" : self.calib_gain_num.GetValue(),
+                "tr" : self.seq_tr_num.GetValue(),
+            })
+
+            if self.refregion():
+                options.update({
+                    "calib_method" : "refregion",
+                    "tissref" : self.ref_tissue_type_ch.GetString(self.ref_tissue_type()),
+                    "te" : self.seq_te_num.GetValue(),
+                    "t1r" : self.ref_t1_num.GetValue(),
+                    "t2r" : self.ref_t2_num.GetValue(),
+                    "t2b" : self.blood_t2_num.GetValue(),
+                })
+                if self.ref_tissue_mask_picker.checkbox.IsChecked():
+                    options["refmask"] = self.ref_tissue_mask_picker.GetPath()
+            else:
+                options["calib_method"] = "voxelwise"
+
+            if self.coil_image_picker.checkbox.IsChecked(): 
+                options["cref" ] = self.image("Calibration reference data", self.coil_image_picker.GetPath())
+                
+        return options
+
     def calib(self): return self.calib_cb.IsChecked()
-    def m0_type(self): return self.m0_type_ch.GetSelection()
-    def seq_tr(self): return self.seq_tr_num.GetValue()
-    def seq_te(self): return self.seq_te_num.GetValue()
-    def calib_image(self): return self.calib_image_picker.GetPath()
-    def calib_gain(self): return self.calib_gain_num.GetValue()
-    def calib_mode(self): return self.calib_mode_ch.GetSelection()
+    def refregion(self): return self.calib_mode_ch.GetSelection() == 0
     def ref_tissue_type(self): return self.ref_tissue_type_ch.GetSelection()
-    def ref_tissue_type_name(self): return self.ref_tissue_type_ch.GetString(self.ref_tissue_type())
-    def ref_tissue_mask(self): 
-        if self.ref_tissue_mask_picker.checkbox.IsChecked():
-            return self.ref_tissue_mask_picker.GetPath()
-        else:
-            return None
-    def ref_t1(self): return self.ref_t1_num.GetValue()
-    def ref_t2(self): return self.ref_t2_num.GetValue()
-    def blood_t2(self): return self.blood_t2_num.GetValue()
-    def coil_image(self): 
-        if self.coil_image_picker.checkbox.IsChecked(): return self.coil_image_picker.GetPath()
-        else: return None
 
     def ref_tissue_type_changed(self, event):
         if self.ref_tissue_type() == 0: # CSF
@@ -76,28 +88,27 @@ class AslCalibration(TabPage):
 
     def update(self, event=None):
         enable = self.calib()
-        self.m0_type_ch.Enable(enable)
-        self.seq_tr_num.Enable(enable and self.m0_type() == 0)
+        self.seq_tr_num.Enable(enable)
         self.calib_image_picker.Enable(enable)
         self.calib_gain_num.Enable(enable)
         self.coil_image_picker.checkbox.Enable(enable)
         if self.analysis.wp(): self.calib_mode_ch.SetSelection(1)
         self.calib_mode_ch.Enable(enable and not self.analysis.wp())
-        self.ref_tissue_type_ch.Enable(enable and self.calib_mode() == 0)
+        self.ref_tissue_type_ch.Enable(enable and self.refregion())
 
         if self.ref_tissue_type() == 3:
             # Ref tissue = None - enforce mask
             self.ref_tissue_mask_picker.checkbox.Enable(False)
-            self.ref_tissue_mask_picker.checkbox.SetValue(enable and self.calib_mode() == 0)
-            self.ref_tissue_mask_picker.Enable(enable and self.calib_mode() == 0)
+            self.ref_tissue_mask_picker.checkbox.SetValue(enable and self.refregion())
+            self.ref_tissue_mask_picker.Enable(enable and self.refregion())
         else:
-            self.ref_tissue_mask_picker.checkbox.Enable(enable and self.calib_mode() == 0)
-        self.ref_tissue_mask_picker.Enable(enable and self.ref_tissue_mask_picker.checkbox.IsChecked() and self.calib_mode() == 0)
+            self.ref_tissue_mask_picker.checkbox.Enable(enable and self.refregion())
+        self.ref_tissue_mask_picker.Enable(enable and self.ref_tissue_mask_picker.checkbox.IsChecked() and self.refregion())
         
-        self.coil_image_picker.checkbox.Enable(enable and self.calib_mode() == 0)
-        self.coil_image_picker.Enable(enable and self.calib_mode() == 0 and self.coil_image_picker.checkbox.IsChecked())
-        self.seq_te_num.Enable(enable and self.calib_mode() == 0)
-        self.blood_t2_num.Enable(enable and self.calib_mode() == 0)
-        self.ref_t1_num.Enable(enable and self.calib_mode() == 0)
-        self.ref_t2_num.Enable(enable and self.calib_mode() == 0)
+        self.coil_image_picker.checkbox.Enable(enable and self.refregion())
+        self.coil_image_picker.Enable(enable and self.refregion() and self.coil_image_picker.checkbox.IsChecked())
+        self.seq_te_num.Enable(enable and self.refregion())
+        self.blood_t2_num.Enable(enable and self.refregion())
+        self.ref_t1_num.Enable(enable and self.refregion())
+        self.ref_t2_num.Enable(enable and self.refregion())
         TabPage.update(self)

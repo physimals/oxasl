@@ -12,24 +12,21 @@ Requirements:
   - matplotlib
   - numpy
   - nibabel
+
+Copyright (c) 2019 University of Oxford
 """
 
-import sys
 import os
-import subprocess
-import shlex
 
 import wx
-import wx.grid
 
-from .analysis_tab import AslAnalysis
-from .structure_tab import StructureTab
-from .calib_tab import AslCalibration
-from .input_tab import AslInputOptions
-from .dist_corr_tab import AslDistCorr
-
-from .widgets import PreviewPanel
-from .run_box import AslRun
+from oxasl.gui.analysis_tab import AslAnalysis
+from oxasl.gui.structure_tab import StructureTab
+from oxasl.gui.calib_tab import AslCalibration
+from oxasl.gui.input_tab import AslInputOptions
+from oxasl.gui.dist_corr_tab import AslDistCorr
+from oxasl.gui.widgets import PreviewPanel
+from oxasl.gui.run_box import AslRun
 
 class AslGui(wx.Frame):
     """
@@ -74,7 +71,7 @@ class AslGui(wx.Frame):
         tab_cls = [AslInputOptions, StructureTab, AslCalibration, AslDistCorr, AslAnalysis,]
         tabs = [cls(notebook, idx, len(tab_cls)) for idx, cls in enumerate(tab_cls)]
         
-        for idx, tab in enumerate(tabs):
+        for tab in tabs:
             notebook.AddPage(tab, tab.title)
             setattr(tab, "run", self.run)
             setattr(tab, "preview", self.preview)

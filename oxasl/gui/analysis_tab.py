@@ -1,12 +1,17 @@
-import wx
-import wx.grid
+"""
+oxasl.gui.analysis_tab.py
 
-from .widgets import TabPage
+Tab page containing model fitting and analysis options
+
+Copyright (c) 2019 University of Oxford
+"""
+import os
+
+import wx
+
+from oxasl.gui.widgets import TabPage, OptionError
 
 class AslAnalysis(TabPage):
-    """
-    Tab page containing data analysis options
-    """
 
     def __init__(self, parent, idx, n):
         TabPage.__init__(self, parent, "Analysis", idx, n)
@@ -41,21 +46,34 @@ class AslAnalysis(TabPage):
         self.SetSizer(self.sizer)
         self.next_prev()
 
-    def outdir(self): return self.outdir_picker.GetPath()
-    def mask(self): 
-        if self.mask_picker.checkbox.IsChecked(): return self.mask_picker.GetPath()
-        else: return None
+    def options(self):
+        outdir = self.outdir_picker.GetPath()
+        if not outdir:
+            raise OptionError("Output directory must be specified")
+        elif os.path.isfile(outdir):
+            raise OptionError("Output directory already exists and is a file")
+            
+        options = {
+            "savedir" : outdir,
+            "wp" : self.wp(),
+            "bat" : self.bat_num.GetValue(),
+            "t1" : self.t1_num.GetValue(),
+            "t1b" : self.t1b_num.GetValue(),
+            "alpha" : self.ie_num.GetValue(),
+            "spatial" : self.spatial_cb.IsChecked(),
+            "infert1" : self.infer_t1_cb.IsChecked(),
+            "inferart" : self.macro_cb.IsChecked(),
+            "fixbolus" : self.fixbolus_cb.IsChecked(),
+            "pvcorr" : self.pv_cb.IsChecked(),
+            "mc" : self.mc_cb.IsChecked(),
+        }
+
+        if self.mask_picker.checkbox.IsChecked(): 
+            options["mask"] = self.mask_picker.GetPath()
+
+        return options
+
     def wp(self): return self.wp_cb.IsChecked()
-    def bat(self): return self.bat_num.GetValue()
-    def t1(self): return self.t1_num.GetValue()
-    def t1b(self): return self.t1b_num.GetValue()
-    def ie(self): return self.ie_num.GetValue()
-    def spatial(self): return self.spatial_cb.IsChecked()
-    def infer_t1(self): return self.infer_t1_cb.IsChecked()
-    def macro(self): return self.macro_cb.IsChecked()
-    def fixbolus(self): return self.fixbolus_cb.IsChecked()
-    def pv(self): return self.pv_cb.IsChecked()
-    def mc(self): return self.mc_cb.IsChecked()
 
     def update(self, event=None):
         self.mask_picker.Enable(self.mask_picker.checkbox.IsChecked())

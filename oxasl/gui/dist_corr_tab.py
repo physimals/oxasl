@@ -1,12 +1,16 @@
-import wx
-import wx.grid
+"""
+oxasl.gui.dist_corr_tab.py
 
-from .widgets import TabPage
+Tab page containing options for distortion correction
+
+Copyright (c) 2019 University of Oxford
+"""
+import wx
+
+from oxasl.gui.widgets import TabPage
 
 class AslDistCorr(TabPage):
-    """
-    Tab page containing distortion correction options
-    """
+    
     FIELDMAP = 0
     CALIB_IMAGE = 1
 
@@ -46,25 +50,35 @@ class AslDistCorr(TabPage):
         self.SetSizer(self.sizer)
         self.next_prev()
 
+    def options(self):
+        options = {}
+        if self.distcorr():
+            options.update({
+                "echospacing" : self.echosp_num.GetValue(),
+                "pedir" : self.pedir_ch.GetStringSelection(),
+            })
+            if self.distcorr_fmap():
+                options.update({
+                    "fmap" : self.image("Fieldmap", self.fmap_picker.GetPath()),
+                    "fmapmag" : self.image("Fieldmap magnitude", self.fmap_mag_picker.GetPath()),
+                    "fmapmagbrain" : self.image("Fieldmap brain", self.fmap_be_picker.GetPath()),
+                })
+            else:
+                options.update({
+                    "cblip" : self.image("Phase-reversed calibration data", self.calib_picker.GetPath()),
+                })
+        return options
+
     def distcorr(self): return self.distcorr_cb.IsChecked()
-    def distcorr_type(self): return self.distcorr_ch.GetSelection()
-
-    def calib(self): return self.calib_picker.GetPath()
-
-    def fmap(self): return self.fmap_picker.GetPath()
-    def fmap_mag(self): return self.fmap_mag_picker.GetPath()
-    def fmap_mag_be(self): return self.fmap_be_picker.GetPath()
-
-    def echosp(self): return self.echosp_num.GetValue()
-    def pedir(self): return self.pedir_ch.GetStringSelection()
+    def distcorr_fmap(self): return self.distcorr_ch.GetSelection() == self.FIELDMAP
 
     def update(self, event=None):
         self.distcorr_ch.Enable(self.distcorr())
 
-        cal = self.distcorr() and self.distcorr_type() == self.CALIB_IMAGE
+        cal = self.distcorr() and not self.distcorr_fmap()
         self.calib_picker.Enable(cal)
 
-        fmap = self.distcorr() and self.distcorr_type() == self.FIELDMAP
+        fmap = self.distcorr() and self.distcorr_fmap()
         self.fmap_picker.Enable(fmap)
         self.fmap_mag_picker.Enable(fmap)
         self.fmap_be_picker.Enable(fmap)
@@ -75,7 +89,9 @@ class AslDistCorr(TabPage):
         TabPage.update(self)
         
     def calib_changed(self, enabled):
-        """ If calibration enabled, add the calibration image option for distortion correction"""
+        """ 
+        If calibration enabled, add the calibration image option for distortion correction
+        """
         sel = self.distcorr_ch.GetSelection()
         if enabled: 
             choices = self.distcorr_choices

@@ -1,7 +1,15 @@
-import wx
-import wx.grid
+"""
+oxasl.gui.structure_tab.py
 
-from .widgets import TabPage
+Tab page containing options for providing structural data
+
+Copyright (c) 2019 University of Oxford
+"""
+import os
+
+import wx
+
+from oxasl.gui.widgets import TabPage, OptionError
 
 class StructureTab(TabPage):
     EXISTING_FSLANAT = 0
@@ -13,9 +21,6 @@ class StructureTab(TabPage):
     TRANS_IMAGE = 1
     TRANS_FSLANAT = 2
 
-    """
-    Tab page containing options for structural space transformation
-    """
     def __init__(self, parent, idx, n):
         TabPage.__init__(self, parent, "Structure", idx, n, name="structure")
 
@@ -37,45 +42,27 @@ class StructureTab(TabPage):
 
         self.transform_cb = wx.CheckBox(self, label="Transform to standard space")
         self.transform_cb.Bind(wx.EVT_CHECKBOX, self.update)
-        self.transform_ch = wx.Choice(self, choices=self.transform_choices)
-        self.transform_ch.SetSelection(self.TRANS_FSLANAT)
-        self.transform_ch.Bind(wx.EVT_CHOICE, self.update)
-        self.transform_picker = wx.FilePickerCtrl(self)
-        self.transform_picker.Bind(wx.EVT_FILEPICKER_CHANGED, self.update)
-        self.pack("", self.transform_cb, self.transform_ch, self.transform_picker, enable=False)
+        self.pack("", self.transform_cb, enable=False)
 
         self.sizer.AddGrowableCol(2, 1)
         self.SetSizer(self.sizer)
         self.next_prev()
 
-    def existing_fsl_anat(self): 
-        if self.struc_ch.GetSelection() == self.EXISTING_FSLANAT:
-            return self.fsl_anat_picker.GetPath()
-        else: 
-            return None
-
-    def run_fsl_anat(self):
-        return self.struc_ch.GetSelection() == self.NEW_FSLANAT
+    def options(self):
+        options = {}
+        if self.struc_ch.GetSelection() == self.INDEP_STRUC:
+            options["struc"] = self.image("Structural data", self.struc_image_picker.GetPath())
+            if self.brain_image_picker.checkbox.IsChecked():
+                options["struc_brain"] = self.image("Structural brain", self.brain_image_picker.GetPath())
+        elif self.struc_ch.GetSelection() == self.EXISTING_FSLANAT:
+            options["fslanat"] = self.fsl_anat_picker.GetPath()
+            if not os.path.exists(options["fslanat"]):
+                raise OptionError("FSL_ANAT directory does not exist")
+        # FIXME new FSL_ANAT
         
-    def struc_image(self): 
-        if self.struc_ch.GetSelection() in (self.NEW_FSLANAT, self.INDEP_STRUC):
-            return self.struc_image_picker.GetPath()
-        else: 
-            return None
-            
-    def struc_image_brain(self): 
-        if self.struc_ch.GetSelection() == self.INDEP_STRUC and self.brain_image_picker.checkbox.IsChecked():
-            return self.brain_image_picker.GetPath()
-        else: return None
-
-    def transform(self): 
-        return self.transform_cb.IsChecked()
-
-    def transform_type(self): 
-        return self.transform_ch.GetSelection()
-
-    def transform_file(self): 
-        return self.transform_picker.GetPath()
+        if self.transform_cb.IsChecked():
+            options["output_std"] = True
+        return options
     
     def update(self, event=None):
         mode = self.struc_ch.GetSelection()
@@ -84,21 +71,6 @@ class StructureTab(TabPage):
 
         self.brain_image_picker.checkbox.Enable(mode == self.INDEP_STRUC)
         self.brain_image_picker.Enable(mode == self.INDEP_STRUC and self.brain_image_picker.checkbox.IsChecked())
-
-        # Only offer FSL_ANAT transform option if we are using FSL_ANAT
-        sel = self.transform_ch.GetSelection()
-        if mode == self.INDEP_STRUC: 
-            if sel == self.TRANS_FSLANAT: sel = self.TRANS_MATRIX
-            choices=2
-        else: 
-            choices=3
-        self.transform_ch.Enable(False)
-        self.transform_ch.Clear()
-        self.transform_ch.AppendItems(self.transform_choices[:choices])
-        self.transform_ch.SetSelection(sel)
-        self.transform_ch.Enable(self.transform())
-
-        self.transform_picker.Enable(self.transform() and self.transform_type() != self.TRANS_FSLANAT)
 
         TabPage.update(self)
         
