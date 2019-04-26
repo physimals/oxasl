@@ -1,14 +1,28 @@
-Obtaining the OXASL software
-============================
+Getting the OXASL software
+==========================
 
-Currently we recommend downloading a pre-built bundle package from our GitHub release page:
+To use OXASL you will need FSL - version 6.0 or later is strongly recommended.
+See `FSL installation <https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FslInstallation>`_ 
+for installation instructions.
 
-A recent version of FSL is required. *In addition* updated versions of various FSL tools
-including FABBER are required. These are included in the bundle.
+I have FSL 6.0 or later
+-----------------------
+
+To install into the fslpython environment use::
+
+    fslpython -m pip install oxasl oxasl_ve --user
+
+This installs the main package and the vessel-encoding plugin.
+To check it is working, try running the main executable::
+
+    oxasl --version
+
+I have an older version of FSL
+------------------------------
+
+You will need to download a pre-built bundle package containing the OXASL code and
+also the required updated FSL dependencies. This can be found on our GitHub
+release page:
 
 https://github.com/ibme-qubic/oxasl/releases
-
-In the next release of FSL, the need for updated versions of Fabber should be removed and
-it should be possible to install the pure python code directly. We hope to make this available
-through the FSL Conda repository, and PyPi.
 
