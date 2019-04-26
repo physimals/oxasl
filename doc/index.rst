@@ -30,5 +30,6 @@ OXASL works within an FSL environment which must be installed.
    asl
    download
    walkthrough_cl
+   walkthrough_gui
    oxasl
    api
