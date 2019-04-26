@@ -20,7 +20,7 @@ templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
 project = u'oxasl'
-copyright = u'2018, Martin Craig'
+copyright = u'2019, University of Oxford'
 author = u'Martin Craig'
 build_dir = u"_build"
 
@@ -37,46 +37,12 @@ import sphinx_rtd_theme
 html_theme = 'sphinx_rtd_theme'
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
-# -- Options for HTMLHelp output ------------------------------------------
-
-htmlhelp_basename = 'oxasldoc'
-
 # -- Options for LaTeX output ---------------------------------------------
 
 latex_elements = {
-    # The paper size ('letterpaper' or 'a4paper').
-    #
-    # 'papersize': 'letterpaper',
-
-    # The font size ('10pt', '11pt' or '12pt').
-    #
-    # 'pointsize': '10pt',
-
-    # Additional stuff for the LaTeX preamble.
-    #
-    # 'preamble': '',
-
-    # Latex figure (float) alignment
-    #
-    # 'figure_align': 'htbp',
 }
 
 latex_documents = [
     (master_doc, 'oxasl.tex', u'oxasl Documentation',
      u'Martin Craig', 'manual'),
-]
-
-# -- Options for manual page output ---------------------------------------
-
-man_pages = [
-    (master_doc, 'oxasl', u'oxasl Documentation',
-     [author], 1)
-]
-
-# -- Options for Texinfo output -------------------------------------------
-
-texinfo_documents = [
-    (master_doc, 'oxasl', u'oxasl Documentation',
-     author, 'oxasl', 'One line description of project.',
-     'Miscellaneous'),
 ]
