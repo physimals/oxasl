@@ -1,3 +1,5 @@
+.. _CLref:
+
 OXASL command reference
 =======================
 

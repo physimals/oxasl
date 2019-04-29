@@ -1,3 +1,5 @@
+.. _CLI:
+
 OXASL walk through tutorial - command line
 ==========================================
 
@@ -5,11 +7,12 @@ This tutorial demonstrates some of the common options available in the OXASL com
 
 We will be working with multi-PLD data from the 
 `FSL tutorial on Arterial Spin Labelling <https://fsl.fmrib.ox.ac.uk/fslcourse/lectures/practicals/ASLpractical/index.html>`_.
+You will need to download this data before following the tutorial.
 
 The tutorial has been written so that we start with the most basic analysis and gradually add
 options and show the effect they have on the output, as well as how they are reported in the
 command log and the summary report. However this is not a complete description of all available
-options - for that see the OXASL command reference.
+options - for that see the :ref:`CLref`.
 
 The data
 ~~~~~~~~
