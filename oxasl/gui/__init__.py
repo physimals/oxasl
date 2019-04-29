@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Simple wxpython based GUI front-end to OXFORD_ASL command line tool
+Simple wxpython based GUI front-end to OXASL pipeline
 
 Currently this does not use the GUI system from the FSL python libraries.
 Possible improvements would include:
@@ -34,12 +34,12 @@ class AslGui(wx.Frame):
     """
 
     def __init__(self):
-        wx.Frame.__init__(self, None, title="Basil", size=(1200, 700), style=wx.DEFAULT_FRAME_STYLE)
+        wx.Frame.__init__(self, None, title="OXASL", size=(1200, 700), style=wx.DEFAULT_FRAME_STYLE)
         main_panel = wx.Panel(self)
         main_vsizer = wx.BoxSizer(wx.VERTICAL)
 
         banner = wx.Panel(main_panel, size=(-1, 80))
-        banner.SetBackgroundColour((54, 122, 157))
+        banner.SetBackgroundColour((57, 71, 121))
         banner_fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), "banner.png")
         wx.StaticBitmap(banner, -1, wx.Bitmap(banner_fname, wx.BITMAP_TYPE_ANY))
         main_vsizer.Add(banner, 0, wx.EXPAND)
