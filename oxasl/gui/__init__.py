@@ -2,16 +2,16 @@
 """
 Simple wxpython based GUI front-end to OXFORD_ASL command line tool
 
-Currently this does not use any of the FSL python libraries. Possible improvements would be:
-  - Use props library to hold run options and use the signalling mechanisms to communicate
-    values. The built-in widget builder does not seem to be flexible enough however.
-  - Use fsleyes embedded widget as the preview for a nicer, more interactive data preview
+Currently this does not use the GUI system from the FSL python libraries.
+Possible improvements would include:
 
-Requirements:
-  - wxpython 
-  - matplotlib
-  - numpy
-  - nibabel
+    - Use props library to hold run options and use the signalling mechanisms to communicate
+    values. The built-in widget builder does not seem to be flexible enough however.
+    - Use fsleyes embedded widget as the preview for a nicer, more interactive data preview
+
+Requirements (beyond OXASL requirements):
+    - wxpython
+    - matplotlib
 
 Copyright (c) 2019 University of Oxford
 """
@@ -63,14 +63,14 @@ class AslGui(wx.Frame):
         self.run_panel.SetSizer(runsizer)
         main_vsizer.Add(self.run_panel, 0, wx.EXPAND)
         self.run_panel.Layout()
-        
+
         main_panel.SetSizer(main_vsizer)
-        
+
         self.run = AslRun(self, self.run_btn, self.run_label)
         setattr(self.run, "preview", self.preview)
         tab_cls = [AslInputOptions, StructureTab, AslCalibration, AslDistCorr, AslAnalysis,]
         tabs = [cls(notebook, idx, len(tab_cls)) for idx, cls in enumerate(tab_cls)]
-        
+
         for tab in tabs:
             notebook.AddPage(tab, tab.title)
             setattr(tab, "run", self.run)
@@ -78,12 +78,16 @@ class AslGui(wx.Frame):
             setattr(self.run, tab.name, tab)
             setattr(self.preview, tab.name, tab)
             for tab2 in tabs:
-                if tab != tab2: setattr(tab, tab2.name, tab2)
+                if tab != tab2:
+                    setattr(tab, tab2.name, tab2)
             tab.update()
 
         self.Layout()
 
 def main():
+    """
+    Program entry point
+    """
     app = wx.App(redirect=False)
     top = AslGui()
     top.Show()
