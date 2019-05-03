@@ -14,11 +14,14 @@ import nibabel as nib
 import wx
 from wx.lib.pubsub import pub
 
-from oxasl import AslImage, Workspace
+from oxasl import Workspace
 from oxasl.oxford_asl import oxasl
 from oxasl.gui.widgets import OptionError
 
 class LogWriter():
+    """
+    File-like interface to send OXASL log output to the GUI output window
+    """
     def write(self, line):
         wx.CallAfter(pub.sendMessage, "run_stdout", line=line)
 
@@ -26,6 +29,9 @@ class LogWriter():
         pass
 
 class OxaslRunner(Thread):
+    """
+    Runs OXASL pipeline in a background thread
+    """
     def __init__(self, options):
         Thread.__init__(self)
         self.options = options
@@ -52,31 +58,44 @@ class AslRun(wx.Frame):
         self.run_btn.Bind(wx.EVT_BUTTON, self.dorun)
         self.run_label = run_label
         self.preview_data = None
-    
+
         self.sizer = wx.BoxSizer(wx.VERTICAL)
         self.output_text = wx.TextCtrl(self, style=wx.TE_READONLY | wx.TE_MULTILINE)
         font = wx.Font(8, wx.TELETYPE, wx.NORMAL, wx.NORMAL)
         self.output_text.SetFont(font)
         self.sizer.Add(self.output_text, 1, flag=wx.EXPAND)
-            
+
         self.SetSizer(self.sizer)
         self.Bind(wx.EVT_CLOSE, self.close)
         pub.subscribe(self.write_output, "run_stdout")
         pub.subscribe(self.finished, "run_finished")
 
     def write_output(self, line):
+        """
+        Write a line onto the log output window
+        """
         self.output_text.AppendText(line)
 
     def close(self, _):
+        """
+        Hide the log output window
+        """
         self.Hide()
 
     def finished(self, retcode):
+        """
+        Called by background thread when pipeline has finished (successful or not)
+        """
         if retcode != 0:
             self.write_output("\nWARNING: command failed\n")
         self.update()
 
     def dorun(self, _):
-        if self.options: 
+        """
+        When 'Run' button clicked, run the pipeline displaying the output in the
+        log window
+        """
+        if self.options:
             self.Show()
             self.Raise()
             self.output_text.Clear()
@@ -96,10 +115,10 @@ class AslRun(wx.Frame):
             self.run_label.SetForegroundColour(wx.Colour(0, 128, 0))
             self.run_label.SetLabel("Ready to Go")
             self.run_btn.Enable(True)
-        except (OptionError, ValueError, nib.filebasedimages.ImageFileError) as e:
+        except (OptionError, ValueError, nib.filebasedimages.ImageFileError) as exc:
             self.run_btn.Enable(False)
             self.run_label.SetForegroundColour(wx.Colour(255, 0, 0))
-            self.run_label.SetLabel(str(e))
+            self.run_label.SetLabel(str(exc))
         except:
             # Any other exception is a program bug - report it to STDERR
             self.run_btn.Enable(False)
