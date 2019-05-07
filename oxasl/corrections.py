@@ -27,6 +27,7 @@ Copyright (c) 2008-2013 Univerisity of Oxford
 """
 from __future__ import unicode_literals
 
+import os
 import tempfile
 import shutil
 
@@ -287,14 +288,14 @@ def get_motion_correction(wsp):
         wsp.log.write(" - Using user-specified regfrom as reference\n")
         ref_source = "User specified: %s" % (wsp.input.regfrom.name)
         mcflirt_result = fsl.mcflirt(wsp.input.asldata, reffile=wsp.input.regfrom, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
-        mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
+        mats = [mcflirt_result[os.path.join("out.mat", "MAT_%04i" % vol)] for vol in range(wsp.asldata.shape[3])]
     elif wsp.input.calib is not None:
         wsp.log.write(" - Using calibration image as reference\n")
         ref_source = "Calibration image"
         wsp.moco.ref = single_volume(wsp, wsp.input.calib)
         wsp.moco.input = wsp.input.asldata
         mcflirt_result = fsl.mcflirt(wsp.moco.input, reffile=wsp.moco.ref, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
-        mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
+        mats = [mcflirt_result[os.path.join("out.mat", "MAT_%04i" % vol)] for vol in range(wsp.asldata.shape[3])]
 
         # To reduce interpolation of the ASL data change the transformations so that we end up in the space of the central volume of asldata
         wsp.reg.asl2calib = mats[int(float(len(mats))/2)]
@@ -307,7 +308,7 @@ def get_motion_correction(wsp):
         wsp.log.write(" - Using ASL data middle volume as reference\n")
         ref_source = "ASL data middle volume: %i" % int(float(wsp.asldata.shape[3])/2)
         mcflirt_result = fsl.mcflirt(wsp.input.asldata, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
-        mats = [mcflirt_result["out.mat/MAT_%04i" % vol] for vol in range(wsp.asldata.shape[3])]
+        mats = [mcflirt_result[os.path.join("out.mat", "MAT_%04i" % vol)] for vol in range(wsp.asldata.shape[3])]
         
     # Convert motion correction matrices into single (4*nvols, 4) matrix - convenient for writing
     # to file, and same form that applywarp expects
