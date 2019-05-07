@@ -1,7 +1,6 @@
 """
-Subclass of fsl.data.image.Image which represents ASL data
+Classes for representing ASL data and constructing instances from command line parameters
 """
-
 import sys
 import warnings
 import collections
@@ -45,7 +44,13 @@ class AslImageOptions(OptionCategory):
 
 def summary(img, log=sys.stdout):
     """
-    Write a summary of the data to a file stream
+    Write a summary of an Image to a stream
+
+    For an AslImage the ``summary`` method is used which displays all the ASL data in human
+    readable form. For generic Image objects just basic information is displayed
+
+    :param img: fsl.data.image.Image object which may or may not be an AslImage
+    :param log: Stream-like object - default is ``sys.stdout``
     """
     log.write("%s:\n" % (img.name.ljust(30)))
     if hasattr(img, "summary"):
@@ -53,14 +58,24 @@ def summary(img, log=sys.stdout):
 
 def data_order(iaf, ibf, order):
     """
-    Determine the data format and ordering from options
+    Determine the data format and ordering from ``iaf`` and ``ibf`` options
 
-    :return: Tuple of:
-               - IAF (ASL format, 'tc', 'ct', 'diff', 've' or 'mp')
-               - ordering (sequence of 2 or three chars, 'l'=labelling images,
-                 'r'=repeats, 't'=TIs/PLDs). The characters are in order from
-                 fastest to slowest varying.
-               - Boolean indicating whether the block format needed to be guessed
+    If ``iaf`` is not specified (None or empty string), TC pairs are specified if the
+    ``order`` parameter is given and contains the ``l`` character. Otherwise differenced
+    data is assumed.
+
+    If neither ``ibf`` nor ``order`` are specified, ``ibf=rpt`` is guessed.
+
+    If ``iaf`` is not ``diff`` and ``order`` does not include the ``l` character it is assumed
+    that the encoded images (e.g. TC pairs) are the fastest varying.
+
+    If any parameters had to be guessed (rather than inferred from other information) a 
+    warning is output.
+
+    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've' or 'mp'), ordering (sequence of 
+             2 or three chars, 'l'=labelling images, 'r'=repeats, 't'=TIs/PLDs. The characters 
+             are in order from fastest to slowest varying), Boolean indicating whether the block 
+             format needed to be guessed
     """
     if not iaf:
         if order is not None and "l" in order:
@@ -107,8 +122,7 @@ class AslImage(Image):
     An AslImage contains information about the structure of the data enabling it to perform
     operations such as reordering and label/control differencing.
 
-    As a minimum you must provide a means of determining the number of TIs/PLDs in the data. 
-
+    As a *minimum* you must provide a means of determining the number of TIs/PLDs in the data. 
     Specifying the data format and ordering explicitly is recommended, but a default ordering will be
     used (with a warning) if you do not.
 
@@ -120,7 +134,7 @@ class AslImage(Image):
       - ``r`` - Repeats
 
       The sequence is in order from fastest varying (innermost grouping) to slowest varying (outermost
-      grouping). If ``p/P`` is not included this describes data which is already differenced.
+      grouping). If ``l`` is not included this describes data which is already differenced.
 
     2. Specifying the ``ibf`` option
       - ``ibf`` - ``rpt`` Blocked by repeats, i.e. first repeat of all TIs, followed by second repeat of all TIs...
@@ -129,21 +143,25 @@ class AslImage(Image):
     
     The data format is defined using the ``iaf`` parameter:
 
-      - ``iaf`` - ``tc`` = tag then control, ``ct`` = control then tag, ``mp`` = multiphase, ``ve`` = vessel encoded
+      - ``iaf`` - ``tc`` = tag then control, ``ct`` = control then tag, ``mp`` = multiphase, 
+        ``ve`` = vessel encoded, ``diff`` = already differenced
 
-    Attributes:
-
-      ``nvols`` - Number of volumes in data
-      ``iaf`` - Data format - see above
-      ``order`` - Data ordering string - see above
-      ``ntc`` - Number of labelling images in data (e.g. 2 for TC pairs, 1 for differenced data)
-      ``phases`` - List of phases for multiphase data (``iaf='mp'``)
-      ``ntis`` - Number of TIs/PLDs
-      ``tis`` - Optional list of TIs
-      ``plds`` - Optional list of PLDs
-      ``have_plds`` - True if PLDs were provided
-      ``tau`` - Bolus durations - one per TI/PLD. If ``have_plds`` is True, tis are derived by adding the bolus duration to the PLDs
-      ``rpts`` - Repeats, one value per TI (may be given as a constant but always stored as list)
+    :ivar nvols:  Number of volumes in data
+    :ivar iaf:    Data format - see above
+    :ivar order:  Data ordering string - see above
+    :ivar ntc:    Number of labelling images in data (e.g. 2 for TC pairs, 1 for differenced data,
+                  for vessel encoded or multiphase data the number of encoding cycles/phases)
+    :ivar casl:   If True, acquisition was CASL/pCASL rather than PASL
+    :ivar phases: List of phases for multiphase data (``iaf='mp'``)
+    :ivar ntis:   Number of TIs/PLDs
+    :ivar tis:    Optional list of TIs
+    :ivar plds:    Optional list of PLDs
+    :ivar have_plds: True if PLDs were provided rather than TIs
+    :ivar tau:    Bolus durations - one per TI/PLD. If ``have_plds`` is True, tis are derived by adding the bolus duration to the PLDs
+    :ivar rpts:   Repeats, one value per TI (may be given as a constant but always stored as list)
+    :ivar slicedt: Increase in TI/PLD per slice in z dimension for 2D acquisitions (default: 0)
+    :ivar sliceband: Number of slices per band for multiband acquisitions (default: None)
+    :ivar artsupp: If True, data was acquired with arterial suppression
     """
   
     DIFFERENCED = 0
@@ -425,6 +443,12 @@ class AslImage(Image):
         Extract the subset of data for a single TI/PLD
 
         FIXME will not correctly set have_plds flag in output if input has PLDs
+
+        :param ti_idx: Index of the TI/PLD required starting from 0
+        :param order: If specified the ordering string for the returned data
+        :param name: Optional name for returned image. Defaults to original name with
+                     suffix ``_ti<n>`` where ``<n>`` is the TI/PLD index
+        :return: AslImage instance containing data only for the selected TI/PLD
         """
         if order is None:
             if self.iaf == "diff":
@@ -465,6 +489,11 @@ class AslImage(Image):
         Perform tag-control subtraction. 
         
         Data will be reordered so the tag/control pairs are together
+
+        Note that currently differencing is not supported for multiphase or vessel encoded data.
+        
+        :param name: Optional name for returned image. Defaults to original name with suffix ``_diff``
+        :return: AslImage instance containing differenced data 
         """
         if self.iaf == "diff":
             # Already differenced
@@ -493,6 +522,8 @@ class AslImage(Image):
         """
         Calculate the mean ASL signal across all repeats
 
+        :param name: Optional name for returned image. Defaults to original name with suffix ``_mean``
+        :param diff: If False do not difference the data before taking the mean (default: True)
         :return: Label-control subtracted AslImage with one volume per TI/PLD
         """
         if diff and self.ntc > 1:
@@ -534,7 +565,8 @@ class AslImage(Image):
 
         This takes a naive mean without differencing or grouping by TIs
 
-        :return: 3D Image. Not an AslImage as timing information lost
+        :param name: Optional name for returned image. Defaults to original name with suffix ``_mean``
+        :return: 3D fsl.data.image.Image. Not an AslImage as timing information has been lost
         """
         meandata = self.data
         if meandata.ndim > 3:
@@ -548,7 +580,8 @@ class AslImage(Image):
         Generate a perfusion weighted image by taking the mean over repeats and then
         the mean over TIs
 
-        :return: 3D Image. Not an AslImage as timing information lost
+        :param name: Optional name for returned image. Defaults to original name with suffix ``_pwi``
+        :return: 3D fsl.data.image.Image. Not an AslImage as timing information lost
         """
         meandata = self.diff().mean_across_repeats().data
         if meandata.ndim > 3:
@@ -604,6 +637,8 @@ class AslImage(Image):
     def summary(self, log=sys.stdout):
         """
         Write a summary of the data to a file stream
+
+        :param log: Stream-like object to write the summary to. Defaults to ``sys.stdout``
         """
         for key, value in self.metadata_summary().items():
             log.write("%s: %s\n" % (key.ljust(30), str(value)))
@@ -611,6 +646,10 @@ class AslImage(Image):
     def metadata_summary(self):
         """
         Generate a human-readable dictionary of metadata
+
+        :return: Dictionary mapping human readable metadata name to value (e.g. 'Label type'
+                 might map to 'Label-control pairs'). The keys and values are not guaranteed
+                 to be fixed and should not be parsed - use the instance attributes instead.
         """
         md = collections.OrderedDict()
         md["Data shape"] = str(self.shape)
@@ -657,15 +696,15 @@ class AslImage(Image):
         use the existing information about TIs, repeats etc. If the number of volumes
         do not match a generic Image is returned instead
         
-        :param data: Numpy data for derived image
-        :param name: Name for new image (can be simple name or full filename)
-        :param suffix: If name not specified, construct by adding suffix to original image name
-
         Any further keyword parameters are passed to the AslImage constructor, overriding existing
         attributes, so this can be used to create a derived image with different numbers of 
         repeats, etc, provided the data is consistent with this.
 
-        If the AslImage constructor fails, a basic fsl.data.image.Image is returned.
+        :param data: Numpy data for derived image
+        :param name: Name for new image (can be simple name or full filename)
+        :param suffix: If name not specified, construct by adding suffix to original image name
+        :return: derived AslImage. However if the AslImage constructor fails, a basic 
+                 fsl.data.image.Image is returned and a warning is output.
         """
         if name is None:
             name = self.name
