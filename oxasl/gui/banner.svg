@@ -16,9 +16,34 @@
    version="1.1"
    id="svg8"
    inkscape:version="0.92.3 (2405546, 2018-03-11)"
-   sodipodi:docname="banner.svg">
+   sodipodi:docname="banner.svg"
+   inkscape:export-filename="/home/ibmeuser/ibmecode/build_scripts/build/oxasl/oxasl/gui/banner.png"
+   inkscape:export-xdpi="96"
+   inkscape:export-ydpi="96">
   <defs
-     id="defs2" />
+     id="defs2">
+    <linearGradient
+       inkscape:collect="always"
+       id="linearGradient4619">
+      <stop
+         style="stop-color:#394779;stop-opacity:1"
+         offset="0"
+         id="stop4615" />
+      <stop
+         style="stop-color:#e8e8e8;stop-opacity:1"
+         offset="1"
+         id="stop4617" />
+    </linearGradient>
+    <linearGradient
+       inkscape:collect="always"
+       xlink:href="#linearGradient4619"
+       id="linearGradient4621"
+       x1="99.156998"
+       y1="286.28302"
+       x2="38.95216"
+       y2="286.41666"
+       gradientUnits="userSpaceOnUse" />
+  </defs>
   <sodipodi:namedview
      id="base"
      pagecolor="#ffffff"
@@ -27,7 +52,7 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="1.979899"
-     inkscape:cx="400"
+     inkscape:cx="247.4183"
      inkscape:cy="54.923727"
      inkscape:document-units="mm"
      inkscape:current-layer="layer1"
@@ -37,7 +62,8 @@
      inkscape:window-height="1145"
      inkscape:window-x="67"
      inkscape:window-y="27"
-     inkscape:window-maximized="1" />
+     inkscape:window-maximized="1"
+     inkscape:pagecheckerboard="true" />
   <metadata
      id="metadata5">
     <rdf:RDF>
@@ -55,9 +81,18 @@
      inkscape:groupmode="layer"
      id="layer1"
      transform="translate(0,-275.83332)">
+    <rect
+       id="rect3808"
+       width="98.95417"
+       height="21.166666"
+       x="0.13363476"
+       y="275.83331"
+       style="fill:url(#linearGradient4621);fill-opacity:1;stroke-width:0.27091068"
+       inkscape:export-xdpi="96"
+       inkscape:export-ydpi="96" />
     <image
-       y="276.76422"
-       x="1.0768694"
+       y="276.36249"
+       x="1.1919681"
        id="image3786"
        xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAfQAAADzCAYAAABwpOSGAAAABHNCSVQICAgIfAhkiAAAAAlwSFlz
 AAAOSAAADkgBa28N/wAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAACAASURB
@@ -490,7 +525,18 @@ ymi+oMwStPSrUkopFdPyaDqYfwEMi97QlFJKKRWIdTTMNV8BJERzUEoppZQKTBpwGG8wP4YWjlFK
 KaVarWnA20B6tAeilFKtzf8D1U6sJwCfP6AAAAAASUVORK5CYII=
 "
        preserveAspectRatio="none"
-       height="19.476374"
-       width="40.074844" />
+       height="18.140026"
+       width="37.325157" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-weight:normal;font-size:10.58333302px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.26458332"
+       x="15.635268"
+       y="294.99011"
+       id="text4625"><tspan
+         sodipodi:role="line"
+         id="tspan4623"
+         x="15.635268"
+         y="294.99011"
+         style="font-style:italic;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:3.17499995px;font-family:'Bitstream Charter';-inkscape-font-specification:'Bitstream Charter, Italic';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-feature-settings:normal;text-align:start;writing-mode:lr-tb;text-anchor:start;stroke-width:0.26458332">Bayesian analysis for Arterial Spin Labelling MRI</tspan></text>
   </g>
 </svg>
