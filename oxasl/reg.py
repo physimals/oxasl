@@ -396,7 +396,14 @@ def reg_bbr(wsp):
     struc.segment(wsp)
 
     wsp.log.write("  - BBR registration using epi_reg\n")
-    result = epi_reg(epi=wsp.reg.regfrom, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight, log=wsp.fsllog)
+    # Windows can't run epi_reg as it's a batch script. Use our experimental python
+    # implementation but use the standard epi_reg on other platforms until the python
+    # version is better tested 
+    if sys.platform.startswith("win"):
+        import oxasl.epi_reg as pyepi
+        result = pyepi.epi_reg(wsp, wsp.reg.regfrom)
+    else:
+        result = epi_reg(epi=wsp.reg.regfrom, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight, log=wsp.fsllog)
     return result["out.nii.gz"], result["out"]
 
     #OUTPUT
@@ -462,7 +469,7 @@ def main():
 
         options, _ = parser.parse_args(sys.argv)
         wsp = Workspace(**vars(options))
-        
+
         if not options.regfrom:
             sys.stderr.write("Input file not specified\n")
             parser.print_help()

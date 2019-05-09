@@ -9,7 +9,7 @@ function generates corrected images with the minimum of interpolation.
 Currently four sources of transformation exist:
 
  - Motion correction of the ASL data. This generates a series of linear (rigid body)
-   transformations in ASL space, one for each ASL volume. If calibration data is also 
+   transformations in ASL space, one for each ASL volume. If calibration data is also
    present a calibration->ASL transform is also generated as part of this process
 
  - Fieldmap-based distortion correction. This generates a nonlinear warp image
@@ -28,6 +28,7 @@ Copyright (c) 2008-2013 Univerisity of Oxford
 from __future__ import unicode_literals
 
 import os
+import sys
 import tempfile
 import shutil
 
@@ -96,12 +97,12 @@ def single_volume(wsp, img, moco=True, discard_first=True):
             if discard_first and img.shape[3] > 1:
                 wsp.log.write("   - Removing first volume to ensure data is in steady state\n")
                 img = Image(img.data[..., :-1], header=img.header)
-            
+
             if moco and img.shape[3] > 1:
                 if moco:
                     wsp.log.write("   - Motion correcting\n")
                     img = fsl.mcflirt(img, out=fsl.LOAD, log=wsp.fsllog)["out"]
-    
+
             wsp.log.write("   - Taking mean across time axis\n")
             img = Image(np.mean(img.data, axis=-1), header=img.header)
 
@@ -119,7 +120,7 @@ def get_cblip_correction(wsp):
      - ``calib`` : Calibration image
      - ``cblip`` : Phase-encode-reversed calibration image
      - ``echospacing`` :
-     - ``pedir`` : 
+     - ``pedir`` :
 
     Optional workspace attributes
     -----------------------------
@@ -128,7 +129,7 @@ def get_cblip_correction(wsp):
     ----------------------------
 
      - ``cblip_warp``    : CBLIP Distortion correction warp image
-     
+
     """
     if wsp.topup is not None:
         return
@@ -156,7 +157,7 @@ def get_cblip_correction(wsp):
     dimsize = wsp.asldata.shape[dim_idx[wsp.pedir]]
     my_topup_params[:, 3] = wsp.echospacing * (dimsize - 1)
     wsp.topup.params = my_topup_params
-    
+
     # Run TOPUP to calculate correction
     wsp.topup.calib_blipped = Image(np.stack((wsp.calib.data, wsp.cblip.data), axis=-1), header=wsp.calib.header)
     topup_result = fsl.topup(imain=wsp.topup.calib_blipped, datain=wsp.topup.params, config="b02b0.cnf", out=fsl.LOAD, iout=fsl.LOAD, fout=fsl.LOAD, log=wsp.fsllog)
@@ -221,15 +222,23 @@ def get_fieldmap_correction(wsp):
         "echospacing" : wsp.echospacing,
         "nofmapreg" : wsp.ifnone("nofmapreg", False),
     }
-    
-    result = epi_reg(epi=wsp.asldata.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, log=wsp.fsllog, **epi_reg_opts)
+
+    # Windows can't run epi_reg as it's a batch script. Use our experimental python
+    # implementation but use the standard epi_reg on other platforms until the python
+    # version is better tested
+    if sys.platform.startswith("win"):
+        import oxasl.epi_reg as pyepi
+        result = pyepi.epi_reg(wsp, epi=wsp.reg.regfrom, **epi_reg_opts)
+    else:
+        result = epi_reg(epi=wsp.asldata.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, log=wsp.fsllog, **epi_reg_opts)
+
     wsp.fieldmap.warp_struc = result["out_warp"]
     wsp.fieldmap.asl2struc = result["out"]
     wsp.fieldmap.struc2asl = np.linalg.inv(wsp.fieldmap.asl2struc)
 
     result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.nativeref, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True, log=wsp.fsllog)
     wsp.fieldmap.warp = result["out"]
-        
+
     page = wsp.report.page("fmap")
     page.heading("Fieldmap distortion correction", level=0)
     page.text("PE direction: %s" % wsp.pedir)
@@ -243,14 +252,14 @@ def get_fieldmap_correction(wsp):
 def get_motion_correction(wsp):
     """
     Calculate motion correction transforms for ASL data
-    
+
     Note simple motion correction of multi-volume calibration data is done in preprocessing.
 
     The reference volume for motion correction is the calibration image, if supplied, or
-    otherwise the middle volume of the ASL data is used. 
-    
+    otherwise the middle volume of the ASL data is used.
+
     If the calibration image is used, the inverse of the middle ASL volume -> calibration
-    transform is applied to each transform matrix. This ensures that the middle volume of 
+    transform is applied to each transform matrix. This ensures that the middle volume of
     the ASL data is unchanged and interpolation on the other volumes is also minimised.
     In this case, all calibration images are also themselves transformed to bring them in
     to ASL middle volume space.
@@ -282,7 +291,7 @@ def get_motion_correction(wsp):
 
     wsp.sub("moco")
     wsp.log.write("\nCalculating Motion Correction\n")
-    # If available, use the calibration image as reference since this will be most consistent if the data has a range 
+    # If available, use the calibration image as reference since this will be most consistent if the data has a range
     # of different TIs and background suppression etc. This also removes motion effects between asldata and calibration image
     if wsp.input.regfrom is not None:
         wsp.log.write(" - Using user-specified regfrom as reference\n")
@@ -301,7 +310,7 @@ def get_motion_correction(wsp):
         wsp.reg.asl2calib = mats[int(float(len(mats))/2)]
         wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
         mats = [np.dot(wsp.reg.calib2asl, mat) for mat in mats]
-        
+
         wsp.log.write("   ASL middle volume->Calib:\n%s\n" % str(wsp.reg.asl2calib))
         wsp.log.write("   Calib->ASL middle volume:\n%s\n" % str(wsp.reg.calib2asl))
     else:
@@ -309,7 +318,7 @@ def get_motion_correction(wsp):
         ref_source = "ASL data middle volume: %i" % int(float(wsp.asldata.shape[3])/2)
         mcflirt_result = fsl.mcflirt(wsp.input.asldata, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         mats = [mcflirt_result[os.path.join("out.mat", "MAT_%04i" % vol)] for vol in range(wsp.asldata.shape[3])]
-        
+
     # Convert motion correction matrices into single (4*nvols, 4) matrix - convenient for writing
     # to file, and same form that applywarp expects
     wsp.moco.mc_mats = np.concatenate(mats, axis=0)
@@ -330,7 +339,7 @@ def get_motion_correction(wsp):
         ["Absolute maximum translation", "%.3g mm (volume %i)" % (np.max(abstrans), np.argmax(abstrans))],
         ["Mean rotation", "%.3g \N{DEGREE SIGN}" % np.mean(rot)],
         ["Rotation std.dev.", "%.3g \N{DEGREE SIGN}" % np.std(rot)],
-        ["Absolute maximum rotation", "%.3g \N{DEGREE SIGN} (volume %i)" % (np.max(absrot), np.argmax(absrot))],       
+        ["Absolute maximum rotation", "%.3g \N{DEGREE SIGN} (volume %i)" % (np.max(absrot), np.argmax(absrot))],
     ])
     page.image("moco_trans", LineGraph(trans, "Volume number", "Translation (mm)"))
     page.image("moco_rot", LineGraph(rot, "Volume number", "Rotation relative to reference (\N{DEGREE SIGN})"))
@@ -338,7 +347,7 @@ def get_motion_correction(wsp):
 def get_sensitivity_correction(wsp):
     """
     Get sensitivity correction image
-    
+
     Required workspace attributes
     -----------------------------
 
@@ -350,7 +359,7 @@ def get_sensitivity_correction(wsp):
      - ``isen`` : User supplied sensitivity image
      - ``cact`` : Calibration image. Used in conjunction with ``cref`` to calculate sensitivity map
      - ``calib`` : Calibration image. Used as alternative to cact provided ``mode`` is ``longtr``
-     - ``cref`` : Calibration reference image 
+     - ``cref`` : Calibration reference image
      - ``senscorr_auto`` : If True, automatically calculate sensitivity correction using FAST
      - ``senscorr_off`` If True, do not apply sensitivity correction
 
@@ -444,7 +453,7 @@ def apply_corrections(wsp):
     wsp.corrected.cref = single_volume(wsp, wsp.input.cref)
     wsp.corrected.cact = single_volume(wsp, wsp.input.cact)
     wsp.corrected.cblip = single_volume(wsp, wsp.input.cblip)
-    
+
     wsp.log.write(" - Data transformations\n")
     if wsp.moco is not None:
         wsp.log.write("   - Using motion correction\n")
@@ -453,19 +462,19 @@ def apply_corrections(wsp):
     if wsp.fieldmap is not None:
         wsp.log.write("   - Using fieldmap distortion correction\n")
         warps.append(wsp.fieldmap.warp)
-    
+
     if wsp.gdc_warp:
         wsp.log.write("   - Using user-supplied GDC warp\n")
         warps.append(wsp.gdc_warp)
-        
-    if wsp.moco is not None: 
+
+    if wsp.moco is not None:
         moco_mats = wsp.moco.mc_mats
 
     if warps:
         kwargs = {}
         for idx, warp in enumerate(warps):
             kwargs["warp%i" % (idx+1)] = warp
-                
+
         wsp.log.write("   - Converting all warps to single transform and extracting Jacobian\n")
         result = fsl.convertwarp(ref=wsp.nativeref, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
         wsp.corrected.total_warp = result["out"]
@@ -475,7 +484,7 @@ def apply_corrections(wsp):
         wsp.corrected.warp_coef = fnirtfileutils(wsp.corrected.total_warp, outformat="spline", out=fsl.LOAD, log=wsp.fsllog)["out"]
         jacobian = fnirtfileutils(wsp.corrected.warp_coef, jac=fsl.LOAD, log=wsp.fsllog)["jac"]
         wsp.corrected.jacobian = Image(jacobian.data, header=wsp.corrected.total_warp.header)
-        
+
     if not warps and moco_mats is None:
         wsp.log.write("   - No corrections to apply\n")
     else:
@@ -488,7 +497,7 @@ def apply_corrections(wsp):
         if wsp.input.calib is not None:
             wsp.log.write("   - Applying to calibration data\n")
             wsp.corrected.calib = correct_img(wsp, wsp.corrected.calib, wsp.reg.calib2asl)
-        
+
             if wsp.cref is not None:
                 wsp.corrected.cref = correct_img(wsp, wsp.corrected.cref, wsp.reg.calib2asl)
             if wsp.cblip is not None:
@@ -521,7 +530,7 @@ def apply_corrections(wsp):
 
     if wsp.senscorr and wsp.corrected.calib:
         # Apply sensitivity correction to calibration image only. In principle we could
-        # apply it to the ASL image, but in keeping with OXFORD_ASL we apply it to the 
+        # apply it to the ASL image, but in keeping with OXFORD_ASL we apply it to the
         # perfusion maps instead at output time. Note that this means the sensitivity
         # correction cancels out of the calibrated outputs when using voxelwise calibration
         wsp.corrected.calib, = apply_sensitivity_correction(wsp, wsp.corrected.calib)
@@ -529,7 +538,7 @@ def apply_corrections(wsp):
 def correct_img(wsp, img, linear_mat):
     """
     Apply combined warp/linear transformations to an image
-    
+
     :param img: fsl.data.image.Image to correct
     :param linear_mat: img->ASL space linear transformation matrix.
     :return: Corrected Image
