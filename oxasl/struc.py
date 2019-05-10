@@ -85,10 +85,10 @@ def init(wsp):
         # FIXME - for now get the mask by binarising the brain image but gives slightly
         # different results compared to using the mask returned by BET
         wsp.structural.brain_mask = Image((wsp.structural.brain.data != 0).astype(np.int), header=wsp.structural.struc.header)
-        
+
     if wsp.structural.struc is not None:
         segment(wsp)
-    
+
 def segment(wsp):
     """
     Segment the structural image
@@ -106,7 +106,7 @@ def segment(wsp):
             wsp.structural.csf_pv = Image(os.path.join(wsp.fslanat, "T1_fast_pve_0"))
             wsp.structural.gm_pv = Image(os.path.join(wsp.fslanat, "T1_fast_pve_1"))
             wsp.structural.wm_pv = Image(os.path.join(wsp.fslanat, "T1_fast_pve_2"))
-        
+
             try:
                 wsp.structural.bias = Image(os.path.join(wsp.fslanat, "T1_fast_bias"))
                 wsp.log.write(" - Bias field extracted sucessfully\n")
@@ -132,7 +132,7 @@ def segment(wsp):
         wsp.structural.csf_seg = Image((wsp.structural.csf_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
         wsp.structural.gm_seg = Image((wsp.structural.gm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
         wsp.structural.wm_seg = Image((wsp.structural.wm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
-        
+
         page.heading("Segmentation image", level=1)
         page.text("CSF partial volume")
         page.image("csf_pv", LightboxImage(wsp.structural.csf_pv, bgimage=wsp.structural.brain))
