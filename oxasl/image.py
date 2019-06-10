@@ -69,12 +69,12 @@ def data_order(iaf, ibf, order):
     If ``iaf`` is not ``diff`` and ``order`` does not include the ``l` character it is assumed
     that the encoded images (e.g. TC pairs) are the fastest varying.
 
-    If any parameters had to be guessed (rather than inferred from other information) a 
+    If any parameters had to be guessed (rather than inferred from other information) a
     warning is output.
 
-    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've' or 'mp'), ordering (sequence of 
-             2 or three chars, 'l'=labelling images, 'r'=repeats, 't'=TIs/PLDs. The characters 
-             are in order from fastest to slowest varying), Boolean indicating whether the block 
+    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've' or 'mp'), ordering (sequence of
+             2 or three chars, 'l'=labelling images, 'r'=repeats, 't'=TIs/PLDs. The characters
+             are in order from fastest to slowest varying), Boolean indicating whether the block
              format needed to be guessed
     """
     if not iaf:
@@ -122,12 +122,12 @@ class AslImage(Image):
     An AslImage contains information about the structure of the data enabling it to perform
     operations such as reordering and label/control differencing.
 
-    As a *minimum* you must provide a means of determining the number of TIs/PLDs in the data. 
+    As a *minimum* you must provide a means of determining the number of TIs/PLDs in the data.
     Specifying the data format and ordering explicitly is recommended, but a default ordering will be
     used (with a warning) if you do not.
 
-    Ordering can be defined in two ways: 
-    
+    Ordering can be defined in two ways:
+
     1. Setting the ``order`` parameters to a sequence of characters (case insensitive):
       - ``l`` - Labelling images (e.g. label/control pairs, sequence of multi-phases, vessel encoding cycles)
       - ``t`` - TIs/PLDs
@@ -140,10 +140,10 @@ class AslImage(Image):
       - ``ibf`` - ``rpt`` Blocked by repeats, i.e. first repeat of all TIs, followed by second repeat of all TIs...
                   ``tis`` Blocked by TIs/PLDs, i.e. all repeats of first TI, followed by all repeats of second TI...
                   When using --ibf, the labelling images (e.g. label/control pairs) are always adjacent
-    
+
     The data format is defined using the ``iaf`` parameter:
 
-      - ``iaf`` - ``tc`` = tag then control, ``ct`` = control then tag, ``mp`` = multiphase, 
+      - ``iaf`` - ``tc`` = tag then control, ``ct`` = control then tag, ``mp`` = multiphase,
         ``ve`` = vessel encoded, ``diff`` = already differenced
 
     :ivar nvols:  Number of volumes in data
@@ -163,7 +163,7 @@ class AslImage(Image):
     :ivar sliceband: Number of slices per band for multiband acquisitions (default: None)
     :ivar artsupp: If True, data was acquired with arterial suppression
     """
-  
+
     DIFFERENCED = 0
     TC_PAIRS = 1
     MULTIPHASE = 2
@@ -177,7 +177,7 @@ class AslImage(Image):
         img_kwargs = ("header", "xform", "loadData", "calcRange", "indexed", "threaded", "dataSource")
         img_args = dict([(k, v) for k, v in kwargs.items() if k in img_kwargs])
         Image.__init__(self, image, name=name, **img_args)
-        
+
         order = kwargs.pop("order", None)
         iaf = kwargs.pop("iaf", None)
         ibf = kwargs.pop("ibf", None)
@@ -189,7 +189,7 @@ class AslImage(Image):
         phases = kwargs.pop("phases", None)
         nphases = kwargs.pop("nphases", None)
         nenc = kwargs.pop("nenc", kwargs.pop("ntc", None))
-        
+
         if self.ndim not in (3, 4):
             raise ValueError("3D or 4D data expected")
 
@@ -215,7 +215,8 @@ class AslImage(Image):
             else:
                 phases = [pidx * 360 / nphases for pidx in range(nphases)]
 
-            if isinstance(phases, six.string_types): phases = [float(ph) for ph in phases.split(",")]
+            if isinstance(phases, six.string_types):
+                phases = [float(ph) for ph in phases.split(",")]
             phases = phases
             ntc = len(phases)
         elif self.iaf == "ve":
@@ -240,7 +241,7 @@ class AslImage(Image):
         if nplds is not None:
             ntis = nplds
             have_plds = True
-        
+
         if plds is not None:
             tis = plds
             have_plds = True
@@ -248,38 +249,42 @@ class AslImage(Image):
         if ntis is None and tis is None:
             raise ValueError("Number of TIs/PLDs not specified")
         elif tis is not None:
-            if isinstance(tis, six.string_types): tis = [float(ti) for ti in tis.split(",")]
+            if isinstance(tis, six.string_types):
+                tis = [float(ti) for ti in tis.split(",")]
             ntis = len(tis)
             if ntis is not None and len(tis) != ntis:
                 raise ValueError("Number of TIs/PLDs specified as: %i, but a list of %i TIs/PLDs was given" % (ntis, len(tis)))
 
         self.setMeta("ntis", int(ntis))
         self.setMeta("have_plds", have_plds)
-        if have_plds: 
+        if have_plds:
             self.setMeta("plds", tis)
         else:
             self.setMeta("tis", tis)
 
         if ibf_guessed and len(self.tis) > 1:
             warnings.warn("Data order was not specified for multi-TI data - assuming blocks of repeats")
-                
+
         # Determine the number of repeats (fixed or variable)
         #
         # Sets the attribute rpts (list, one per TI/PLD)
         if rpts is None:
-            # Calculate fixed number of repeats 
+            # Calculate fixed number of repeats
             if self.nvols % (self.ntc * self.ntis) != 0:
-                raise ValueError("Data contains %i volumes, inconsistent with %i TIs and %i labelling images" % (self.nvols, self.ntis, self.ntc))        
+                raise ValueError("Data contains %i volumes, inconsistent with %i TIs and %i labelling images" % (self.nvols, self.ntis, self.ntc))
             rpts = [int(self.nvols / (self.ntc * self.ntis))] * self.ntis
         else:
-            if isinstance(rpts, six.string_types): rpts = [int(rpt) for rpt in rpts.split(",")]
-            elif isinstance(rpts, (int, np.integer)): rpts = [rpts,]
+            if isinstance(rpts, six.string_types):
+                rpts = [int(rpt) for rpt in rpts.split(",")]
+            elif isinstance(rpts, (int, np.integer)):
+                rpts = [rpts,]
+
             if len(rpts) == 1:
                 rpts *= self.ntis
             elif len(rpts) != self.ntis:
-                raise ValueError("%i TIs specified, inconsistent with %i variable repeats" % (self.ntis, len(rpts)))        
+                raise ValueError("%i TIs specified, inconsistent with %i variable repeats" % (self.ntis, len(rpts)))
             elif sum(rpts) * self.ntc != self.nvols:
-                raise ValueError("Data contains %i volumes, inconsistent with %i labelling images and total of %i repeats" % (self.nvols, self.ntc, sum(rpts)))        
+                raise ValueError("Data contains %i volumes, inconsistent with %i labelling images and total of %i repeats" % (self.nvols, self.ntc, sum(rpts)))
         self.setMeta("rpts", rpts)
 
         # Bolus durations should be a sequence same length as TIs/PLDs
@@ -288,8 +293,10 @@ class AslImage(Image):
         taus = kwargs.pop("bolus", kwargs.pop("taus", kwargs.pop("tau", None)))
         if taus is None:
             taus = 1.8
-        if isinstance(taus, six.string_types): taus = [float(tau) for tau in taus.split(",")]
-        elif isinstance(taus, (float, int, np.integer)): taus = [float(taus),] * self.ntis
+        if isinstance(taus, six.string_types):
+            taus = [float(tau) for tau in taus.split(",")]
+        elif isinstance(taus, (float, int, np.integer)):
+            taus = [float(taus),] * self.ntis
 
         if len(taus) == 1:
             taus = taus * ntis
@@ -297,14 +304,14 @@ class AslImage(Image):
             raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs" % (len(taus), self.ntis))
         self.setMeta("taus", taus)
 
-        # Labelling type. CASL/pCASL normally associated with PLDs but can pass TIs instead. 
+        # Labelling type. CASL/pCASL normally associated with PLDs but can pass TIs instead.
         # However we would not expect PLDs for a non-CASL aquisition so this generates a warning
         #
         # If PLDs were provided, TIs are derived by adding the bolus duration to the PLDs
         #
         # Sets the attributes casl (bool), updates tis (list)
         casl = kwargs.pop("casl", None)
-        if casl is None: 
+        if casl is None:
             casl = self.have_plds
         if self.have_plds:
             if not casl:
@@ -344,7 +351,7 @@ class AslImage(Image):
     @property
     def nphases(self):
         return self.getMeta("ntc", None)
-        
+
     def get_vol_index(self, label_idx, ti_idx, rpt_idx, order=None):
         """
         Get the volume index for a specified label, TI and repeat index
@@ -358,7 +365,8 @@ class AslImage(Image):
         """
         if order is None:
             order = self.order
-        if len(order) < 3: order = "l" + order
+        if len(order) < 3:
+            order = "l" + order
 
         # Not yet found a simple way to do this which works for variable repeats
         # without crude iteration!
@@ -377,7 +385,7 @@ class AslImage(Image):
                 its[1] = 0
                 its[2] += 1
             if its[2] == self._get_ncomp(order[2], ti):
-                # Normally this is the end but we might have run out of 
+                # Normally this is the end but we might have run out of
                 # repeats but not run out of TIs
                 pass
             else:
@@ -389,14 +397,14 @@ class AslImage(Image):
 
     def _get_ncomp(self, comp_id, ti):
         ret = {"t": self.ntis, "r" : self.rpts[ti], "l" : self.ntc}
-        if comp_id in ret: 
+        if comp_id in ret:
             return ret[comp_id]
         else:
             raise RuntimeError("Unknown ordering character: %s" % comp_id)
 
     def reorder(self, out_order=None, iaf=None, name=None):
         """
-        Re-order ASL data 
+        Re-order ASL data
 
         The order is defined by a string in which
         r=repeats, l=labelling images, and t=tis/plds.
@@ -416,14 +424,14 @@ class AslImage(Image):
             raise ValueError("Data is not differenced but output_order does not contain labelling")
         elif iaf != self.iaf and (iaf not in ("tc", "ct") or self.iaf not in ("tc", "ct")):
             raise ValueError("Can't change data format from '%s' to '%s'" % (self.iaf, iaf))
-        
+
         input_data = self.data
         if input_data.ndim == 3:
             input_data = input_data[..., np.newaxis]
         output_data = np.zeros(input_data.shape, dtype=input_data.dtype)
         tags = range(self.ntc)
         for ti in range(self.ntis):
-            for rpt in range(self.rpts[ti]):    
+            for rpt in range(self.rpts[ti]):
                 for tag in tags:
                     if iaf != self.iaf:
                         # Change from TC to CT or vice versa
@@ -437,7 +445,7 @@ class AslImage(Image):
         if not name:
             name = self.name + "_reorder"
         return self.derived(image=output_data, name=name, iaf=iaf, order=out_order)
-        
+
     def single_ti(self, ti_idx, order=None, name=None):
         """
         Extract the subset of data for a single TI/PLD
@@ -479,21 +487,21 @@ class AslImage(Image):
             taus = self.taus[ti_idx]
         else:
             taus = None
-        
+
         if not name:
             name = self.name + "_ti%i" % ti_idx
         return self.derived(image=output_data, name=name, order=order, tis=tis, plds=plds, taus=taus, ntis=1, rpts=nrpts)
-        
+
     def diff(self, name=None):
         """
-        Perform tag-control subtraction. 
-        
+        Perform tag-control subtraction.
+
         Data will be reordered so the tag/control pairs are together
 
         Note that currently differencing is not supported for multiphase or vessel encoded data.
-        
+
         :param name: Optional name for returned image. Defaults to original name with suffix ``_diff``
-        :return: AslImage instance containing differenced data 
+        :return: AslImage instance containing differenced data
         """
         if self.iaf == "diff":
             # Already differenced
@@ -506,14 +514,14 @@ class AslImage(Image):
             # Re-order so that TC pairs are together with the tag first
             out_order = self.order.replace("l", "")
             reordered = self.reorder("l" + out_order, iaf="tc").data
-            
+
             for vol in range(int(self.nvols / 2)):
                 tag = 2*vol
                 ctrl = tag+1
                 output_data[..., vol] = reordered[..., ctrl] - reordered[..., tag]
-        
+
         out_order = self.order.replace("l", "")
-        
+
         if not name:
             name = self.name + "_diff"
         return self.derived(image=output_data, name=name, iaf="diff", order=out_order)
@@ -554,7 +562,7 @@ class AslImage(Image):
                 repeat_data = input_data[..., start:start+nrp]
                 output_data[..., label+data.ntc*ti] = np.mean(repeat_data, 3)
                 start += nrp
-        
+
         if not name:
             name = self.name + "_mean"
         return self.derived(image=output_data, name=name, iaf=data.iaf, order=orig_order, rpts=1)
@@ -589,7 +597,7 @@ class AslImage(Image):
         if not name:
             name = self.name + "_pwi"
         return Image(image=meandata, name=name, header=self.header)
-            
+
     def split_epochs(self, epoch_size, overlap=0, time_order=None):
         """
         Split ASL data into 'epochs' of a specified size, with optional overlap
@@ -597,7 +605,7 @@ class AslImage(Image):
         asldata = self.diff()
         if time_order is not None:
             asldata = asldata.reorder(time_order)
-        
+
         epoch = 0
         epoch_start = 0
         input_data = asldata.data
@@ -619,7 +627,7 @@ class AslImage(Image):
                             rpts[idx] += 1
             epoch_data = input_data[..., epoch_start:epoch_end]
             epoch_img = AslImage(image=epoch_data,
-                                 name=self.name + "_epoch%i" % epoch, 
+                                 name=self.name + "_epoch%i" % epoch,
                                  iaf=asldata.iaf, order=asldata.order,
                                  tis=tis, rpts=rpts,
                                  header=self.header).mean_across_repeats()
@@ -627,7 +635,7 @@ class AslImage(Image):
             ret.append(epoch_img)
             epoch += 1
             epoch_start += epoch_size - overlap
-            # Finish if start of next epoch is out of range or if current epoch 
+            # Finish if start of next epoch is out of range or if current epoch
             # ended at the last volume
             if epoch_start >= asldata.nvols or epoch_end == asldata.nvols:
                 break
@@ -642,7 +650,7 @@ class AslImage(Image):
         """
         for key, value in self.metadata_summary().items():
             log.write("%s: %s\n" % (key.ljust(30), str(value)))
-            
+
     def metadata_summary(self):
         """
         Generate a human-readable dictionary of metadata
@@ -654,7 +662,7 @@ class AslImage(Image):
         md = collections.OrderedDict()
         md["Data shape"] = str(self.shape)
 
-        if self.iaf == "tc": 
+        if self.iaf == "tc":
             label_type = "Label-control pairs"
         elif self.iaf == "ct":
             label_type = "Control-Label pairs"
@@ -687,7 +695,7 @@ class AslImage(Image):
         if self.artsupp:
             md["Arterial suppression"] = "Was used"
         return md
-        
+
     def derived(self, image, name=None, suffix="", **kwargs):
         """
         Create a derived ASL image based on this one, but with different data
@@ -695,15 +703,15 @@ class AslImage(Image):
         This is only possible if the number of volumes match, otherwise we cannot
         use the existing information about TIs, repeats etc. If the number of volumes
         do not match a generic Image is returned instead
-        
+
         Any further keyword parameters are passed to the AslImage constructor, overriding existing
-        attributes, so this can be used to create a derived image with different numbers of 
+        attributes, so this can be used to create a derived image with different numbers of
         repeats, etc, provided the data is consistent with this.
 
         :param data: Numpy data for derived image
         :param name: Name for new image (can be simple name or full filename)
         :param suffix: If name not specified, construct by adding suffix to original image name
-        :return: derived AslImage. However if the AslImage constructor fails, a basic 
+        :return: derived AslImage. However if the AslImage constructor fails, a basic
                  fsl.data.image.Image is returned and a warning is output.
         """
         if name is None:
@@ -730,4 +738,3 @@ class AslImage(Image):
         except ValueError as exc:
             warnings.warn("AslImage.derived failed (%s) - returning fsl.data.image.Image" % str(exc))
             return Image(image=image, name=name, header=self.header, **kwargs)
-            
