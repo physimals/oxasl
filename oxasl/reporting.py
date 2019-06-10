@@ -18,7 +18,7 @@ Example usage:
     page.maths()
     page.heading("Affine transformation standard->structural", level=2)
     page.maths()
-    
+
     report.add("registration", page)
     report.generate_html("my-report")
 """
@@ -31,7 +31,6 @@ import datetime
 import shutil
 import tempfile
 import warnings
-import subprocess
 import csv
 
 import six
@@ -41,7 +40,7 @@ import scipy.ndimage
 try:
     from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
     from matplotlib.figure import Figure
-except:
+except ImportError:
     Figure = None
 
 from fsl.data.image import Image
@@ -97,10 +96,10 @@ class LightboxImage(object):
             if shape is None:
                 shape = img.shape
             if img.ndim != 3:
-                raise ValueError("Images must be 3D") 
+                raise ValueError("Images must be 3D")
             if img.shape != shape:
                 raise ValueError("Images do not have consistent shapes")
-        
+
         min_slice, max_slice = self._slicerange(self._img, shape)
         num_slices = min(16, max_slice - min_slice + 1)
         grid_size = int(math.ceil(math.sqrt(num_slices)))
@@ -118,7 +117,7 @@ class LightboxImage(object):
             if self._bgimage:
                 data = self._bgimage.data[:, :, slice_idx].T
                 axes.imshow(data, cmap='gray')
-            
+
             if self._img:
                 data = self._img.data[:, :, slice_idx].T
 
@@ -142,9 +141,9 @@ class LightboxImage(object):
                     data = np.ma.masked_array(data, self._mask.data[:, :, slice_idx].T == 0)
                 elif self._zeromask:
                     data = np.ma.masked_array(data, data == 0)
-                
+
                 img = axes.imshow(data, vmax=vmax, vmin=vmin, cmap=cmap)
-            
+
             # Reverse y-axis so anterior is as the top
             axes.set_ylim(axes.get_ylim()[::-1])
 
@@ -153,7 +152,7 @@ class LightboxImage(object):
             fig.colorbar(img, ax=fig.axes)
 
         fig.savefig(fname, bbox_inches='tight')
-        
+
 class LineGraph(object):
     """
     A .png image file showing a line graph
@@ -161,7 +160,7 @@ class LineGraph(object):
 
     def __init__(self, data, xlabel, ylabel, **kwargs):
         """
-        :param *imgs: One or more ``fsl.data.Image`` instances. Later images will be 
+        :param *imgs: One or more ``fsl.data.Image`` instances. Later images will be
                       overlaid onto earlier images
         :param zeromask: If True, treat zero values as transparent
         """
@@ -185,9 +184,9 @@ class LineGraph(object):
         axes.set_xlabel(self._xlabel)
         axes.set_ylabel(self._ylabel)
         axes.plot(self._data)
-            
+
         fig.savefig(fname, bbox_inches='tight')
-        
+
 class ReportPage(object):
     """
     Simple helper class for creating documents containing ReStructuredText
@@ -207,7 +206,7 @@ class ReportPage(object):
         """
         self._report.add(name, img_obj)
         self._content += ".. image:: %s%s\n\n" % (name, img_obj.extension)
-        
+
     def text(self, txt):
         """
         Add a line of text content
@@ -226,13 +225,13 @@ class ReportPage(object):
             self._content += "    " + line + "\n"
         self._content += "\n"
 
-    def matrix(self, mat, sf=3):
+    def matrix(self, mat, sig_fig=3):
         """
         Add a matrix of numbers
         """
         matrix_latex = "\\begin{bmatrix}\n"
         for row in mat:
-            matrix_latex += " & ".join([self._latex_float(v, sf) for v in row]) + " \\\\\n"
+            matrix_latex += " & ".join([self._latex_float(v, sig_fig) for v in row]) + " \\\\\n"
         matrix_latex += "\\end{bmatrix}\n"
         self.maths(matrix_latex)
 
@@ -244,8 +243,11 @@ class ReportPage(object):
             raise ValueError("Unsupported heading level: %i" % level)
         self._content += txt + "\n"
         self._content += self._heading_chars[level] * len(txt) + "\n\n"
-        
+
     def table(self, tabdata, name="", headers=None):
+        """
+        Add a table
+        """
         self._content += ".. csv-table:: " + name + "\n"
         if headers:
             self._content += "    :header: " + ",".join(['"%s"' % h for h in headers]) + "\n"
@@ -268,9 +270,14 @@ class ReportPage(object):
         self._content += "\n"
 
     def dicttable(self, dictionary):
+        """
+        Add table based on the contents of a python dictionary.
+
+        The columns are 'Key' and 'Value'
+        """
         tabdata = dictionary.items()
         self.table(tabdata, headers=("Key", "Value"))
-        
+
     def tofile(self, fname):
         """
         Write RST content to a file
@@ -278,12 +285,12 @@ class ReportPage(object):
         with open(fname, "wb") as rstfile:
             rstfile.write(self._content.encode("utf-8"))
 
-    def _latex_float(self, f, sf=3):
+    def _latex_float(self, val, sig_fig=3):
         """
         Format float in format suitable for Latex - nicked off StackOverflow!
         """
-        pyformat = "{0:.%ig}" % sf
-        float_str = pyformat.format(f)
+        pyformat = "{0:.%ig}" % sig_fig
+        float_str = pyformat.format(val)
         if "e" in float_str:
             base, exponent = float_str.split("e")
             return r"{0} \times 10^{{{1}}}".format(base, int(exponent))
@@ -312,7 +319,6 @@ class Report(object):
         Generate an HTML report
         """
         self._end_time = datetime.datetime.now()
-        duration = (self._end_time - self._start_time).total_seconds()
 
         if build_dir:
             if os.path.exists(build_dir):
@@ -332,13 +338,13 @@ class Report(object):
                 conffile.write(REPORT_CONF)
 
             try:
-                args = ['sphinx-build', '-M', 'html', build_dir, os.path.join(build_dir, "_build")]
-                #result = subprocess.check_output(args)
                 # Different sphinx version have different main API
+                args = ['sphinx-build', '-M', 'html', build_dir, os.path.join(build_dir, "_build")]
                 import sphinx
                 if hasattr(sphinx, "main"):
                     result = sphinx.main(args)
                 else:
+                    import sphinx.cmd.build
                     result = sphinx.cmd.build.main(args)
             except (AttributeError, ImportError, OSError):
                 log.write("WARNING: sphinx not found, HTML report will not be generated\n")
@@ -347,14 +353,14 @@ class Report(object):
                 log.write("WARNING: sphinx failed, HTML report will not be generated\n")
                 log.write("Message: %s\n" % str(exc))
                 return False
-                
+
             if os.path.exists(dest_dir):
                 if not os.path.isdir(dest_dir):
                     raise ValueError("Report destination directory %s exists but is not a directory" % dest_dir)
                 else:
                     warnings.warn("Report destination directory %s already exists - removing" % dest_dir)
                     shutil.rmtree(dest_dir)
-                
+
             shutil.copytree(os.path.join(build_dir, "_build", "html"), dest_dir)
             return True
         finally:
@@ -362,6 +368,11 @@ class Report(object):
                 shutil.rmtree(build_dir)
 
     def tofile(self, build_dir):
+        """
+        Write the report contents out to a build directory.
+
+        This is the RST and image content - not the built HTML/PDF documentation
+        """
         if not os.path.exists(build_dir):
             os.makedirs(build_dir)
 
@@ -370,7 +381,7 @@ class Report(object):
             indexfile.write("=" * len(self.title) + "\n\n")
             self._timings(indexfile)
             self._toc(indexfile)
-            
+
         for fname, content in self._files.items():
             try:
                 content.tofile(os.path.join(build_dir, fname))
@@ -380,6 +391,13 @@ class Report(object):
                 warnings.warn("Error writing report content %s to file: %s" % (fname, exc))
 
     def page(self, name, overwrite=False, **kwargs):
+        """
+        Add a page to the report. The page is returned for content to be added
+
+        :param name: Name of the page.
+        :param overwrite: If True, and page already exists with the same ``name``,
+                          replace content. Otherwise an exception is thrown.
+        """
         page = ReportPage(name, report=self, **kwargs)
         self.add(name, page, overwrite)
         return page
@@ -390,7 +408,7 @@ class Report(object):
 
         :param name: Name of the content.
         :param content: Content object which has ``extension`` attribute and supports ``tofile()`` method
-        :param overwrite: If True, and content already exists with the same ``name`` and extension, 
+        :param overwrite: If True, and content already exists with the same ``name`` and extension,
                           replace content. Otherwise an exception is thrown.
 
         :return: Name given to the object in the report. If ``overwrite=True`` this will be the same as ``name``
@@ -412,7 +430,7 @@ class Report(object):
     def _timings(self, indexfile):
         if self._start_time:
             indexfile.write("Start time: %s\n\n" % self._start_time.strftime("%Y-%m-%d %H:%M:%S"))
-        if self._end_time: 
+        if self._end_time:
             indexfile.write("End time: %s\n\n" % self._end_time.strftime("%Y-%m-%d %H:%M:%S"))
 
     def _toc(self, indexfile):
@@ -473,7 +491,7 @@ def main():
     report = Report()
     page = report.page("test")
     page.image("lbox", LightboxImage(*[Image(fname) for fname in sys.argv[1:]]))
-    
+
     report.generate_html("testreport")
 
 if __name__ == "__main__":
