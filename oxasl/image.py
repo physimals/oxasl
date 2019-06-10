@@ -215,7 +215,7 @@ class AslImage(Image):
             else:
                 phases = [pidx * 360 / nphases for pidx in range(nphases)]
 
-            if isinstance(phases, str): phases = [float(ph) for ph in phases.split(",")]
+            if isinstance(phases, six.string_types): phases = [float(ph) for ph in phases.split(",")]
             phases = phases
             ntc = len(phases)
         elif self.iaf == "ve":
@@ -272,8 +272,8 @@ class AslImage(Image):
                 raise ValueError("Data contains %i volumes, inconsistent with %i TIs and %i labelling images" % (self.nvols, self.ntis, self.ntc))        
             rpts = [int(self.nvols / (self.ntc * self.ntis))] * self.ntis
         else:
-            if isinstance(rpts, str): rpts = [int(rpt) for rpt in rpts.split(",")]
-            elif isinstance(rpts, int): rpts = [rpts,]
+            if isinstance(rpts, six.string_types): rpts = [int(rpt) for rpt in rpts.split(",")]
+            elif isinstance(rpts, (int, np.integer)): rpts = [rpts,]
             if len(rpts) == 1:
                 rpts *= self.ntis
             elif len(rpts) != self.ntis:
@@ -288,8 +288,8 @@ class AslImage(Image):
         taus = kwargs.pop("bolus", kwargs.pop("taus", kwargs.pop("tau", None)))
         if taus is None:
             taus = 1.8
-        if isinstance(taus, str): taus = [float(tau) for tau in taus.split(",")]
-        elif isinstance(taus, (float, int)): taus = [float(taus),] * self.ntis
+        if isinstance(taus, six.string_types): taus = [float(tau) for tau in taus.split(",")]
+        elif isinstance(taus, (float, int, np.integer)): taus = [float(taus),] * self.ntis
 
         if len(taus) == 1:
             taus = taus * ntis
