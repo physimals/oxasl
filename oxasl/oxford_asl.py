@@ -29,7 +29,7 @@ The processing sequence is approximately:
    the structural data, and extracting any existing structural->standard space transformations
    (e.g. if an FSL_ANAT directory is the source of structural information)
 
-4. If requested, the motion correction transformations for the ASL data are determined. 
+4. If requested, the motion correction transformations for the ASL data are determined.
    This is always done so that the middle volume of the
    ASL data is unchanged, although this volume is not always used as the reference.
    If applicable, the calibration->ASL registration is also determined.
@@ -48,7 +48,7 @@ The processing sequence is approximately:
 10. If applicable, calibration is applied to the raw perfusion images
 
 11. Raw and calibrated output images are generated in all output spaces (native, structural standard)
-    
+
 """
 from __future__ import print_function
 
@@ -64,6 +64,11 @@ try:
     import oxasl_ve
 except ImportError:
     oxasl_ve = None
+
+try:
+    import oxasl_mp
+except ImportError:
+    oxasl_mp = None
 
 try:
     import oxasl_deblur
@@ -134,6 +139,8 @@ def main():
         parser.add_category(corrections.DistcorrOptions())
         if oxasl_ve:
             parser.add_category(oxasl_ve.VeaslOptions())
+        if oxasl_mp:
+            parser.add_category(oxasl_mp.MultiphaseOptions())
         if oxasl_enable:
             parser.add_category(oxasl_enable.EnableOptions(ignore=["regfrom",]))
         parser.add_category(GenericOptions())
@@ -142,7 +149,7 @@ def main():
         debug = options.debug
         if not options.output:
             options.output = "oxasl"
-        
+
         # Some oxasl command-line specific defaults
         if options.calib is not None and options.calib_method is None:
             if options.struc is not None:
@@ -175,7 +182,7 @@ def oxasl(wsp):
     Main oxasl pipeline script
     """
     wsp.log.write("OXASL version: %s\n" % __version__)
-    for plugin in (oxasl_ve, oxasl_deblur, oxasl_enable):
+    for plugin in (oxasl_ve, oxasl_mp, oxasl_deblur, oxasl_enable):
         if plugin is not None:
             wsp.log.write(" - Found plugin: %s (version %s)\n" % (plugin.__name__, getattr(plugin, "__version__", "unknown")))
 
@@ -192,12 +199,13 @@ def oxasl(wsp):
             raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
         oxasl_ve.model_ve(wsp)
     else:
-        # FIXME support for multiphase data
-        raise ValueError("ASL data has format '%s' - not supported by OXASL pipeline" % wsp.asldata.iaf)
+        if oxasl_mp is None:
+            raise ValueError("Multiphase data supplied but oxasl_mp is not installed")
+        oxasl_mp.model_mp(wsp)
 
     if wsp.save_report:
         do_report(wsp)
-    
+
     do_cleanup(wsp)
     wsp.log.write("\nOutput is %s\n" % wsp.savedir)
     wsp.log.write("OXASL - done\n")
@@ -259,7 +267,7 @@ def model_paired(wsp):
     ----------------------------
 
      - ``basil``         - Contains model fitting output on data without partial volume correction
-     - ``basil_pvcorr``  - Contains model fitting output with partial volume correction if 
+     - ``basil_pvcorr``  - Contains model fitting output with partial volume correction if
                            ``wsp.pvcorr`` is ``True``
      - ``output.native`` - Native (ASL) space output from last Basil modelling output
      - ``output.struc``  - Structural space output
@@ -329,7 +337,7 @@ OUTPUT_ITEMS = {
     "modelfit" : ("modelfit", 1, False, "", "", ""),
     "asldata_diff" : ("asldata_diff", 1, False, "", "", ""),
 }
-    
+
 def output_native(wsp, basil_wsp, report=None):
     """
     Create native space output images
@@ -350,7 +358,7 @@ def output_native(wsp, basil_wsp, report=None):
         for prefix in prefixes:
             is_variance = prefix == "var"
             if is_variance:
-                # Variance is not output by Fabber natively so we get it by 
+                # Variance is not output by Fabber natively so we get it by
                 # squaring the standard deviation. We also pass the flag
                 # to the calibration routine so it can square the correction
                 # factors
@@ -359,7 +367,7 @@ def output_native(wsp, basil_wsp, report=None):
                 fabber_output = "%s_%s" % (prefix, fabber_name)
             else:
                 fabber_output = fabber_name
-            
+
             img = basil_wsp.finalstep.ifnone(fabber_output, None)
             if img is not None:
                 # Make negative values = 0 and ensure masked value zeroed
@@ -384,12 +392,12 @@ def output_native(wsp, basil_wsp, report=None):
                     img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=is_variance)
                     name = "%s_calib" % name
                     setattr(wsp.native, name, img)
-    
+
     if wsp.save_mask:
         wsp.native.mask = wsp.rois.mask
 
     output_report(wsp.native, report=report)
-        
+
 def output_report(wsp, report=None):
     """
     Create report pages from output data
@@ -403,7 +411,7 @@ def output_report(wsp, report=None):
     if wsp.structural.struc is not None:
         gm = reg.struc2asl(wsp, wsp.structural.gm_pv).data
         wm = reg.struc2asl(wsp, wsp.structural.wm_pv).data
-    
+
     for oxasl_name, multiplier, calibrate, units, normal_gm, normal_wm in OUTPUT_ITEMS.values():
         name = oxasl_name + "_calib"
         img = getattr(wsp, name)
@@ -431,7 +439,7 @@ def output_report(wsp, report=None):
                 table.append(["WM mean", "%.4g %s" % (np.mean(data[wm > 0.5]), units), normal_wm])
                 table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[wm > 0.9]), units), normal_wm])
             page.table(table, headers=["Metric", "Value", "Typical"])
-            
+
             page.heading("Image", level=1)
             page.image("%s_img" % name, LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
 
