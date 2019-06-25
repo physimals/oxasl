@@ -337,9 +337,17 @@ class Report(object):
             with open(os.path.join(build_dir, "conf.py"), "w") as conffile:
                 conffile.write(REPORT_CONF)
 
+            if os.path.exists(dest_dir):
+                if not os.path.isdir(dest_dir):
+                    raise ValueError("Report destination directory %s exists but is not a directory" % dest_dir)
+                else:
+                    warnings.warn("Report destination directory %s already exists - removing" % dest_dir)
+                    shutil.rmtree(dest_dir)
+            os.makedirs(dest_dir)
+
             try:
                 # Different sphinx version have different main API
-                args = ['sphinx-build', '-M', 'html', build_dir, os.path.join(build_dir, "_build")]
+                args = ['sphinx-build', '-b', 'html', build_dir, dest_dir]
                 import sphinx
                 if hasattr(sphinx, "main"):
                     result = sphinx.main(args)
@@ -354,14 +362,6 @@ class Report(object):
                 log.write("Message: %s\n" % str(exc))
                 return False
 
-            if os.path.exists(dest_dir):
-                if not os.path.isdir(dest_dir):
-                    raise ValueError("Report destination directory %s exists but is not a directory" % dest_dir)
-                else:
-                    warnings.warn("Report destination directory %s already exists - removing" % dest_dir)
-                    shutil.rmtree(dest_dir)
-
-            shutil.copytree(os.path.join(build_dir, "_build", "html"), dest_dir)
             return True
         finally:
             if is_temp:
