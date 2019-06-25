@@ -283,7 +283,7 @@ class AslImage(Image):
                 rpts *= self.ntis
             elif len(rpts) != self.ntis:
                 raise ValueError("%i TIs specified, inconsistent with %i variable repeats" % (self.ntis, len(rpts)))
-            
+
             if sum(rpts) * self.ntc != self.nvols:
                 raise ValueError("Data contains %i volumes, inconsistent with %i labelling images and total of %i repeats" % (self.nvols, self.ntc, sum(rpts)))
         self.setMeta("rpts", rpts)
@@ -719,17 +719,17 @@ class AslImage(Image):
             name = self.name
         name = name + suffix
 
-        DERIVED_ATTRS = ["iaf", "order", "rpts", "taus", "phases",
+        derived_attrs = ["iaf", "order", "rpts", "taus", "phases",
                          "casl", "sliceband", "slicedt", "artsupp"]
         if self.have_plds:
-            DERIVED_ATTRS.append("plds")
-            DERIVED_ATTRS.append("nplds")
+            derived_attrs.append("plds")
+            derived_attrs.append("nplds")
         else:
-            DERIVED_ATTRS.append("tis")
-            DERIVED_ATTRS.append("ntis")
+            derived_attrs.append("tis")
+            derived_attrs.append("ntis")
 
         derived_kwargs = {}
-        for attr in DERIVED_ATTRS:
+        for attr in derived_attrs:
             derived_kwargs[attr] = kwargs.get(attr, getattr(self, attr, None))
         if self.iaf == "ve":
             derived_kwargs["nenc"] = self.ntc

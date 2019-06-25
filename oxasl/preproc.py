@@ -33,7 +33,7 @@ def preprocess(wsp):
      - ``smooth`` : If True, perform smoothing
      - ``fwhm`` : If smooth=True, the full-width-half-maximum for the smoothing kernel
      - ``ref`` : If mc=True, a reference image for motion correction (default is to use the middle volume)
-     
+
     Workspace attributes updated
     -----------------------------
 
@@ -43,17 +43,17 @@ def preprocess(wsp):
 
     wsp.asldata_preproc = wsp.asldata
 
-    if wsp.diff: 
+    if wsp.diff:
         wsp.log.write("  - Tag-control subtraction\n")
         wsp.asldata_preproc = wsp.asldata_preproc.diff()
-        
+
     if wsp.reorder:
         wsp.log.write("  - Re-ordering to %s\n" % wsp.reorder)
         if "l" in wsp.reorder.lower() and wsp.diff:
             wsp.reorder = wsp.reorder.replace("l", "")
         wsp.asldata_preproc = wsp.asldata_preproc.reorder(wsp.reorder)
 
-    if wsp.mc: 
+    if wsp.mc:
         wsp.log.write("  - Motion correction\n")
         mcimg = fsl.mcflirt(wsp.asldata_preproc, cost="mutualinfo", out=fsl.LOAD, reffile=wsp.ref)["out"]
         wsp.asldata_preproc = wsp.asldata_preproc.derived(mcimg.data, suffix="_mc")
@@ -98,7 +98,7 @@ def main():
         if not options.output:
             options.output = "oxasl_preproc_out"
         wsp = Workspace(auto_asldata=True, **vars(options))
-        
+
         print("")
         wsp.asldata.summary()
         preprocess(wsp)

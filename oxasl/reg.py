@@ -35,8 +35,8 @@ def get_regfrom(wsp):
     """
     Set the 3D image to be used as the ASL registration target for structural->ASL registration
 
-    Regfrom defines the 'native' space 
-    
+    Regfrom defines the 'native' space
+
     Optional workspace attributes
     -----------------------------
 
@@ -68,15 +68,15 @@ def get_regfrom(wsp):
 def get_motion_params(mat):
     """
     Get motion parameters from a Flirt motion correction matrix
-    
+
     This is done under the assumption that the matrix may contain
-    rotation, translation and possibly minor scaling but no reflection, 
+    rotation, translation and possibly minor scaling but no reflection,
     shear etc. So the output could be incorrect for some extreme
     correction matrices, but this probably indicates an error in the
     registration process. We wrap the whole thing in a try block so
     if anything goes horribly wrong it does not at least stop the
     pipeline running
-    
+
     See http://en.wikipedia.org/wiki/Rotation_matrix for details
     of the rotation calculation.
 
@@ -93,7 +93,7 @@ def get_motion_params(mat):
         mat[:, 0] /= scales[0]
         mat[:, 1] /= scales[1]
         mat[:, 2] /= scales[2]
-        
+
         # Rotation axis
         rot_axis = np.array([
             mat[2, 1] - mat[1, 2],
@@ -118,7 +118,7 @@ def get_motion_params(mat):
 def reg_asl2calib(wsp):
     """
     Register calibration image to ASL space
-    
+
     Note that this might already have been done as part of motion correction
     """
     init(wsp)
@@ -131,10 +131,10 @@ def reg_asl2calib(wsp):
 def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
     """
     Registration of ASL images to structural image
-    
+
     :param flirt: If provided, sets whether to use FLIRT registration
     :param bbr: If provided, sets whether to use BBR registration
-    
+
     Required workspace attributes
     -----------------------------
 
@@ -157,7 +157,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
             wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.regfrom, wsp.structural.brain, wsp.reg.asl2struc)
         if bbr:
             wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
-        
+
         wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
 
         wsp.log.write(" - ASL->Structural transform\n")
@@ -189,7 +189,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
 def reg_struc2std(wsp, fnirt=False):
     """
     Determine structural -> standard space registration
-    
+
     Optional workspace attributes
     -----------------------------
 
@@ -206,7 +206,7 @@ def reg_struc2std(wsp, fnirt=False):
 
     if wsp.reg.std2struc is not None:
         return
-    
+
     if wsp.fslanat:
         warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff.nii.gz")
         mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
@@ -222,12 +222,12 @@ def reg_struc2std(wsp, fnirt=False):
         wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
         flirt_result = fsl.flirt(wsp.structural.brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
         wsp.reg.struc2std = flirt_result["omat"]
-        
+
         if fnirt:
             wsp.log.write(" - Registering structural image to standard space using FNIRT\n")
             fnirt_result = fsl.fnirt(wsp.structural.brain, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
             wsp.reg.struc2std = fnirt_result["cout"]
-    
+
     if isinstance(wsp.reg.struc2std, Image):
         # Calculate the inverse warp using INVWARP
         invwarp_result = fsl.invwarp(wsp.reg.struc2std, wsp.structural.struc, out=fsl.LOAD)
@@ -294,7 +294,7 @@ def asl2calib(wsp, img, **kwargs):
 
 def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None, mask=False, mask_thresh=0.5):
     """
-    Transform an image 
+    Transform an image
 
     :param wsp: Workspace, used for logging only
     :param img: Image to transform
@@ -314,7 +314,8 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
     if use_flirt and have_warp:
         raise ValueError("Cannot transform using Flirt when we have a warp")
     elif use_flirt:
-        if interp == "nn": interp = "nearestneighbour"
+        if interp == "nn":
+            interp = "nearestneighbour"
         ret = fsl.applyxfm(img, ref, trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
     else:
         if have_warp:
@@ -330,7 +331,7 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
     return ret
 
 def reg_flirt(wsp, img, ref, initial_transform=None):
-    """ 
+    """
     Register low resolution ASL or calibration data to a high resolution
     structural image using Flirt rigid-body registration
 
@@ -342,15 +343,15 @@ def reg_flirt(wsp, img, ref, initial_transform=None):
 
     Optional keyword arguments:
 
-    :param inweight: 
+    :param inweight:
     :param init: Initial transform matrix
-    :param schedule: FLIRT transform schedule file (default: xyztrans.sch") 
+    :param schedule: FLIRT transform schedule file (default: xyztrans.sch")
     :param dof: FLIRT degrees of freedom
 
     :return Tuple of registered image, transform matrix
     """
     wsp.log.write(" - Registering image: %s using FLIRT\n" % img.name)
-    
+
     # Step 1: 3D translation only
     flirt_opts = {
         "schedule" : os.path.join(os.environ["FSLDIR"], "etc", "flirtsch", "xyztrans.sch"),
@@ -380,7 +381,7 @@ def reg_bbr(wsp):
 
     Optional keyword arguments:
 
-    :param inweight: 
+    :param inweight:
     :param init: Initial transform matrix
 
     Optional keyword arguments for fieldmap distortion correction:
@@ -398,7 +399,7 @@ def reg_bbr(wsp):
     wsp.log.write("  - BBR registration using epi_reg\n")
     # Windows can't run epi_reg as it's a batch script. Use our experimental python
     # implementation but use the standard epi_reg on other platforms until the python
-    # version is better tested 
+    # version is better tested
     if sys.platform.startswith("win"):
         import oxasl.epi_reg as pyepi
         result = pyepi.epi_reg(wsp, wsp.reg.regfrom)
@@ -417,7 +418,7 @@ def reg_bbr(wsp):
 	#imcp $tempdir/low2high_final_warp $outdir/asl2struct_warp #the warp from epi_reg
     #fi
     #imcp $tempdir/low2high_final $outdir/asl2struct # save the transformed image to check on the registration
-    # 
+    #
     # # copy the edge image from epi_reg output as that is good for visualisation
     # imcp $wm_seg $outdir/wm_seg
     #imcp $tempdir/low2high_final_fast_wmedge $outdir/tissedge
@@ -440,7 +441,7 @@ class RegOptions(OptionCategory):
         #group.add_option("--flirt", dest="do_flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
         #group.add_option("--flirtsch", help="user-specified FLIRT schedule for registration")
         groups.append(group)
-        
+
         #group = IgnorableOptionGroup(parser, "Extra BBR registration refinement", ignore=self.ignore)
         #group.add_option("-c", dest="cfile", help="ASL control/calibration image for initial registration - brain extracted")
         #group.add_option("--wm_seg", dest="wm_seg", help="tissue segmenation image for bbr (in structural image space)")

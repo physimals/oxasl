@@ -77,7 +77,7 @@ class Workspace(object):
         options, args = parser.parse_args(sys.argv)
         wsp = Workspace(**vars(options))
 
-    A workspace is always associated with a physical directory. Certain types of 
+    A workspace is always associated with a physical directory. Certain types of
     objects are automatically be saved to the workspace. If no save directory
     is specified a temporary directory is created
 
@@ -103,9 +103,9 @@ class Workspace(object):
                         than held in memory.
         :param separate_input: If True a sub workspace named 'input' will be created
                                and initial data will be stored there. This sub workspace
-                               will also be checked by default when attributes are 
+                               will also be checked by default when attributes are
                                requested from the main workspace.
-        :param auto_asldata: If True, automatically create an AslImage attribute 
+        :param auto_asldata: If True, automatically create an AslImage attribute
                              from the input keyword arguments
         :param log:     File stream to write log output to (default: sys.stdout)
         """
@@ -139,7 +139,7 @@ class Workspace(object):
             self.log_cmdout = kwargs.pop("log_cmdout", False)
         if "report" in kwargs or self.report is None:
             self.report = kwargs.pop("report", Report())
-        
+
         # Default log configuration for FSL wrapper commands
         if self.fsllog is None:
             self.fsllog = kwargs.pop("fsllog", None)
@@ -184,10 +184,10 @@ class Workspace(object):
                 if val is not None:
                     ret = val
                     break
-        
+
         if ret is None and self._parent is not None:
             ret = getattr(self._parent, name)
-        
+
         return ret
 
     def __setattr__(self, name, value):
@@ -195,7 +195,7 @@ class Workspace(object):
 
     def ifnone(self, attr, alternative):
         """
-        Return the value of an attribute, if set and not None, or 
+        Return the value of an attribute, if set and not None, or
         otherwise the supplied alternative
         """
         ret = getattr(self, attr, None)
@@ -226,7 +226,7 @@ class Workspace(object):
             if not save_name:
                 save_name = name
 
-            # Remove any existing file first - it could be left behind if 
+            # Remove any existing file first - it could be left behind if
             # the extension is different or the new value is None
             existing_files = glob.glob(os.path.join(self.savedir, "%s.*" % save_name))
             if not isinstance(value, Workspace):
@@ -251,7 +251,7 @@ class Workspace(object):
                         value = AslImageProxy(fname, md=dict(value.metaItems()))
                     elif isinstance(value, Image):
                         value = ImageProxy(fname, md=dict(value.metaItems()))
-                   
+
                 elif isinstance(value, np.ndarray) and value.ndim == 2:
                     # Save as ASCII matrix
                     with open(os.path.join(self.savedir, save_name + ".mat"), "w") as tfile:
@@ -270,16 +270,16 @@ class Workspace(object):
         """
         Create a sub-workspace, (i.e. a subdir of this workspace)
 
-        This inherits the log configuration from the parent workspace. The savedir 
-        will be a subdirectory of the original workspace. Additional data may be 
-        set using keyword arguments. The child-workspace will be available 
+        This inherits the log configuration from the parent workspace. The savedir
+        will be a subdirectory of the original workspace. Additional data may be
+        set using keyword arguments. The child-workspace will be available
         as an attribute on the parent workspace.
-        
+
         :param name: Name of sub workspace
         :param parent_default: If True, attribute values default to the parent workspace
-                               if not set on the sub-workspace 
+                               if not set on the sub-workspace
         """
-        savedir = os.path.join(self.savedir, name)  
+        savedir = os.path.join(self.savedir, name)
         if parent_default and name not in self._defaults:
             parent = self
         else:
@@ -317,9 +317,11 @@ def text_to_matrix(text):
         # Split by commas or spaces
         vals = line.replace(",", " ").split()
         # Ignore empty lines
-        if not vals: continue
+        if not vals:
+            continue
         # Check correct number of columns
-        if ncols < 0: ncols = len(vals)
+        if ncols < 0:
+            ncols = len(vals)
         elif len(vals) != ncols:
             raise ValueError("File must contain a matrix of numbers with fixed size (rows/columns)")
         # Check all data is numeric
@@ -328,7 +330,7 @@ def text_to_matrix(text):
                 float(val)
             except:
                 raise ValueError("Non-numeric value '%s' found in matrix text" % val)
-        fvals.append([float(v) for v in vals])     
+        fvals.append([float(v) for v in vals])
     return np.array(fvals)
 
 def mkdir(dirname, fail_if_exists=False, warn_if_exists=True, log=sys.stdout):
@@ -339,6 +341,8 @@ def mkdir(dirname, fail_if_exists=False, warn_if_exists=True, log=sys.stdout):
         os.makedirs(dirname)
     except OSError as exc:
         if exc.errno == errno.EEXIST:
-            if fail_if_exists: raise
-            elif warn_if_exists: log.write("WARNING: mkdir - Directory %s already exists\n" % dirname)
+            if fail_if_exists:
+                raise
+            elif warn_if_exists:
+                log.write("WARNING: mkdir - Directory %s already exists\n" % dirname)
     return os.path.abspath(dirname)

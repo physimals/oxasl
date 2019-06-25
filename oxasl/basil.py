@@ -6,8 +6,8 @@ The BASIL module is a little more complex than the other Workspace based
 modules because of the number of options available and the need for flexibility
 in how the modelling steps are run.
 
-The main function is ``basil`` which performs model fitting on ASL data 
-in the Workspace ``asldata`` attribute. 
+The main function is ``basil`` which performs model fitting on ASL data
+in the Workspace ``asldata`` attribute.
 
     wsp = Workspace()
     wsp.asldata = AslImage("asldata.nii.gz", tis=[1.6,])
@@ -15,7 +15,7 @@ in the Workspace ``asldata`` attribute.
     basil(wsp, output_wsp=wsp.sub("basil"))
     basil.finalstep.mean_ftiss.save("mean_ftiss.nii.gz")
 
-Because of the number of options possible for the modelling process, the 
+Because of the number of options possible for the modelling process, the
 workspace attribute ``basil_options`` can be set as a dictionary of extra
 options relevant only to Basil:
 
@@ -48,7 +48,7 @@ def basil(wsp, output_wsp=None, prefit=True):
 
     :param wsp: Workspace object
     :param output_wsp: Optional Workspace object for storing output. If not specified
-                       will use ``wsp`` 
+                       will use ``wsp``
     :param prefit: If True, run a pre-fitting step using the mean over repeats of the ASL data
 
     Required workspace attributes
@@ -73,7 +73,7 @@ def basil(wsp, output_wsp=None, prefit=True):
      - ``t1im`` : T1 map as Image
      - ``pgm`` :  Grey matter partial volume map as Image
      - ``pwm`` : White matter partial volume map as Image
-     - ``initmvn`` : MVN structure to use as initialization as Image   
+     - ``initmvn`` : MVN structure to use as initialization as Image
      - ``spatial`` : If True, include final spatial VB step (default: False)
      - ``onestep`` : If True, do all inference in a single step (default: False)
      - ``basil_options`` : Optional dictionary of additional options for underlying model
@@ -90,12 +90,12 @@ def basil(wsp, output_wsp=None, prefit=True):
         wsp.infertau = False
         batsd_default = 0.1
     else:
-        # For multi TI/PLD data, set a more liberal prior for tissue ATT since we should be able to 
+        # For multi TI/PLD data, set a more liberal prior for tissue ATT since we should be able to
         # determine this from the data. NB this leaves the arterial BAT alone.
         batsd_default = 1
 
     if wsp.wp:
-        # White paper mode - this overrides defaults, but can be overwritten by command line 
+        # White paper mode - this overrides defaults, but can be overwritten by command line
         # specification of individual parameters
         wsp.log.write(" - Analysis in white paper mode: T1 default=1.65, BAT default=0, voxelwise calibration\n")
         t1_default = 1.65
@@ -107,14 +107,19 @@ def basil(wsp, output_wsp=None, prefit=True):
         else:
             bat_default = 0.7
 
-    if wsp.t1 is None: wsp.t1 = t1_default
-    if wsp.t1b is None: wsp.t1b = 1.65
-    if wsp.bat is None: wsp.bat = bat_default
-    if wsp.batsd is None: wsp.batsd = batsd_default
-    if wsp.infertiss is None: wsp.infertiss = True
-    
+    if wsp.t1 is None:
+        wsp.t1 = t1_default
+    if wsp.t1b is None:
+        wsp.t1b = 1.65
+    if wsp.bat is None:
+        wsp.bat = bat_default
+    if wsp.batsd is None:
+        wsp.batsd = batsd_default
+    if wsp.infertiss is None:
+        wsp.infertiss = True
+
     # if we are doing CASL then fix the bolus duration, unless explicitly told us otherwise
-    if wsp.infertau is None: 
+    if wsp.infertau is None:
         wsp.infertau = not wsp.asldata.casl
 
     # Pick up extra BASIL options
@@ -161,7 +166,7 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
             desc += " - Initialise with step %i" % idx
         step_wsp.log.write(desc + "     ")
         result = step.run(prev_result, log=wsp.log, fsllog=wsp.fsllog,
-                          fabber_corelib=wsp.fabber_corelib, fabber_libs=wsp.fabber_libs, 
+                          fabber_corelib=wsp.fabber_corelib, fabber_libs=wsp.fabber_libs,
                           fabber_coreexe=wsp.fabber_coreexe, fabber_exes=wsp.fabber_exes)
         for key, value in result.items():
             setattr(step_wsp, key, value)
@@ -250,10 +255,10 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
             noisesd = wsp.noisesd
         wsp.log.write(" - Using a prior noise sd of: %f\n" % noisesd)
         options["prior-noise-stddev"] = noisesd
-     
+
     # Keyword arguments override options
     options.update(kwargs)
-   
+
     # Additional optional workspace arguments
     for attr in ("t1", "t1b", "bat", "FA", "mask", "pwm", "pgm", "batsd"):
         value = getattr(wsp, attr)
@@ -295,7 +300,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         pwm[pwm > 1] = 1
         pgm = Image(pgm, header=pgm_img.header)
         pwm = Image(pwm, header=pwm_img.header)
-        
+
     if pvcorr and not wsp.infertiss:
         raise ValueError("ERROR: PV correction is not compatible with --artonly option (there is no tissue component)")
 
@@ -317,13 +322,13 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         options["incpve"] = True
 
     # Keep track of the number of spatial priors specified by name
-    spriors = 1 
+    spriors = 1
 
     if wsp.initmvn:
         # we are being supplied with an initial MVN
         wsp.log.write("Initial MVN being loaded %s\n" % wsp.initmvn.name)
         options["continue-from-mvn"] = wsp.initmvn
-    
+
     # T1 image prior
     if wsp.t1im:
         spriors = _add_prior(options, spriors, "T_1", type="I", image=wsp.t1im)
@@ -413,10 +418,10 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
     ### --- SINGLE-STEP OPTION ---
     if wsp.onestep:
         steps.append(FabberStep(options, step_desc))
-        
+
     if not steps:
         raise ValueError("No steps were generated - no parameters were set to be inferred")
-        
+
     return steps
 
 def _add_prior(options, prior_idx, param, **kwargs):
@@ -501,14 +506,14 @@ class BasilOptions(OptionCategory):
 
     def groups(self, parser):
         groups = []
-        
+
         group = IgnorableOptionGroup(parser, "BASIL options", ignore=self.ignore)
         group.add_option("--infertau", help="Infer bolus duration", action="store_true", default=False)
         group.add_option("--inferart", help="Infer macro vascular (arterial) signal component", action="store_true", default=False)
         group.add_option("--inferpc", help="Infer pre-capillary signal component", action="store_true", default=False)
         group.add_option("--infert1", help="Include uncertainty in T1 values", action="store_true", default=False)
         group.add_option("--artonly", help="Remove tissue component and infer only arterial component", action="store_true", default=False)
-        group.add_option("--fixbat",  help="Fix bolus arrival time", action="store_false", default=True)
+        group.add_option("--fixbat", help="Fix bolus arrival time", action="store_false", default=True)
         group.add_option("--spatial", help="Add step that implements adaptive spatial smoothing on CBF", action="store_true", default=False)
         group.add_option("--fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
         group.add_option("--noiseprior", help="Use an informative prior for the noise estimation", action="store_true", default=False)
@@ -540,7 +545,7 @@ def main():
         parser.add_category(image.AslImageOptions())
         parser.add_category(BasilOptions())
         parser.add_category(GenericOptions())
-        
+
         options, _ = parser.parse_args(sys.argv)
         if not options.output:
             options.output = "basil"
@@ -549,7 +554,7 @@ def main():
             sys.stderr.write("Input file not specified\n")
             parser.print_help()
             sys.exit(1)
-        
+
         asldata = AslImage(options.asldata, **parser.filter(options, "image"))
         wsp = Workspace(savedir=options.output, **vars(options))
         wsp.asldata = asldata
@@ -586,7 +591,7 @@ def main():
 
         # Run BASIL processing, passing options as keyword arguments using **
         basil(wsp)
-        
+
     except ValueError as exc:
         sys.stderr.write("\nERROR: " + str(exc) + "\n")
         sys.stderr.write("Use --help for usage information\n")

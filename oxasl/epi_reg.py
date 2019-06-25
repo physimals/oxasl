@@ -97,7 +97,8 @@ def epi_reg(wsp, epi_img, use_fmap=False, **kwargs):
         #     ${FSLDIR}/bin/convertwarp --ref=${vrefhead} --warp1=${vout}_warp --midmat=${vout}_inv.mat --warp2=${gdcwarp} --postmat=${vout}.mat --out=${vout}_warp --relout
         #     ${FSLDIR}/bin/applywarp -i ${vepi} -r ${vrefhead} -o ${vout} -w ${vout}_warp --interp=spline --rel
 
-if __name__ == "__main__":
+def main():
+    """ Simple test case """
     from fsl.data.image import Image
     from oxasl import Workspace
     wsp = Workspace(savedir="epi_py_out", debug=True)
@@ -108,3 +109,6 @@ if __name__ == "__main__":
 
     result = epi_reg(wsp, wsp.regfrom)
     wsp.imgreg, wsp.img2struc = result["out.nii.gz"], result["out"]
+
+if __name__ == "__main__":
+    main()

@@ -15,7 +15,7 @@ Design
 
 AslImage
 ~~~~~~~~
-The ``oxasl.image.AslImage`` class represents a captured ASL data file. It 
+The ``oxasl.image.AslImage`` class represents a captured ASL data file. It
 contains information about the acquisition (number/values of TIs/PLDs, repeats,
 ordering of label/control image etc). It also has methods which act directly
 on the data, for example performing tag-control subtraction, or generation of
@@ -28,7 +28,7 @@ a perfusion-weighted image.::
 Workspaces
 ~~~~~~~~~~
 The ``workspace`` module contains the ``Workspace`` class which
-can be used to build a higher-level interface for complex workflows. A 
+can be used to build a higher-level interface for complex workflows. A
 workspace is simply an object whose attributes are images, data, etc being
 used as part of the workflow. Unlike a normal object, requesting an attribute
 that does not exist returns None rather than raising an exception.::
@@ -43,7 +43,7 @@ data types, such as images or 2D matrices.::
     wsp = Workspace(savedir="myoutput")
     wsp.asldata = AslImage("mpld.nii.gz", ntis=1) # Saves myoutput/asldata.nii.gz
 
-A workspace is also associated with 
+A workspace is also associated with
 a log stream (sys.stdout by default) and a prepared logging dictionary ``fsllog``
 for passing to FSL Python wrapper commands::
 
@@ -53,25 +53,25 @@ for passing to FSL Python wrapper commands::
 
 Module functions
 ~~~~~~~~~~~~~~~~
-Other modules typically contains one or more functions which operate on a 
+Other modules typically contains one or more functions which operate on a
 workspace, in some cases with additional parameters (but not always).
 
 Module functions operate under the general rule that data stored directly
 as a workspace attribute is unprocessed, user-supplied data. Derived data
 is then stored in a sub-workspace. Module functions will usually create
-a sub-workspace to store their own output in, for example the ``struc`` module 
-places it's output (brain extractions, segmentations) in the wsp.structural 
+a sub-workspace to store their own output in, for example the ``struc`` module
+places it's output (brain extractions, segmentations) in the wsp.structural
 sub-workspace.
 
 For example the ``calib`` module contains the ``calibrate`` function which
-calibrates a perfusion image to physical units using either voxelwise or reference 
-region methods. It reads parameters required for this from the workspace, including 
+calibrates a perfusion image to physical units using either voxelwise or reference
+region methods. It reads parameters required for this from the workspace, including
 the calibration method to use.
 
 Most of these functions write their output back into the workspace under a standard
 name, however in some cases the function might be called on different input images
 and might therefore return an image directly, which can be added to the workspace
-by the caller under whatever name they prefer 
+by the caller under whatever name they prefer
 
 Command line tools
 ~~~~~~~~~~~~~~~~~~
@@ -107,7 +107,7 @@ try:
 except:
     __version__ = "unknown"
     __timestamp__ = "unknown"
-    
+
 from .image import AslImage
 from .workspace import Workspace
 

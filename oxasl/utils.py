@@ -16,7 +16,7 @@ class Tee(object):
         self._streams.extend(streams)
 
     def add(self, stream):
-        """ 
+        """
         Add a sub-stream
         """
         if stream:

@@ -17,11 +17,11 @@ def generate_mask(wsp):
     Generate mask for ASL data
 
     - If a ready-made mask image is provided or has already been generated, this is returned
-    - If a structural image is provided this will be used. Brain extraction and registration 
+    - If a structural image is provided this will be used. Brain extraction and registration
       will be performed if required
     - If a calibration image is provided, this is used. It is assumed to be in the same space
       as the ASL data
-    - If none of the above are present, the ASL data itself is averaged and brain extracted 
+    - If none of the above are present, the ASL data itself is averaged and brain extracted
       to produce the mask
 
     Required workspace attributes
@@ -43,7 +43,7 @@ def generate_mask(wsp):
     """
     if wsp.rois is not None and wsp.rois.mask is not None:
         return
-        
+
     wsp.sub("rois")
 
     # Reporting
@@ -69,10 +69,10 @@ def generate_mask(wsp):
         wsp.rois.mask_src = "regfrom"
         wsp.rois.mask = Image((wsp.reg.regfrom.data != 0).astype(np.int), header=wsp.reg.regfrom.header)
         mask_source = "generated from brain extracted registration ASL image"
-    
+
     wsp.log.write("\nGenerated ASL data mask\n")
     wsp.log.write(" - Mask %s\n" % mask_source)
-    
+
     page.heading("Masked ASL brain image", level=1)
     page.text("Mask was %s" % mask_source)
     page.text("PW ASL image masked by ASL-space mask")
@@ -107,7 +107,7 @@ def main():
         wsp.asldata.summary()
 
         wsp.generate_mask()
-        
+
         if wsp.output is None:
             wsp.output = wsp.asldata.name + "_mask"
         wsp.rois.mask.save(wsp.output)

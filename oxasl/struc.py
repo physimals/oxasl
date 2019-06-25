@@ -113,11 +113,12 @@ def segment(wsp):
             except PathError:
                 wsp.log.write(" - No bias field found")
         elif wsp.fastsrc:
+            # FIXME should be possible to implement this
             raise NotImplementedError("Specifying FAST output directory")
-            img = os.path.split(wsp.fastsrc)[1]
-            wsp.structural.csf_pv = os.path.join(wsp.fastsrc, "%s_pve_0" % img)
-            wsp.structural.gm_pv = os.path.join(wsp.fastsrc, "%s_pve_1" % img)
-            wsp.structural.wm_pv = os.path.join(wsp.fastsrc, "%s_pve_2" % img)
+            #img = os.path.split(wsp.fastsrc)[1]
+            #wsp.structural.csf_pv = os.path.join(wsp.fastsrc, "%s_pve_0" % img)
+            #wsp.structural.gm_pv = os.path.join(wsp.fastsrc, "%s_pve_1" % img)
+            #wsp.structural.wm_pv = os.path.join(wsp.fastsrc, "%s_pve_2" % img)
         elif wsp.structural.struc:
             wsp.log.write(" - Running FAST\n")
             page.text("FAST run to segment structural image")

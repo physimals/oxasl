@@ -13,7 +13,6 @@ import nibabel as nib
 from fsl.data.image import Image
 from fsl.wrappers import LOAD, wrapperutils  as wutils
 import fsl.utils.assertions as asrt
-
 from fabber import Fabber, FabberException, percent_progress
 
 from oxasl.utils import Tee
@@ -51,9 +50,9 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
     can take an arbitrary number of inputs including image inputs so the
     @fileOrImage type decorators don't really work well. Also you can't
     tell what image inputs you might have until you query the individual
-    model for its options. All of this complexity is therefore hidden in 
+    model for its options. All of this complexity is therefore hidden in
     the generic Fabber python API.
-    
+
     Nevertheless we aim to replicate the interface of FSL tools as much as
     possible, e.g. accepting fsl.data.image.Image instances for input
     data, and respecting the LOAD special parameter to indicate which
@@ -87,7 +86,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
             ref_nii = main_data.nibImage
         else:
             ref_nii = Image(main_data).nibImage
-        
+
     if ref_nii:
         header = ref_nii.header
         affine = ref_nii.header.get_best_affine()

@@ -21,8 +21,8 @@ class AslOptionParser(OptionParser):
 
     A category contains one or more OptionGroup instances. An option
     dictionary can be filtered by category, i.e. to extract the options
-    belonging to a particular category (e.g. 'calibration options'). The 
-    existing OptionGroup class is not sufficient for this because groups 
+    belonging to a particular category (e.g. 'calibration options'). The
+    existing OptionGroup class is not sufficient for this because groups
     cannot be nested
     """
     def __init__(self, usage="", version=__version__, **kwargs):
@@ -77,7 +77,7 @@ class AslOptionParser(OptionParser):
         return new_argv
 
     def add_category(self, category):
-        """ 
+        """
         Add an OptionCategory to the parser
         """
         for group in category.groups(self):
@@ -92,12 +92,12 @@ class AslOptionParser(OptionParser):
         :param options: Options dictionary or namespace
         :param category: Category name
         :param consume: If True, remove filtered options from the passed dictionary
-        
+
         :return: Dictionary of options that were found in the specified category
         """
         if not isinstance(options, dict):
             options = vars(options)
-            
+
         filtered = {}
         for option in self._categories[category]:
             if option.dest in options:
@@ -108,12 +108,12 @@ class AslOptionParser(OptionParser):
 
 class OptionCategory(object):
     """
-    A named category of options. 
+    A named category of options.
     """
     def __init__(self, name, ignore=()):
         self.name = name
         self.ignore = ignore
-    
+
     def groups(self, parser):
         """
         :param parser: OptionParser instance
@@ -170,6 +170,14 @@ def _check_image(option, opt, value):
         raise OptionValueError("option %s: invalid Image value: %r" % (opt, value))
 
 def load_matrix(fname):
+    """
+    Load a matrix from a text file
+
+    Matrix should be a series of ASCII floating point numbers separated by whitespace
+    on each line.
+
+    :param fname: Filename
+    """
     matrix = []
     with open(fname, "r") as f:
         for line in f.readlines():
@@ -181,7 +189,7 @@ def _check_matrix(option, opt, value):
         return load_matrix(value)
     except ValueError:
         raise OptionValueError("option %s: invalid matrix value: %r" % (opt, value))
-            
+
 class _ImageOption(Option):
     TYPES = Option.TYPES + ("image", "matrix",)
     TYPE_CHECKER = copy(Option.TYPE_CHECKER)

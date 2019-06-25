@@ -31,7 +31,7 @@ def init(wsp):
 def calculate_m0(wsp):
     """
     Calculate M0 value for use in calibration of perfusion images
-    
+
     :param wsp: Workspace object
 
     Required workspace attributes
@@ -50,12 +50,12 @@ def calculate_m0(wsp):
 
     Additional optional and mandatory attributes may be required for different methods - see :ref get_m0_voxelwise:
     and :ref get_m0_refregion: functions for details.
-    
+
     Workspace attributes updated
     -----------------------------
 
      - ``calibration.m0`` : M0 value, either a single value or an voxelwise Image
-    """    
+    """
     init(wsp)
 
     if wsp.calibration.m0 is None:
@@ -90,7 +90,7 @@ def calibrate(wsp, perf_img, multiplier=1.0, alpha=1.0, var=False):
         raise ValueError("Perfusion data cannot be None")
     if not wsp.calib:
         raise ValueError("No calibration data supplied")
-        
+
     init(wsp)
     calculate_m0(wsp)
     wsp.log.write("\nCalibrating perfusion data: %s\n" % perf_img.name)
@@ -128,7 +128,7 @@ def get_m0_voxelwise(wsp):
 
     :param wsp: Workspace object
     :return: Image containing voxelwise M0 map
-    
+
     Required workspace attributes
     -----------------------------
 
@@ -177,7 +177,7 @@ def get_m0_voxelwise(wsp):
     # Reporting
     page = wsp.report.page("m0")
     page.heading("Voxelwise M0 calculation")
-    page.text("Voxelwise calibration calculates an M0 value for each voxel from the calibration image")  
+    page.text("Voxelwise calibration calculates an M0 value for each voxel from the calibration image")
     page.heading("Correction factors", level=1)
     table = []
     table.append(["Calibration gain", "%.3g" % gain])
@@ -188,7 +188,7 @@ def get_m0_voxelwise(wsp):
         table.append(["Tissue T1", "%.3g" % wsp.t1t])
         table.append(["T1 Correction factor (for short TR)", "%.3g" % shorttr])
     table.append(["Overall correction factor", "%.3g" % (gain*shorttr/pct)])
-    
+
     if wsp.rois is not None and wsp.rois.mask is not None:
         table.append(["Mean M0 (within mask)", "%.3g" % np.mean(m0[wsp.rois.mask.data > 0])])
         table.append(["Edge correction", "Enabled" if wsp.edgecorr else "Disabled"])
@@ -221,7 +221,7 @@ def _edge_correct(m0, brain_mask):
         zslice_extrap = scipy.ndimage.filters.generic_filter(zslice, _masked_mean, footprint=np.ones([5, 5]))
         m0[..., z] = zslice_extrap
     m0[brain_mask == 0] = 0
-    
+
     return m0
 
 def _masked_mean(vals):
@@ -248,7 +248,7 @@ def get_m0_wholebrain(wsp):
     Get a whole-brain M0 value
 
     This calculates an M0 map for the whole brain using the T1, T2 and PC
-    values for each tissue type with the contribution at each voxel weighted 
+    values for each tissue type with the contribution at each voxel weighted
     by the tissue partial volume
 
     :param wsp: Workspace object
@@ -283,12 +283,12 @@ def get_m0_wholebrain(wsp):
         brain_mask = wsp.rois.mask.data
     else:
         brain_mask = np.ones(wsp.calib.shape[:3])
-    
+
     ### Sensitivity image calculation (if we have a sensitivity image)
     if wsp.sens:
         wsp.log.write(" - Using sensitivity image: %s\n" % wsp.sens.name)
         calib_data /= wsp.sens.data
-    
+
     m0 = np.zeros(calib_data.shape, dtype=np.float)
     for tiss_type in ("wm", "gm", "csf"):
         pve_struc = getattr(wsp.structural, "%s_pv" % tiss_type)
@@ -319,8 +319,8 @@ def get_m0_wholebrain(wsp):
     # Reporting
     page = wsp.report.page("m0")
     page.heading("Whole-brain M0 calculation")
-    page.text("Whole-brain calibration calculates an M0 value for each voxel from the calibration image based on partial volume estimates")  
-    page.text("- Calibration gain: %f" % gain)  
+    page.text("Whole-brain calibration calculates an M0 value for each voxel from the calibration image based on partial volume estimates")
+    page.text("- Calibration gain: %f" % gain)
     page.text(" - TR: %f" % tr)
     page.text(" - TE: %f" % te)
 
@@ -342,7 +342,7 @@ def get_m0_refregion(wsp, mode="longtr"):
      - ``calib`` : Image containing voxelwise M0 map
      - ``refmask`` : Reference region mask in calibration image space. Technically this is not required
                       as the brain mask will be used if not specified, however it is strongly recommended.
-     
+
     Optional workspace attributes
     -----------------------------
 
@@ -359,7 +359,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     """
     wsp.log.write(" - Doing reference region calibration\n")
     gain = wsp.ifnone("calib_gain", 1)
- 
+
     tr = wsp.ifnone("tr", 3.2)
     te = wsp.ifnone("te", 0)
     taq = wsp.ifnone("taq", 0)
@@ -378,7 +378,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     # GM/WM T2* from Foucher 2011 JMRI 34:785-790
     wsp.tissref = wsp.ifnone("tissref", "csf")
     wsp.log.write(" - Using tissue reference type: %s\n" % wsp.tissref)
-         
+
     t1r, t2r, t2rstar, pcr = tissue_defaults(wsp.tissref)
     if t2star:
         t2r = t2rstar
@@ -405,7 +405,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     if wsp.t2b is not None:
         t2b = wsp.t2b
         wsp.log.write(" - Using user-specified T2b value: %f\n" % t2b)
-        
+
     if wsp.pcr is not None:
         pcr = wsp.pcr
         wsp.log.write(" - Using user-specified partition coefficient: %f\n" % pcr)
@@ -442,7 +442,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     elif wsp.tissref.lower() in ("csf", "wm", "gm"):
         get_tissrefmask(wsp)
         refmask = wsp.calibration.refmask.data
-        
+
     nonzero = np.count_nonzero(refmask)
     if nonzero < 1:
         raise ValueError("Reference mask does not contain any unmasked voxels")
@@ -455,18 +455,18 @@ def get_m0_refregion(wsp, mode="longtr"):
         wsp.log.write(" - Using sensitivity image: %s\n" % wsp.sens.name)
         sens_corr = True
         sens_data = wsp.sens.data
-    
+
     wsp.log.write(" - MODE: %s\n" % mode)
     wsp.log.write(" - Calibration gain: %f\n" % gain)
- 
+
     if mode == "longtr":
         if sens_corr:
             wsp.log.write(" - Applying sensitivity image\n")
             calib_data /= sens_data
-        
+
         # Mask M0 map with tissue reference
         calib_data[refmask == 0] = 0
-        
+
         # calcualte T1 of reference region (if a T1 image has been supplied)
         if t1r_img:
             t1r = np.mean(t1r.data[refmask != 0])
@@ -482,7 +482,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         wsp.log.write(" - mean signal in reference tissue: %f\n" % mean_sig)
         t1_corr = 1 / (1 - math.exp(- (tr - taq) / t1r))
         wsp.log.write(" - T1 correction factor: %f\n" % t1_corr)
-        
+
     elif mode == "satrecov":
         # Calibration image is control images and we want to do a saturation recovery fit
         # NB only do the fit in the CSF mask
@@ -495,7 +495,7 @@ def get_m0_refregion(wsp, mode="longtr"):
             "model" : "satrecov",
             "t1" : t1r,
         }
-        
+
         #deal with TIs
         tis = wsp.ifnone("satrecov_tis", [])
         wsp.log.write(" - TIs: %s\n" % str(tis))
@@ -509,7 +509,7 @@ def get_m0_refregion(wsp, mode="longtr"):
             options["phases"] = wsp.calib_nphases
         if wsp.lfa:
             options["LFA"] = wsp.lfa
-        
+
         # Extra sat recovery options
         if wsp.fixa:
             options["fixa"] = True
@@ -519,7 +519,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         from .wrappers import fabber
         fabber_result = fabber(options)
         mean_m0 = fabber_result["mean_M0t"]
-        
+
         # Calculate M0 value - this is mean M0 of CSF at the TE of the sequence
         m0_value = np.mean(mean_m0.data[refmask != 0])
 
@@ -534,7 +534,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         wsp.log.write(" - FABBER (again) within whole brain mask\n")
         options["mask"] = brain_mask
         fabber(options)
-        # $fabber --data=$calib --mask=$bmask --output=$temp_calib/satrecovT --data-order=singlefile --model=satrecov --noise=white --method=vb $tislist $llopts $sropts 
+        # $fabber --data=$calib --mask=$bmask --output=$temp_calib/satrecovT --data-order=singlefile --model=satrecov --noise=white --method=vb $tislist $llopts $sropts
 
         # save useful results to specified output directory
         #imcp $temp_calib/satrecovT/mean_T1t $outdir/T1t
@@ -545,7 +545,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         raise ValueError("Unknown reference region mode: %s (Should be satrecov or longtr)" % mode)
 
     # Use equation to get the M0 value that is needed
-    
+
     #  T2 correction
     t2_corr = math.exp(- te / t2b) / math.exp(- te / t2r)
     wsp.log.write(" - T2 correction factor: %f\n" % t2_corr)
@@ -568,8 +568,8 @@ def get_m0_refregion(wsp, mode="longtr"):
     page.text("Reference region calibration calculates a single M0 value for a region of known tissue type")
     page.heading("Calculation details", level=1)
     page.table([
-        ["Sequence TR (s)", tr], 
-        ["Sequence TE (ms)", te], 
+        ["Sequence TR (s)", tr],
+        ["Sequence TE (ms)", te],
         ["T1 reference tissue (s)", t1r],
         ["T2 reference tissue (ms)", t2r],
         ["Blood T2 (ms)", t2b],
@@ -591,7 +591,7 @@ def get_tissrefmask(wsp):
     Calculate a calibration reference mask for a particular known tissue type
     """
     struc.segment(wsp)
-    
+
     page = wsp.report.page("auto_calib_mask")
     page.heading("Calibration reference region")
     page.text("Reference region was automatically generated for tissue type: %s" % wsp.tissref.upper())
@@ -604,7 +604,7 @@ def get_tissrefmask(wsp):
         # By deafult now we do FNRIT transformation of ventricle mask
         # FIXME disabled as not being used in ASL_CALIB at present
         #wsp.calibration.struc2stdfnirt = wsp.ifnone("stdmaskfnirt", True)
-        
+
         # Select ventricles based on standard space atlas
         page.heading("Automatic ventricle selection", level=1)
         page.text("Standard space ventricles mask (from Harvard-Oxford atlas) eroded by 1 pixel")
@@ -658,11 +658,11 @@ TISS_DEFAULTS = {
 def tissue_defaults(tiss_type=None):
     """
     Get default T1, T2, T2* and PC for different tissue types
-    
+
     Parameters for reference tissue type: T1, T2, T2*, partition coeffs, FAST seg ID
     Partition coeffs based on Herscovitch and Raichle 1985 with a blood water density of 0.87
     GM/WM T2* from Foucher 2011 JMRI 34:785-790
-    
+
     :return: If tiss_type given, tuple of T1, T2, T2* and PC for tissue type.
              Otherwise return dictionary of tissue type name (csf, wm, gm) to tuple
              of T1, T2, T2* and PC for all known types
@@ -709,7 +709,7 @@ class CalibOptions(OptionCategory):
         group.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
         group.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
         groups.append(group)
-        
+
         group = IgnorableOptionGroup(parser, "longtr mode (calibration image is a control image with a long TR)", ignore=self.ignore)
         groups.append(group)
 
@@ -730,7 +730,7 @@ class CalibOptions(OptionCategory):
         #group.add_option("--warp", help="Structural to MNI152 non-linear registration (warp)")
 
         return groups
- 
+
 def main():
     """
     Entry point for oxasl_calib command line program
@@ -742,7 +742,7 @@ def main():
         parser.add_category(CalibOptions())
         parser.add_category(GenericOptions(output_type="file"))
         options, _ = parser.parse_args(sys.argv)
-        
+
         if not options.perf:
             sys.stderr.write("Perfusion input file not specified\n")
             parser.print_help()
