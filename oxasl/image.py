@@ -283,7 +283,8 @@ class AslImage(Image):
                 rpts *= self.ntis
             elif len(rpts) != self.ntis:
                 raise ValueError("%i TIs specified, inconsistent with %i variable repeats" % (self.ntis, len(rpts)))
-            elif sum(rpts) * self.ntc != self.nvols:
+            
+            if sum(rpts) * self.ntc != self.nvols:
                 raise ValueError("Data contains %i volumes, inconsistent with %i labelling images and total of %i repeats" % (self.nvols, self.ntc, sum(rpts)))
         self.setMeta("rpts", rpts)
 
