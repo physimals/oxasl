@@ -353,6 +353,12 @@ class AslImage(Image):
     def nphases(self):
         return self.getMeta("ntc", None)
 
+    def is_var_repeats(self):
+        """
+        :return: True if this data set has repeats which vary by time point
+        """
+        return min(self.rpts) != max(self.rpts)
+
     def get_vol_index(self, label_idx, ti_idx, rpt_idx, order=None):
         """
         Get the volume index for a specified label, TI and repeat index

@@ -101,6 +101,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--fixbolus", dest="infertau", help="Fix bolus duration", action="store_false")
         g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
         g.add_option("--spatial-off", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
+        g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile")
         if oxasl_enable:
             g.add_option("--use-enable", help="Use ENABLE preprocessing step", action="store_true", default=False)
 
@@ -294,7 +295,7 @@ def model_paired(wsp):
         struc.segment(wsp)
         wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
         wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
-        wsp.basil_options = {"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl}
+        wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl})
         basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
         output_native(wsp.output, wsp.basil_pvcorr)
     else:

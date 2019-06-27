@@ -163,11 +163,19 @@ class GenericOptions(OptionCategory):
         group.add_option("--debug", help="Debug mode - log all command output and keep all output files", action="store_true", default=False)
         return [group, ]
 
-def _check_image(option, opt, value):
-    try:
-        return Image(value, loadData=False)
-    except ValueError:
-        raise OptionValueError("option %s: invalid Image value: %r" % (opt, value))
+def load_options_file(fname):
+    options = {}
+    if fname:
+        with open(fname) as options_file:
+            for line in options_file:
+                keyval = line.strip().rstrip("\n").lstrip("--").split("=", 1)
+                key = keyval[0].strip().replace("-", "_")
+                if key != "":
+                    if len(keyval) == 1:
+                        options[key] = True
+                    else:
+                        options[key] = keyval[1].strip()
+    return options
 
 def load_matrix(fname):
     """
@@ -184,14 +192,27 @@ def load_matrix(fname):
             matrix.append([float(v) for v in line.split()])
     return np.array(matrix, dtype=np.float)
 
+def _check_image(option, opt, value):
+    try:
+        return Image(value, loadData=False)
+    except ValueError:
+        raise OptionValueError("option %s: invalid Image value: %r" % (opt, value))
+
 def _check_matrix(option, opt, value):
     try:
         return load_matrix(value)
     except ValueError:
         raise OptionValueError("option %s: invalid matrix value: %r" % (opt, value))
 
+def _check_optfile(option, opt, value):
+    try:
+        return load_options_file(value)
+    except ValueError:
+        raise OptionValueError("option %s: invalid options file: %r" % (opt, value))
+
 class _ImageOption(Option):
-    TYPES = Option.TYPES + ("image", "matrix",)
+    TYPES = Option.TYPES + ("image", "matrix", "optfile",)
     TYPE_CHECKER = copy(Option.TYPE_CHECKER)
     TYPE_CHECKER["image"] = _check_image
     TYPE_CHECKER["matrix"] = _check_matrix
+    TYPE_CHECKER["optfile"] = _check_optfile

@@ -518,6 +518,7 @@ class BasilOptions(OptionCategory):
         group.add_option("--fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
         group.add_option("--noiseprior", help="Use an informative prior for the noise estimation", action="store_true", default=False)
         group.add_option("--noisesd", help="Set a custom noise std. dev. for the nosie prior", type=float)
+        group.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile")
         groups.append(group)
 
         group = IgnorableOptionGroup(parser, "Model options", ignore=self.ignore)
@@ -576,18 +577,6 @@ def main():
         wsp.max_iterations = num_iter
         wsp.max_trials = num_trials
         wsp.onestep = onestep
-
-        # Read in additional model options from a file
-        wsp.basil_options = {}
-        if wsp.optfile:
-            for line in open(options.optfile):
-                keyval = line.strip().rstrip("\n").lstrip("--").split("=", 1)
-                key = keyval[0].strip().replace("-", "_")
-                if key != "":
-                    if len(keyval) == 1:
-                        wsp.basil_options[key] = True
-                    else:
-                        wsp.basil_options[key] = keyval[1].strip()
 
         # Run BASIL processing, passing options as keyword arguments using **
         basil(wsp)
