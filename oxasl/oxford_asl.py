@@ -84,7 +84,7 @@ from oxasl import Workspace, __version__, image, calib, struc, basil, mask, corr
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.reporting import LightboxImage
 
-from surfoxasl import prepare_surf_pvs
+from oxasl.surfoxasl import prepare_surf_pvs
 
 class OxfordAslOptions(OptionCategory):
     """

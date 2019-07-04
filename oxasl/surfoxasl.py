@@ -1,9 +1,6 @@
 import os.path as op 
 
 import toblerone
-
-import workspace
-import oxford_asl
 from fsl.data.image import Image
 
 def prepare_surf_pvs(wsp):
