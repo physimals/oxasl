@@ -79,6 +79,7 @@ class DistcorrOptions(OptionCategory):
 
         g = IgnorableOptionGroup(parser, "Partial volume correction")
         g.add_option("--pvcorr", help="Apply partial volume correction", action="store_true", default=False)
+        g.add_option("--surf-pvcorr", help="Apply SURFACE PVEc, not mutually exclusive with --pvcorr", action="store_true", default=False)
         ret.append(g)
 
         return ret

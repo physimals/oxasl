@@ -5,4 +5,5 @@ build
 dist
 oxasl.egg-info
 doc/html
+.vscode
 doc/doctrees

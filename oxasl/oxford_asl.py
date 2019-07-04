@@ -84,6 +84,8 @@ from oxasl import Workspace, __version__, image, calib, struc, basil, mask, corr
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.reporting import LightboxImage
 
+from surfoxasl import prepare_surf_pvs
+
 class OxfordAslOptions(OptionCategory):
     """
     OptionCategory which contains options for preprocessing ASL data
@@ -101,7 +103,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--fixbolus", dest="infertau", help="Fix bolus duration", action="store_false")
         g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
         g.add_option("--spatial-off", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
-        g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile")
+        g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
         if oxasl_enable:
             g.add_option("--use-enable", help="Use ENABLE preprocessing step", action="store_true", default=False)
 
@@ -278,30 +280,51 @@ def model_paired(wsp):
 
     wsp.sub("output")
 
-    if wsp.pvcorr:
-        # Do partial volume correction fitting
-        #
-        # FIXME: We could at this point re-apply all corrections derived from structural space?
-        # But would need to make sure corrections module re-transforms things like sensitivity map
-        #
-        # Partial volume correction is very sensitive to the mask, so recreate it
-        # if it came from the structural image as this requires accurate ASL->Struc registration
-        if wsp.rois.mask_src == "struc":
-            wsp.rois.mask_orig = wsp.rois.mask
-            wsp.rois.mask = None
-            mask.generate_mask(wsp)
+    if wsp.pvcorr or wsp.surf_pvcorr:
 
-        # Generate PVM and PWM maps for Basil
-        struc.segment(wsp)
-        wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
-        wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
-        wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl})
-        basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
-        output_native(wsp.output, wsp.basil_pvcorr)
+        if wsp.pvcorr:
+            # Do partial volume correction fitting
+            #
+            # FIXME: We could at this point re-apply all corrections derived from structural space?
+            # But would need to make sure corrections module re-transforms things like sensitivity map
+            #
+            # Partial volume correction is very sensitive to the mask, so recreate it
+            # if it came from the structural image as this requires accurate ASL->Struc registration
+            if wsp.rois.mask_src == "struc":
+                wsp.rois.mask_orig = wsp.rois.mask
+                wsp.rois.mask = None
+                mask.generate_mask(wsp)
+
+            # Generate PVM and PWM maps for Basil
+            struc.segment(wsp)
+            wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
+            wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
+
+            # wsp.basil_options = None?
+            wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl})
+            basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
+            output_native(wsp.output, wsp.basil_pvcorr)
+            output_trans(wsp.output)
+    
+
+        if wsp.surf_pvcorr:
+
+            # As in the FAST PVEc block
+            if wsp.rois.mask_src == "struc":
+                wsp.rois.mask_orig = wsp.rois.mask
+                wsp.rois.mask = None
+                mask.generate_mask(wsp)
+            
+            prepare_surf_pvs(wsp)
+            basil.basil(wsp, output_wsp=wsp.sub("basil_surf_pvcorr"), prefit=False)
+            surfout = wsp.output.sub('surfout')
+            output_native(surfout, wsp.basil_surf_pvcorr)   
+            output_trans(surfout)
+
+
     else:
         output_native(wsp.output, wsp.basil)
-
-    output_trans(wsp.output)
+        output_trans(wsp.output)
 
 def redo_reg(wsp, pwi):
     """
