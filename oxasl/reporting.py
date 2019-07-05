@@ -353,7 +353,7 @@ class Report(object):
                     result = sphinx.main(args)
                 else:
                     import sphinx.cmd.build
-                    result = sphinx.cmd.build.main(args)
+                    result = sphinx.cmd.build.main(args[1:])
             except (AttributeError, ImportError, OSError):
                 log.write("WARNING: sphinx not found, HTML report will not be generated\n")
                 return False
