@@ -189,7 +189,8 @@ def load_matrix(fname):
     matrix = []
     with open(fname, "r") as f:
         for line in f.readlines():
-            matrix.append([float(v) for v in line.split()])
+            if line.strip():
+                matrix.append([float(v) for v in line.strip().split()])
     return np.array(matrix, dtype=np.float)
 
 def _check_image(option, opt, value):
