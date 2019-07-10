@@ -169,7 +169,7 @@ def load_options_file(fname):
         with open(fname) as options_file:
             for line in options_file:
                 keyval = line.strip().rstrip("\n").lstrip("--").split("=", 1)
-                key = keyval[0].strip().replace("-", "_")
+                key = keyval[0].strip()
                 if key != "":
                     if len(keyval) == 1:
                         options[key] = True
