@@ -195,7 +195,7 @@ def oxasl(wsp):
 
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
         model_paired(wsp)
-    elif wsp.asldata.iaf == "ve":
+    elif wsp.asldata.iaf in ("ve", "vediff"):
         if oxasl_ve is None:
             raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
         oxasl_ve.model_ve(wsp)
@@ -390,7 +390,7 @@ def output_native(wsp, basil_wsp, report=None):
                 setattr(wsp.native, name, img)
 
                 if calibrate and wsp.calib is not None:
-                    alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf == "ve" else 0.85 if wsp.asldata.casl else 0.98)
+                    alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
                     img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=is_variance)
                     name = "%s_calib" % name
                     setattr(wsp.native, name, img)
@@ -425,7 +425,7 @@ def output_report(wsp, report=None):
             page = report.page(name)
             page.heading("Output image: %s" % name)
             if calibrate and name.endswith("_calib"):
-                alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf == "ve" else 0.85 if wsp.asldata.casl else 0.98)
+                alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
                 page.heading("Calibration", level=1)
                 page.text("Image was calibrated using supplied M0 image")
                 page.text("Inversion efficiency: %f" % alpha)
