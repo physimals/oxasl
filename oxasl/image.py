@@ -225,8 +225,10 @@ class AslImage(Image):
                 raise ValueError("Vessel encoded data specified but number of encoding cycles not given")
             elif self.iaf == "ve":
                 ntc = nenc
+            elif nenc % 2 == 0:
+                ntc = int(nenc / 2)
             else:
-                ntc = nenc / 2
+                raise ValueError("Subtracted vessel encoded data must have had an even number of encoding cycles")
         else:
             ntc = 1
         self.setMeta("ntc", ntc)
