@@ -44,7 +44,7 @@ this data defines 4 source vessels::
 The encoding sequence is currently assumed to be determined from the estimated initial
 vessel locations.
 
-An example command line for multi-PLD VEPCASL data would be:
+An example command line for multi-PLD VEPCASL data would be::
 
     oxasl -i mpld_asltc --casl --iaf=ve --ibf=tis --slicedt=0.0452 \
           --plds=0.25,0.5,0.75,1.0,1.25,1.5 --bolus=1.4 \
