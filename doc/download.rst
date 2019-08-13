@@ -10,7 +10,7 @@ I have FSL 6.0 or later
 
 To install into the fslpython environment use::
 
-    fslpython -m pip install oxasl oxasl_ve --user
+    fslpython -m pip install oxasl oxasl_ve oxasl_mp --user
 
 This installs the main package and the vessel-encoding plugin.
 To check it is working, try running the main executable::

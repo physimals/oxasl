@@ -1,5 +1,3 @@
-.. _CLI:
-
 OXASL example using vessel encoded pCASL data
 =============================================
 

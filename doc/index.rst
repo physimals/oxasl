@@ -20,6 +20,7 @@ MRI data. Features of the toolbox include:
 Plugins are also available for:
 
  - Vessel-encoded ASL data
+ - Multiphase ASL data
 
 OXASL works within an FSL environment which must be installed.
 
@@ -32,5 +33,6 @@ OXASL works within an FSL environment which must be installed.
    walkthrough_cl
    walkthrough_gui
    example_ve
+   example_mp
    oxasl
    api
