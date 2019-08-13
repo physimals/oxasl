@@ -1,5 +1,5 @@
-OXASL example using vessel encoded pCASL data
-=============================================
+Example using vessel encoded pCASL data
+=======================================
 
 This example shows how to process vessel encoded pCASL data with OXASL.
 

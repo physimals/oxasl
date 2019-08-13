@@ -1,5 +1,5 @@
-OXASL example using multiphase ASL data
-=======================================
+Example using multiphase ASL data
+=================================
 
 This example shows how to process multiphase data within OXASL. Multiphase data
 is collected at a range of inversion phases, so rather than pairs of tag/control
