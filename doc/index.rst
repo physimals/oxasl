@@ -31,5 +31,6 @@ OXASL works within an FSL environment which must be installed.
    download
    walkthrough_cl
    walkthrough_gui
+   example_ve
    oxasl
    api
