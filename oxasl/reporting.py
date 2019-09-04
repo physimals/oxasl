@@ -45,6 +45,24 @@ except ImportError:
 
 from fsl.data.image import Image
 
+def which(program):
+    """
+    Simple implementation of which to search for executable
+    """
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    fpath, fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        for path in os.environ["PATH"].split(os.pathsep):
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+    return None
+
 class LightboxImage(object):
     """
     A .png image file showing a lightbox view of one or more Image instances
@@ -346,14 +364,19 @@ class Report(object):
             os.makedirs(dest_dir)
 
             try:
-                # Different sphinx version have different main API
-                args = ['sphinx-build', '-b', 'html', build_dir, dest_dir]
-                import sphinx
-                if hasattr(sphinx, "main"):
-                    result = sphinx.main(args)
+                # Different sphinx version have different main API.
+                # We try the executable first currently to work around a bug in pyside2
+                args = [which('sphinx-build'), '-b', 'html', build_dir, dest_dir]
+                if args[0] is not None:
+                    import subprocess
+                    result = subprocess.call(args)
                 else:
-                    import sphinx.cmd.build
-                    result = sphinx.cmd.build.main(args)
+                    import sphinx
+                    if hasattr(sphinx, "main"):
+                        result = sphinx.main(args)
+                    else:
+                        import sphinx.cmd.build
+                        result = sphinx.cmd.build.main(args[1:])
             except (AttributeError, ImportError, OSError):
                 log.write("WARNING: sphinx not found, HTML report will not be generated\n")
                 return False

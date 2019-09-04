@@ -25,7 +25,7 @@ class AslImageOptions(OptionCategory):
     def groups(self, parser):
         group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
         group.add_option("--asldata", self.fname_opt, help="ASL data file")
-        group.add_option("--iaf", help="input ASl format: diff=differenced,tc=tag-control,ct=control-tag,mp=multiphase,ve=vessel-encoded")
+        group.add_option("--iaf", help="input ASl format: diff=differenced,tc=tag-control,ct=control-tag,mp=multiphase,ve=vessel-encoded,vediff=pairwise subtracted VE data")
         group.add_option("--order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, l=labelling (tag/control/phases etc). First character is fastest varying")
         group.add_option("--tis", help="TIs (s) as comma-separated list")
         group.add_option("--plds", help="PLDs (s) as comma-separated list - alternative to --tis")
@@ -33,7 +33,7 @@ class AslImageOptions(OptionCategory):
         group.add_option("--nplds", help="Equivalent to --ntis", type="int")
         group.add_option("--rpts", help="Variable repeats as comma-separated list, one per TI/PLD", default=None)
         group.add_option("--nphases", help="For --iaf=mp, number of phases (assumed to be evenly spaced)", default=None, type="int")
-        group.add_option("--nenc", help="For --iaf=ve, number of encoding cycles", type="int", default=8)
+        group.add_option("--nenc", help="For --iaf=ve/vediff, number of encoding cycles in original acquisition", type="int", default=8)
         group.add_option("--casl", help="Acquisition was pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
         group.add_option("--tau", "--taus", "--bolus", help="Bolus duration (s). Can be single value or comma separated list, one per TI/PLD")
         group.add_option("--slicedt", help="Timing difference between slices (s) for 2D readout", type=float, default=0.0)
@@ -72,7 +72,7 @@ def data_order(iaf, ibf, order):
     If any parameters had to be guessed (rather than inferred from other information) a
     warning is output.
 
-    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've' or 'mp'), ordering (sequence of
+    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've', 'vediff' or 'mp'), ordering (sequence of
              2 or three chars, 'l'=labelling images, 'r'=repeats, 't'=TIs/PLDs. The characters
              are in order from fastest to slowest varying), Boolean indicating whether the block
              format needed to be guessed
@@ -88,7 +88,7 @@ def data_order(iaf, ibf, order):
             # Order specified and did not include labelling images so we are entitled
             # to assume differenced data without a warning
             iaf = "diff"
-    elif iaf not in ("diff", "tc", "ct", "mp", "ve"):
+    elif iaf not in ("diff", "tc", "ct", "mp", "ve", "vediff"):
         raise ValueError("Unrecognized data format: iaf=%s" % iaf)
 
     ibf_guessed = False
@@ -144,7 +144,7 @@ class AslImage(Image):
     The data format is defined using the ``iaf`` parameter:
 
       - ``iaf`` - ``tc`` = tag then control, ``ct`` = control then tag, ``mp`` = multiphase,
-        ``ve`` = vessel encoded, ``diff`` = already differenced
+        ``ve`` = vessel encoded, ``vediff`` = Pairwise subtracted vessel encoded, ``diff`` = already differenced
 
     :ivar nvols:  Number of volumes in data
     :ivar iaf:    Data format - see above
@@ -219,10 +219,16 @@ class AslImage(Image):
                 phases = [float(ph) for ph in phases.split(",")]
             phases = phases
             ntc = len(phases)
-        elif self.iaf == "ve":
+        elif self.iaf in ("ve", "vediff"):
+            self.setMeta("nenc", nenc)
             if nenc is None:
                 raise ValueError("Vessel encoded data specified but number of encoding cycles not given")
-            ntc = nenc
+            elif self.iaf == "ve":
+                ntc = nenc
+            elif nenc % 2 == 0:
+                ntc = int(nenc / 2)
+            else:
+                raise ValueError("Subtracted vessel encoded data must have had an even number of encoding cycles")
         else:
             ntc = 1
         self.setMeta("ntc", ntc)
@@ -677,14 +683,16 @@ class AslImage(Image):
             label_type = "Multiphase"
         elif self.iaf == "ve":
             label_type = "Vessel encoded"
+        elif self.iaf == "vediff":
+            label_type = "Vessel encoded (pairwise subtracted)"
         else:
             label_type = "Already differenced"
         md["Label type"] = label_type
 
         if self.iaf == "mp":
             md["Phases"] = str(self.phases)
-        elif self.iaf == "ve":
-            md["Encoding cycles"] = self.ntc
+        elif self.iaf in ("ve", "vediff"):
+            md["Encoding cycles"] = self.nenc
 
         md["Labelling"] = "CASL/pCASL" if self.casl else "PASL"
         if self.have_plds:
@@ -737,8 +745,8 @@ class AslImage(Image):
         derived_kwargs = {}
         for attr in derived_attrs:
             derived_kwargs[attr] = kwargs.get(attr, getattr(self, attr, None))
-        if self.iaf == "ve":
-            derived_kwargs["nenc"] = self.ntc
+        if self.iaf in ("ve", "vediff"):
+            derived_kwargs["nenc"] = self.nenc
 
         try:
             return AslImage(image=image, name=name, header=self.header, **derived_kwargs)

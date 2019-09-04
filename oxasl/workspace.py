@@ -252,7 +252,7 @@ class Workspace(object):
                     elif isinstance(value, Image):
                         value = ImageProxy(fname, md=dict(value.metaItems()))
 
-                elif isinstance(value, np.ndarray) and value.ndim == 2:
+                elif isinstance(value, np.ndarray) and value.ndim in (1, 2):
                     # Save as ASCII matrix
                     with open(os.path.join(self.savedir, save_name + ".mat"), "w") as tfile:
                         tfile.write(matrix_to_text(value))
@@ -299,6 +299,9 @@ def matrix_to_text(mat):
     """
     Convert matrix array to text using spaces/newlines as col/row delimiters
     """
+    # Pad 1D array to 2D matrix
+    if mat.ndim == 1:
+        mat = np.array([mat,])
     rows = []
     for row in mat:
         rows.append(" ".join([str(v) for v in row]))

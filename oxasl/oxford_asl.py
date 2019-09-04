@@ -60,6 +60,8 @@ import numpy as np
 
 from fsl.data.image import Image
 
+# Quick-and-dirty plugin imports - to be replaced with entry points and a defined plugin api
+# at some point
 try:
     import oxasl_ve
 except ImportError:
@@ -80,11 +82,14 @@ try:
 except ImportError:
     oxasl_enable = None
 
+try:
+    import oxasl_surfpvc
+except ImportError:
+    oxasl_surfpvc = None
+
 from oxasl import Workspace, __version__, image, calib, struc, basil, mask, corrections, reg
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.reporting import LightboxImage
-
-from oxasl.surfoxasl import prepare_surf_pvs
 
 class OxfordAslOptions(OptionCategory):
     """
@@ -197,7 +202,7 @@ def oxasl(wsp):
 
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
         model_paired(wsp)
-    elif wsp.asldata.iaf == "ve":
+    elif wsp.asldata.iaf in ("ve", "vediff"):
         if oxasl_ve is None:
             raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
         oxasl_ve.model_ve(wsp)
@@ -279,52 +284,47 @@ def model_paired(wsp):
     redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
 
     wsp.sub("output")
+    output_native(wsp.output, wsp.basil)
+    output_trans(wsp.output)
 
     if wsp.pvcorr or wsp.surf_pvcorr:
+        # Partial volume correction is very sensitive to the mask, so recreate it
+        # if it came from the structural image as this requires accurate ASL->Struc registration
+        if wsp.rois.mask_src == "struc":
+            wsp.rois.mask_orig = wsp.rois.mask
+            wsp.rois.mask = None
+            mask.generate_mask(wsp)
 
         if wsp.pvcorr:
             # Do partial volume correction fitting
             #
             # FIXME: We could at this point re-apply all corrections derived from structural space?
             # But would need to make sure corrections module re-transforms things like sensitivity map
-            #
-            # Partial volume correction is very sensitive to the mask, so recreate it
-            # if it came from the structural image as this requires accurate ASL->Struc registration
-            if wsp.rois.mask_src == "struc":
-                wsp.rois.mask_orig = wsp.rois.mask
-                wsp.rois.mask = None
-                mask.generate_mask(wsp)
-
+            
             # Generate PVM and PWM maps for Basil
             struc.segment(wsp)
             wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
             wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
 
-            # wsp.basil_options = None?
+            wsp.basil_options = wsp.ifnone("basil_options", {})
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl})
             basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
-            output_native(wsp.output, wsp.basil_pvcorr)
-            output_trans(wsp.output)
-    
+
+            wsp.sub("output_pvcorr")
+            output_native(wsp.output_pvcorr, wsp.basil_pvcorr)
+            output_trans(wsp.output_pvcorr)    
 
         if wsp.surf_pvcorr:
-
-            # As in the FAST PVEc block
-            if wsp.rois.mask_src == "struc":
-                wsp.rois.mask_orig = wsp.rois.mask
-                wsp.rois.mask = None
-                mask.generate_mask(wsp)
-            
-            prepare_surf_pvs(wsp)
+            if oxasl_surfpvc is None:
+                raise RuntimeError("Surface-based PVC requested but oxasl_surfpvc is not installed")
+                
+            # Do surface-based partial volume correction fitting
+            oxasl_surfpvc.prepare_surf_pvs(wsp)
             basil.basil(wsp, output_wsp=wsp.sub("basil_surf_pvcorr"), prefit=False)
-            surfout = wsp.output.sub('surfout')
-            output_native(surfout, wsp.basil_surf_pvcorr)   
-            output_trans(surfout)
 
-
-    else:
-        output_native(wsp.output, wsp.basil)
-        output_trans(wsp.output)
+            wsp.output.sub('output_surf_pvcorr')
+            output_native(wsp.output_surf_pvcorr, wsp.basil_surf_pvcorr)   
+            output_trans(wsp.output_surf_pvcorr)
 
 def redo_reg(wsp, pwi):
     """
@@ -412,7 +412,7 @@ def output_native(wsp, basil_wsp, report=None):
                 setattr(wsp.native, name, img)
 
                 if calibrate and wsp.calib is not None:
-                    alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf == "ve" else 0.85 if wsp.asldata.casl else 0.98)
+                    alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
                     img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=is_variance)
                     name = "%s_calib" % name
                     setattr(wsp.native, name, img)
@@ -447,7 +447,7 @@ def output_report(wsp, report=None):
             page = report.page(name)
             page.heading("Output image: %s" % name)
             if calibrate and name.endswith("_calib"):
-                alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf == "ve" else 0.85 if wsp.asldata.casl else 0.98)
+                alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
                 page.heading("Calibration", level=1)
                 page.text("Image was calibrated using supplied M0 image")
                 page.text("Inversion efficiency: %f" % alpha)
@@ -476,6 +476,7 @@ def output_trans(wsp):
     if not wsp.output_struc or wsp.reg.asl2struc is None:
         return
 
+    wsp.log.write("\nGenerating output in structural space\n")
     wsp.sub("struct")
     for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
         for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
@@ -484,6 +485,7 @@ def output_trans(wsp):
             if native_output is not None and native_output.ndim == 3:
                 if wsp.reg.asl2struc is not None:
                     setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output == 'mask')))
+    wsp.log.write(" - DONE\n")
 
 def do_cleanup(wsp):
     """

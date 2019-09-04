@@ -169,7 +169,7 @@ def load_options_file(fname):
         with open(fname) as options_file:
             for line in options_file:
                 keyval = line.strip().rstrip("\n").lstrip("--").split("=", 1)
-                key = keyval[0].strip().replace("-", "_")
+                key = keyval[0].strip()
                 if key != "":
                     if len(keyval) == 1:
                         options[key] = True
@@ -189,7 +189,8 @@ def load_matrix(fname):
     matrix = []
     with open(fname, "r") as f:
         for line in f.readlines():
-            matrix.append([float(v) for v in line.split()])
+            if line.strip():
+                matrix.append([float(v) for v in line.strip().split()])
     return np.array(matrix, dtype=np.float)
 
 def _check_image(option, opt, value):
