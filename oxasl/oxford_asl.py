@@ -277,6 +277,8 @@ def model_paired(wsp):
     redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
 
     wsp.sub("output")
+    output_native(wsp.output, wsp.basil)
+    output_trans(wsp.output)
 
     if wsp.pvcorr:
         # Do partial volume correction fitting
@@ -298,11 +300,9 @@ def model_paired(wsp):
         wsp.basil_options = wsp.ifnone("basil_options", {})
         wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl})
         basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
-        output_native(wsp.output, wsp.basil_pvcorr)
-    else:
-        output_native(wsp.output, wsp.basil)
-
-    output_trans(wsp.output)
+        wsp.sub("output_pvcorr")
+        output_native(wsp.output_pvcorr, wsp.basil_pvcorr)
+        output_trans(wsp.output_pvcorr)
 
 def redo_reg(wsp, pwi):
     """
@@ -454,6 +454,7 @@ def output_trans(wsp):
     if not wsp.output_struc or wsp.reg.asl2struc is None:
         return
 
+    wsp.log.write("\nGenerating output in structural space\n")
     wsp.sub("struct")
     for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
         for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
@@ -462,6 +463,7 @@ def output_trans(wsp):
             if native_output is not None and native_output.ndim == 3:
                 if wsp.reg.asl2struc is not None:
                     setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output == 'mask')))
+    wsp.log.write(" - DONE\n")
 
 def do_cleanup(wsp):
     """
