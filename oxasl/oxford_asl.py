@@ -190,7 +190,7 @@ def oxasl(wsp):
     Main oxasl pipeline script
     """
     wsp.log.write("OXASL version: %s\n" % __version__)
-    for plugin in (oxasl_ve, oxasl_mp, oxasl_deblur, oxasl_enable):
+    for plugin in (oxasl_ve, oxasl_mp, oxasl_deblur, oxasl_enable, oxasl_surfpvc):
         if plugin is not None:
             wsp.log.write(" - Found plugin: %s (version %s)\n" % (plugin.__name__, getattr(plugin, "__version__", "unknown")))
 
@@ -301,7 +301,7 @@ def model_paired(wsp):
             # FIXME: We could at this point re-apply all corrections derived from structural space?
             # But would need to make sure corrections module re-transforms things like sensitivity map
             
-            # Generate PVM and PWM maps for Basil
+            # Prepare GM and WM partial volume maps from FAST segmentation
             struc.segment(wsp)
             wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
             wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
@@ -318,7 +318,7 @@ def model_paired(wsp):
             if oxasl_surfpvc is None:
                 raise RuntimeError("Surface-based PVC requested but oxasl_surfpvc is not installed")
                 
-            # Do surface-based partial volume correction fitting
+            # Prepare GM and WM partial volume maps from surface using Toblerone plugin
             oxasl_surfpvc.prepare_surf_pvs(wsp)
             basil.basil(wsp, output_wsp=wsp.sub("basil_surf_pvcorr"), prefit=False)
 
