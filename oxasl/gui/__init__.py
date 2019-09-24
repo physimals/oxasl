@@ -38,9 +38,14 @@ class AslGui(wx.Frame):
         main_panel = wx.Panel(self)
         main_vsizer = wx.BoxSizer(wx.VERTICAL)
 
+        local_dir = os.path.abspath(os.path.dirname(__file__))
+        icon = wx.Icon()
+        icon.CopyFromBitmap(wx.Bitmap(os.path.join(local_dir, "icon.png"), wx.BITMAP_TYPE_ANY))
+        self.SetIcon(icon)
+
         banner = wx.Panel(main_panel, size=(-1, 80))
         banner.SetBackgroundColour((57, 71, 121))
-        banner_fname = os.path.join(os.path.abspath(os.path.dirname(__file__)), "banner.png")
+        banner_fname = os.path.join(local_dir, "banner.png")
         wx.StaticBitmap(banner, -1, wx.Bitmap(banner_fname, wx.BITMAP_TYPE_ANY))
         main_vsizer.Add(banner, 0, wx.EXPAND)
 
