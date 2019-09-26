@@ -349,7 +349,7 @@ def test_refregion_defaults():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
@@ -368,7 +368,7 @@ def test_refregion_unknown():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="kryptonite")
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="kryptonite")
     with pytest.raises(ValueError):
         calib.calibrate(wsp, perf_img)
     
@@ -381,7 +381,7 @@ def test_refregion_csf_all():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="csf")
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="csf")
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -398,7 +398,7 @@ def test_refregion_wm_all():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm")
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm")
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -415,7 +415,7 @@ def test_refregion_gm_all():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="gm")
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="gm")
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -433,7 +433,7 @@ def test_refregion_tr():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", tr=TR)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm", tr=TR)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -451,7 +451,7 @@ def test_refregion_te():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", te=TE)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm", te=TE)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -468,7 +468,7 @@ def test_refregion_t2b():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", t2b=T2b)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm", t2b=T2b)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -485,7 +485,7 @@ def test_refregion_t1r():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", t1r=T1)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm", t1r=T1)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -502,7 +502,7 @@ def test_refregion_t2r():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", t2r=T2)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm", t2r=T2)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -519,7 +519,7 @@ def test_refregion_pc():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", pcr=PC)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm", pcr=PC)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -535,7 +535,7 @@ def test_refregion_csf_t2star():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="csf", t2star=True)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="csf", t2star=True)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -551,7 +551,7 @@ def test_refregion_wm_t2star():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", t2star=True)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm", t2star=True)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -568,7 +568,7 @@ def test_refregion_gm_t2star():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="gm", t2star=True)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="gm", t2star=True)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -586,7 +586,7 @@ def test_refregion_gain():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm", calib_gain=GAIN)
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm", calib_gain=GAIN)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
 
@@ -603,7 +603,7 @@ def test_refregion_alpha():
     ref_d = np.ones((5, 5, 5))
     ref_img = Image(name="refmask", image=ref_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, tissref="wm")
+    wsp = Workspace(calib=calib_img, calib_method="refregion", refmask=ref_img, calib_aslreg=True, tissref="wm")
     perf_calib = calib.calibrate(wsp, perf_img, alpha=ALPHA)
     calibrated_d = perf_calib.data
 
