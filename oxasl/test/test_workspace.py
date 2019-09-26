@@ -233,7 +233,7 @@ def test_matrix_save():
         wsp = Workspace(savedir=tempdir)
         mat = np.random.rand(4, 4)
         wsp.testmat = mat
-        path = os.path.join(tempdir, "testmat")
+        path = os.path.join(tempdir, "testmat.mat")
         assert(os.path.isfile(path))
         with open(path) as matfile:
             othermat = text_to_matrix(matfile.read())
@@ -251,7 +251,7 @@ def test_matrix_nosave():
         wsp = Workspace(savedir=tempdir)
         mat = np.random.rand(4, 4)
         wsp.set_item("testmat", mat, save=False)
-        path = os.path.join(tempdir, "testmat")
+        path = os.path.join(tempdir, "testmat.mat")
         assert(not os.path.exists(path))
         assert(np.all(mat == wsp.testmat))
     finally:
@@ -266,9 +266,9 @@ def test_matrix_save_name():
         wsp = Workspace(savedir=tempdir)
         mat = np.random.rand(4, 4)
         wsp.set_item("testmat", mat, save_name="parsnip")
-        path = os.path.join(tempdir, "testmat")
+        path = os.path.join(tempdir, "testmat.mat")
         assert(not os.path.exists(path))
-        path = os.path.join(tempdir, "parsnip")
+        path = os.path.join(tempdir, "parsnip.mat")
         assert(os.path.isfile(path))
         with open(path) as matfile:
             othermat = text_to_matrix(matfile.read())
