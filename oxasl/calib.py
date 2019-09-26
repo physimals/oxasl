@@ -435,9 +435,14 @@ def get_m0_refregion(wsp, mode="longtr"):
         brain_mask = np.ones(wsp.calib.shape[:3])
 
     if wsp.refmask is not None:
-        wsp.log.write(" - Using supplied reference tissue mask: %s\n" % wsp.refmask.name)
+        wsp.log.write(" - Using supplied reference tissue mask: %s" % wsp.refmask.name)
         wsp.calibration.refmask = Image(wsp.refmask.data.astype(np.int), header=wsp.refmask.header)
-        wsp.calibration.refmask_trans = reg.calib2asl(wsp, wsp.calibration.refmask, mask=True)
+        if wsp.calib_aslreg:
+            wsp.log.write(" (Aligned to ASL image already)\n")
+            wsp.calibration.refmask_trans = wsp.calibration.refmask
+        else:
+            wsp.log.write(" (Transforming to ASL image space)\n")
+            wsp.calibration.refmask_trans = reg.calib2asl(wsp, wsp.calibration.refmask, mask=True)
         refmask = wsp.calibration.refmask_trans.data
     elif wsp.tissref.lower() in ("csf", "wm", "gm"):
         get_tissrefmask(wsp)
@@ -690,6 +695,8 @@ class CalibOptions(OptionCategory):
         group.add_option("--calib-method", "--cmethod", help="Calibration method: voxelwise or refregion")
         group.add_option("--calib-alpha", "--alpha", help="Inversion efficiency", type=float, default=None)
         group.add_option("--calib-gain", "--cgain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
+        group.add_option("--calib-aslreg", help="Calibration image is already aligned with ASL image", action="store_true", default=False)
+
         group.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
         groups.append(group)
 
