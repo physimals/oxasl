@@ -310,7 +310,7 @@ def test_mean_across_repeats_rt():
     assert img.ntc == 1
     assert img.order == "rt"
     data = img.nibImage.get_data()
-    assert list(data.shape) == [5, 5, 5, 2] 
+    assert list(data.shape) == [5, 5, 5, 2]
     for znew, zold in enumerate([1.5, 5.5]):
         assert np.all(data[..., znew] == zold)
 
@@ -594,3 +594,75 @@ def test_derived():
     assert img2.ntc == 2
     assert img2.order == "lrt"
     
+def test_multite():
+    d = np.random.rand(5, 5, 5, 16)
+    img = AslImage(name="d", image=d, plds=[1, 2], iaf="tc", ibf="tis", tes=[8, 9], casl=True, bolus=[3, 4])
+    assert img.ntes == 2
+    assert img.tes == [8, 9]
+    assert img.ntis == 2
+    assert img.have_plds
+    assert img.plds == [1, 2]
+    assert img.tis == [4, 6]
+    assert img.rpts == [2, 2]
+    assert img.ntc == 2
+    assert img.order == "elrt"
+    assert img.nvols == 16
+
+def test_multite_diff():
+    d = np.zeros([5, 5, 5, 16])
+    for z in range(16): d[..., z] = z
+    img = AslImage(name="d", image=d, plds=[1, 2], iaf="tc", ibf="tis", tes=[8, 9], casl=True, bolus=[3, 4])
+    imgdiff = img.diff()
+    assert imgdiff.ntes == 2
+    assert imgdiff.tes == [8, 9]
+    assert imgdiff.ntis == 2
+    assert imgdiff.have_plds
+    assert imgdiff.plds == [1, 2]
+    assert imgdiff.tis == [4, 6]
+    assert imgdiff.rpts == [2, 2]
+    assert imgdiff.ntc == 1
+    assert imgdiff.order == "ert"
+    assert imgdiff.nvols == 8
+    np.all(imgdiff.data == 2)
+
+def test_multite_mean_across_repeats_ibf_tis():
+    d = np.zeros([5, 5, 5, 16])
+    for z in range(16): d[..., z] = z
+    img = AslImage(name="d", image=d, plds=[1, 2], iaf="tc", ibf="tis", tes=[8, 9], casl=True, bolus=[3, 4])
+    imgmar = img.mean_across_repeats(diff=False)
+    assert imgmar.ntes == 2
+    assert imgmar.tes == [8, 9]
+    assert imgmar.ntis == 2
+    assert imgmar.have_plds
+    assert imgmar.plds == [1, 2]
+    assert imgmar.tis == [4, 6]
+    assert imgmar.rpts == [1, 1]
+    assert imgmar.ntc == 2
+    assert imgmar.order == "elrt"
+    assert imgmar.nvols == 8
+    for z in range(8):
+        if z < 4:
+            # e.g. mean of 0th and 4th image = 2
+            assert np.all(imgmar.data[..., z] == (z + 2))
+        else:
+            # e.g. mean of 8th and 12th image = 10
+            assert np.all(imgmar.data[..., z] == (z + 6))
+
+def test_multite_mean_across_repeats_ibf_rpt():
+    d = np.zeros([5, 5, 5, 16])
+    for z in range(16): d[..., z] = z
+    img = AslImage(name="d", image=d, plds=[1, 2], iaf="tc", ibf="rpt", tes=[8, 9], casl=True, bolus=[3, 4])
+    imgmar = img.mean_across_repeats(diff=False)
+    assert imgmar.ntes == 2
+    assert imgmar.tes == [8, 9]
+    assert imgmar.ntis == 2
+    assert imgmar.have_plds
+    assert imgmar.plds == [1, 2]
+    assert imgmar.tis == [4, 6]
+    assert imgmar.rpts == [1, 1]
+    assert imgmar.ntc == 2
+    assert imgmar.order == "eltr"
+    assert imgmar.nvols == 8
+    for z in range(8):
+        # e.g. mean of 0th and 8th image = 4
+        assert np.all(imgmar.data[..., z] == (z + 4))
