@@ -765,6 +765,10 @@ class AslImage(Image):
             md["Slices per band"] = self.sliceband
         if self.artsupp:
             md["Arterial suppression"] = "Was used"
+        
+        if len(self.tes) > 0:
+            md["TEs (s)"] = str(self.tes)
+            
         return md
 
     def derived(self, image, name=None, suffix="", **kwargs):
