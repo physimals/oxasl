@@ -152,7 +152,11 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
     :param output_wsp: Optional Workspace object for storing output files. If not specified
                        ``wsp`` is used instead
     """
-    steps = basil_steps(wsp, asldata, mask, **kwargs)
+    if len(asldata.tes) > 1:
+        steps = basil_steps_multite(wsp, asldata, mask, **kwargs)
+    else:
+        steps = basil_steps(wsp, asldata, mask, **kwargs)
+
     if output_wsp is None:
         output_wsp = wsp
 
@@ -424,6 +428,165 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
 
     return steps
 
+def basil_steps_multite(wsp, asldata, mask=None, **kwargs):
+    """
+    Get the steps required for a BASIL run on multi-TE data
+
+    This is separated for the case where an alternative process wants to run
+    the actual modelling, or so that the steps can be checked prior to doing
+    an actual run.
+
+    Arguments are the same as the ``basil`` function.
+    """
+    if asldata is None:
+        raise ValueError("Input ASL data is None")
+
+    wsp.log.write("BASIL v%s\n" % __version__)
+    asldata.summary(log=wsp.log)
+    asldata = asldata.diff().reorder("rt")
+
+    # Default Fabber options for VB runs and spatial steps. Note that attributes
+    # which are None (e.g. sliceband) are not passed to Fabber
+    options = {
+        "data" : asldata,
+        "model" : "asl_multite",
+        "method" : "vb",
+        "noise" : "white",
+        "allow-bad-voxels" : True,
+        "max-iterations" : 20,
+        "convergence" : "trialmode",
+        "max-trials" : 10,
+        "save-mean" : True,
+        "save-mvn" : True,
+        "save-std" : True,
+        "save-model-fit" : True,
+    }
+
+    if mask is not None:
+        options["mask"] = mask
+
+    # We choose to pass TIs (not PLDs). The asldata object ensures that
+    # TIs are correctly derived from PLDs, when these are specified, by adding
+    # the bolus duration.
+    _list_option(options, asldata.tis, "ti")
+
+    # Pass multiple TEs
+    _list_option(options, asldata.tes, "te")
+
+    # Bolus duration must be constant for multi-TE model
+    if min(asldata.taus) != max(asldata.taus):
+        raise ValueError("Multi-TE model does not support variable bolus durations")
+    else:
+        options["tau"] = asldata.taus[0]
+
+    # Repeats must be constant for multi-TE model
+    if min(asldata.rpts) != max(asldata.rpts):
+        raise ValueError("Multi-TE model does not support variable repeats")
+    else:
+        options["repeats"] = asldata.rpts[0]
+
+    # Other asl data parameters
+    for attr in ("casl", "slicedt", "sliceband"):
+        if getattr(asldata, attr, None) is not None:
+            options[attr] = getattr(asldata, attr)
+
+    # Keyword arguments override options
+    options.update(kwargs)
+
+    # Additional optional workspace arguments
+    for attr in ("t1", "t1b", "t2", "t2b", "mask"):
+        value = getattr(wsp, attr)
+        if value is not None:
+            if attr.startswith("t2"):
+                # Model expects T2 in seconds not ms
+                options[attr] = float(value) / 1000
+            else:
+                options[attr] = value
+
+    # Options for final spatial step
+    prior_type_spatial = "M"
+    prior_type_mvs = "A"
+    options_svb = {
+        "method" : "spatialvb",
+        "param-spatial-priors" : "N+",
+        "convergence" : "maxits",
+        "max-iterations": 20,
+    }
+
+    wsp.log.write("Model (in fabber) is : %s\n" % options["model"])
+    
+    # Set general parameter inference and inclusion
+    if not wsp.infertiss:
+        wsp.log.write("WARNING: infertiss=False but ftiss is always inferred in multi-TE model\n")
+    if not wsp.inferbat:
+        wsp.log.write("WARNING: inferbat=False but BAT is always inferred in multi-TE model\n")
+    if wsp.inferart:
+        wsp.log.write("WARNING: inferart=True but multi-TE model does not support arterial component\n")
+    if wsp.infertau:
+        options["infertau"] = True
+    if wsp.infert1:
+        options["infert1"] = True
+
+    # Keep track of the number of spatial priors specified by name
+    spriors = 1
+
+    if wsp.initmvn:
+        # we are being supplied with an initial MVN
+        wsp.log.write("Initial MVN being loaded %s\n" % wsp.initmvn.name)
+        options["continue-from-mvn"] = wsp.initmvn
+
+    # T1 image prior
+    if wsp.t1im:
+        spriors = _add_prior(options, spriors, "T_1", type="I", image=wsp.t1im)
+
+    steps = []
+    components = ""
+
+    ### --- TISSUE MODULE ---
+    #if wsp.infertiss:
+    if True:
+        components += " Tissue"
+
+        ### Inference options
+        if wsp.infertau:
+            components += " Bolus duration"
+            options["infertau"] = True
+        if wsp.infert1:
+            components += " T1"
+            options["infert1"] = True
+        if wsp.infertexch:
+            components += " Exchange time"
+            options["infertexch"] = True
+
+        step_desc = "VB - %s" % components
+        if not wsp.onestep:
+            steps.append(FabberStep(options, step_desc))
+
+        # Setup spatial priors ready
+        spriors = _add_prior(options_svb, spriors, "ftiss", type=prior_type_spatial)
+
+    ### --- SPATIAL MODULE ---
+    if wsp.spatial:
+        step_desc = "Spatial VB - %s" % components
+        options.update(options_svb)
+        del options["max-trials"]
+
+        if not wsp.onestep:
+            steps.append(FabberStep(options, step_desc))
+
+    ### --- SINGLE-STEP OPTION ---
+    if wsp.onestep:
+        steps.append(FabberStep(options, step_desc))
+
+    if not steps:
+        raise ValueError("No steps were generated - no parameters were set to be inferred")
+
+    return steps
+
+def _list_option(options, values, name):
+    for idx, value in enumerate(values):
+        options["%s%i" % (name, idx+1)] = value
+
 def _add_prior(options, prior_idx, param, **kwargs):
     options["PSP_byname%i" % prior_idx] = param
     for key, value in kwargs.items():
@@ -468,18 +631,13 @@ class PvcInitStep(Step):
         wm_cbf_ratio = 0.4
 
         # Modified pvgm map
-        #fsl.maths(pgm, " -sub 0.2 -thr 0 -add 0.2 temp_pgm")
         temp_pgm = np.copy(self.options["pgm"].data)
         temp_pgm[temp_pgm < 0.2] = 0.2
 
         # First part of correction psuedo WM CBF term
-        #fsl.run("mvntool", "--input=temp --output=temp_ftiss --mask=%s --param=ftiss --param-list=step%i/paramnames.txt --val" % (mask.name, prev_step))
-        #fsl.maths("temp_ftiss", "-mul %f -mul %s wmcbfterm" % (wm_cbf_ratio, pwm.name))
         prev_ftiss = prev_output["mean_ftiss"].data
         wm_cbf_term = (prev_ftiss * wm_cbf_ratio) * self.options["pwm"].data
 
-        #fsl.maths("temp_ftiss", "-sub wmcbfterm -div temp_pgm gmcbf_init")
-        #fsl.maths("gmcbf_init -mul %f wmcbf_init" % wm_cbf_ratio)
         gmcbf_init = (prev_ftiss - wm_cbf_term) / temp_pgm
         wmcbf_init = gmcbf_init * wm_cbf_ratio
 
@@ -509,11 +667,13 @@ class BasilOptions(OptionCategory):
 
         group = IgnorableOptionGroup(parser, "BASIL options", ignore=self.ignore)
         group.add_option("--infertau", help="Infer bolus duration", action="store_true", default=False)
-        group.add_option("--inferart", help="Infer macro vascular (arterial) signal component", action="store_true", default=False)
-        group.add_option("--inferpc", help="Infer pre-capillary signal component", action="store_true", default=False)
+        group.add_option("--inferart", help="Infer macro vascular (arterial) signal component (not supported for multi-TE data)", action="store_true", default=False)
+        group.add_option("--inferpc", help="Infer pre-capillary signal component (not supported for multi-TE data)", action="store_true", default=False)
         group.add_option("--infert1", help="Include uncertainty in T1 values", action="store_true", default=False)
-        group.add_option("--artonly", help="Remove tissue component and infer only arterial component", action="store_true", default=False)
+        group.add_option("--infertexch", help="Infer exchange time (multi-TE data only)", action="store_true", default=False)
+        group.add_option("--artonly", help="Remove tissue component and infer only arterial component (not supported for multi-TE data)", action="store_true", default=False)
         group.add_option("--fixbat", help="Fix bolus arrival time", action="store_false", default=True)
+        group.add_option("--batsd", help="Bolus arrival time standard deviation (s) - default 1.0 for multi-PLD, 0.1 otherwise", type=float)
         group.add_option("--spatial", help="Add step that implements adaptive spatial smoothing on CBF", action="store_true", default=False)
         group.add_option("--fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
         group.add_option("--noiseprior", help="Use an informative prior for the noise estimation", action="store_true", default=False)
