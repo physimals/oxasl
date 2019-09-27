@@ -101,24 +101,32 @@ class OxfordAslOptions(OptionCategory):
 
     def groups(self, parser):
         ret = []
-        g = IgnorableOptionGroup(parser, "Main Options")
+        g = IgnorableOptionGroup(parser, "General Pipeline Options")
         g.add_option("--wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
         g.add_option("--mc", help="Motion correct data", action="store_true", default=False)
-        g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
-        g.add_option("--fixbolus", dest="infertau", help="Fix bolus duration", action="store_false")
-        g.add_option("--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
-        g.add_option("--spatial-off", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
-        g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
         if oxasl_enable:
             g.add_option("--use-enable", help="Use ENABLE preprocessing step", action="store_true", default=False)
+        ret.append(g)
 
-        ret.append(g)
-        g = IgnorableOptionGroup(parser, "Acquisition/Data specific")
+        g = IgnorableOptionGroup(parser, "Model fitting options")
+        g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
+        g.add_option("--batsd", help="Bolus arrival time standard deviation (s) - default 1.0 for multi-PLD, 0.1 otherwise", type=float)
+        g.add_option("--fixbolus", "--fixtau", dest="infertau", help="Fix bolus duration", action="store_false")
+        g.add_option("--art-off", "--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
+        g.add_option("--spatial-off", "--spatialoff", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
+        g.add_option("--infertexch", help="Infer exchange time (multi-TE data only)", action="store_true", default=False)
+        g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
+        
+        g = IgnorableOptionGroup(parser, "Physiological parameters (all have default values from literature)")
         g.add_option("--bat", help="Estimated bolus arrival time (s) - default=0.7 (pASL), 1.3 (cASL)", type=float)
-        g.add_option("--batsd", help="Bolus arrival time standard deviation (s)", type=float)
-        g.add_option("--t1", help="Tissue T1 (s)", type=float, default=1.3)
+        g.add_option("--t1", "--t1t", help="Tissue T1 (s)", type=float, default=1.3)
+        g.add_option("--t2", "--t2t", help="Tissue T2 (ms)", type=float, default=30)
+        g.add_option("--t2s", help="Tissue T2* (ms)", type=float, default=20)
         g.add_option("--t1b", help="Blood T1 (s)", type=float, default=1.65)
+        g.add_option("--t2b", help="Blood T2 (ms) - Lu et al. 2012 MRM 67:42-49, 3T during normoxia", type=float, default=150)
+        g.add_option("--t2sb", help="Blood T2* (ms) - Petersen 2006 MRM 55(2):219-232", type=float, default=50)
         ret.append(g)
+
         g = IgnorableOptionGroup(parser, "Output options")
         g.add_option("--save-corrected", help="Save corrected input data", action="store_true", default=False)
         g.add_option("--save-reg", help="Save registration information (transforms etc)", action="store_true", default=False)
@@ -280,6 +288,8 @@ def model_paired(wsp):
      - ``output.native`` - Native (ASL) space output from last Basil modelling output
      - ``output.struc``  - Structural space output
     """
+    wsp.basil_options = wsp.ifnone("basil_options", {})
+
     basil.basil(wsp, output_wsp=wsp.sub("basil"))
     redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
 
@@ -306,7 +316,6 @@ def model_paired(wsp):
             wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
             wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
 
-            wsp.basil_options = wsp.ifnone("basil_options", {})
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl})
             basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
 

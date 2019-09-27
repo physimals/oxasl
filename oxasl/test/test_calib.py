@@ -188,7 +188,7 @@ def test_shorttr_corr():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="voxelwise", tr=TR, t1t=T1)
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", tr=TR, t1=T1)
     perf_calib = calib.calibrate(wsp, perf_img)
     calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")
@@ -330,7 +330,7 @@ def test_shorttr_corr_var():
     calib_d = np.random.rand(5, 5, 5)
     calib_img = Image(name="calib", image=calib_d)
 
-    wsp = Workspace(calib=calib_img, calib_method="voxelwise", tr=TR, t1t=T1)
+    wsp = Workspace(calib=calib_img, calib_method="voxelwise", tr=TR, t1=T1)
     perf_calib = calib.calibrate(wsp, perf_img, var=True)
     calibrated_d = perf_calib.data
     assert(perf_calib.name == "perfusion_calib")

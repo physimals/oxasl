@@ -139,7 +139,7 @@ def get_m0_voxelwise(wsp):
 
      - ``calib_gain`` : Calibration gain (default 1.0)
      - ``tr`` : Sequence TR (s) (optional, if present used for short TR correction when tr<5)
-     - ``t1t`` : Tissue T1 (optional, if present used for short TR correction)
+     - ``t1`` : Tissue T1 (optional, if present used for short TR correction)
      - ``pct`` : Partition coefficient used to convert M0 tissue into M0 arterial (default 0.9)
      - ``mask`` : Brain mask in calibration image space
      - ``calib_edgecorr`` : If True, and mask provided, apply edge correction
@@ -153,9 +153,9 @@ def get_m0_voxelwise(wsp):
 
     shorttr = 1
     if wsp.tr is not None and wsp.tr < 5:
-        if wsp.t1t is not None:
-            wsp.log.write(" - Correcting the calibration (M0) image for short TR (TR=%f, using T1 of tissue %f)\n" % (wsp.tr, wsp.t1t))
-            shorttr = 1 / (1 - math.exp(-wsp.tr / wsp.t1t))
+        if wsp.t1 is not None:
+            wsp.log.write(" - Correcting the calibration (M0) image for short TR (TR=%f, using T1 of tissue %f)\n" % (wsp.tr, wsp.t1))
+            shorttr = 1 / (1 - math.exp(-wsp.tr / wsp.t1))
             m0 *= shorttr
         else:
             wsp.log.write("WARNING: tr < 5 (%f) but tissue T1 not provided so cannot apply short TR correction\n" % wsp.tr)
@@ -185,7 +185,7 @@ def get_m0_voxelwise(wsp):
     if wsp.tr is not None:
         table.append(["Sequence TR", "%.3g" % wsp.tr])
     if shorttr != 1:
-        table.append(["Tissue T1", "%.3g" % wsp.t1t])
+        table.append(["Tissue T1", "%.3g" % wsp.t1])
         table.append(["T1 Correction factor (for short TR)", "%.3g" % shorttr])
     table.append(["Overall correction factor", "%.3g" % (gain*shorttr/pct)])
 
@@ -271,11 +271,9 @@ def get_m0_wholebrain(wsp):
 
     t2star = wsp.ifnone("t2star", False)
     if t2star:
-        # From Petersen 2006 MRM 55(2):219-232 see discussion
-        t2b = 50
+        t2b = wsp.ifnone("t2sb", 50)
     else:
-        # From Lu et al. 2012 MRM 67:42-49 have 154ms at 3T during normoxia
-        t2b = 150
+        t2b = wsp.ifnone("t2b", 150)
 
     # Check the data and masks
     calib_data = np.copy(wsp.calib.data)
@@ -294,9 +292,9 @@ def get_m0_wholebrain(wsp):
         pve_struc = getattr(wsp.structural, "%s_pv" % tiss_type)
         wsp.log.write(" - Transforming %s tissue PVE into ASL space\n" % tiss_type)
         pve = reg.struc2asl(wsp, pve_struc)
-        t1r, t2r, t2rstar, pcr = tissue_defaults(tiss_type)
+        t1r, t2r, t2sr, pcr = tissue_defaults(tiss_type)
         if t2star:
-            t2r = t2rstar
+            t2r = t2sr
         t1_corr = 1 / (1 - math.exp(- (tr - taq) / t1r))
         t2_corr = 1 / math.exp(- te / t2r)
         wsp.log.write("Correction factors: T1: %f, T2 %f, PC: %f" % (t1_corr, t2_corr, pcr))
@@ -350,10 +348,9 @@ def get_m0_refregion(wsp, mode="longtr"):
      - ``tr`` : Sequence TR (s) (default 3.2)
      - ``te`` : Sequence TE (s) (default 0)
      - ``taq`` : Sequence TAQ (s) (default 0)
-     - ``t2star`` : If True, correct for T2* rather than T2
+     - ``t2star`` : If True, correct for T2* rather than T2 (i.e. use T2* defaults not T2 defaults)
      - ``t1r`` : Reference tissue T1 (default: see ``TISSUE_DEFAULTS``)
-     - ``t2r`` : Reference tissue T2 (default: see ``TISSUE_DEFAULTS``)
-     - ``t2rstar`` : Reference tissue T2* (default: see ``TISSUE_DEFAULTS``)
+     - ``t2r`` : Reference tissue T2/T2* (default: see ``TISSUE_DEFAULTS``)
      - ``pcr`` : Reference tissue partition coefficient (default: see ``TISSUE_DEFAULTS``)
      - ``mask`` : Brain mask in calibration image space
     """
@@ -367,11 +364,9 @@ def get_m0_refregion(wsp, mode="longtr"):
 
     t2star = wsp.ifnone("t2star", False)
     if t2star:
-        # From Petersen 2006 MRM 55(2):219-232 see discussion
-        t2b = 50
+        t2b = wsp.ifnone("t2sb", 50)
     else:
-        # From Lu et al. 2012 MRM 67:42-49 have 154ms at 3T during normoxia
-        t2b = 150
+        t2b = wsp.ifnone("t2b", 150)
 
     # Parameters for reference tissue type: T1, T2, T2*, partition coeffs, FAST seg ID
     # Partition coeffs based on Herscovitch and Raichle 1985 with a blood water density of 0.87
@@ -379,9 +374,9 @@ def get_m0_refregion(wsp, mode="longtr"):
     wsp.tissref = wsp.ifnone("tissref", "csf")
     wsp.log.write(" - Using tissue reference type: %s\n" % wsp.tissref)
 
-    t1r, t2r, t2rstar, pcr = tissue_defaults(wsp.tissref)
+    t1r, t2r, t2sr, pcr = tissue_defaults(wsp.tissref)
     if t2star:
-        t2r = t2rstar
+        t2r = t2sr
 
     # Command line override of default T1, T2, PC
     t1r_img, t2r_img = False, False
@@ -401,10 +396,6 @@ def get_m0_refregion(wsp, mode="longtr"):
             t2r_img = True
         else:
             wsp.log.write(" - Using user-specified T2r value: %f\n" % t2r)
-
-    if wsp.t2b is not None:
-        t2b = wsp.t2b
-        wsp.log.write(" - Using user-specified T2b value: %f\n" % t2b)
 
     if wsp.pcr is not None:
         pcr = wsp.pcr
@@ -702,17 +693,15 @@ class CalibOptions(OptionCategory):
 
         group = IgnorableOptionGroup(parser, "Voxelwise calibration", ignore=self.ignore)
         group.add_option("--pct", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
-        group.add_option("--t1t", help="T1 of tissue (s)", type=float, default=1.3)
         groups.append(group)
 
         group = IgnorableOptionGroup(parser, "Reference region calibration", ignore=self.ignore)
         group.add_option("--mode", help="Calibration mode (longtr or satrevoc)", default="longtr")
         group.add_option("--tissref", help="Tissue reference type (csf, wm, gm or none)", default="csf")
         group.add_option("--te", help="Sequence TE (ms)", type=float, default=0.0)
+        group.add_option("--refmask", "--csf", help="Reference tissue mask in calibration image space", type="image")
         group.add_option("--t1r", help="T1 of reference tissue (s) - defaults: csf 4.3, gm 1.3, wm 1.0", type=float, default=None)
         group.add_option("--t2r", help="T2/T2* of reference tissue (ms) - defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50", type=float, default=None)
-        group.add_option("--t2b", help="T2/T2* of blood (ms) - default T2/T2*: 150/50)", type=float, default=None)
-        group.add_option("--refmask", "--csf", help="Reference tissue mask in calibration image space", type="image")
         group.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
         group.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
         groups.append(group)
@@ -727,9 +716,6 @@ class CalibOptions(OptionCategory):
         group.add_option("--calib-nphases", help="Number of phases (repetitions) of higher FA", type=int)
         group.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
         groups.append(group)
-
-        #group = IgnorableOptionGroup(parser, "Coil sensitivity correction, either using existing sensitivity image or reference images collected using same parameters", ignore=self.ignore)
-        #groups.append(group)
 
         #group = IgnorableOptionGroup(parser, "CSF masking options (only for --tissref csf)", ignore=self.ignore)
         #group.add_option("--csfmaskingoff", action="store_true", default=False, help="Turn off the ventricle masking, reference is based on segmentation only.")
