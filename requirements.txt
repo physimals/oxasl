@@ -5,3 +5,4 @@ six
 pyaml
 fslpy>=1.13
 pyfab
+scikit-image
