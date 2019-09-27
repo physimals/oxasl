@@ -4,6 +4,7 @@ Functions for generating a suitable mask for ASL data
 import sys
 
 import numpy as np
+import scipy as sp
 
 import fsl.wrappers as fsl
 from fsl.data.image import Image
@@ -61,7 +62,7 @@ def generate_mask(wsp):
         page.heading("Brain extracted structural image", level=1)
         page.image("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
         brain_mask_asl = reg.struc2asl(wsp, wsp.structural.brain_mask)
-        wsp.rois.mask = fsl.fslmaths(brain_mask_asl).thr(0.25).bin().fillh().run()
+        wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((brain_mask_asl.data > 0.25)).astype(np.int), header=brain_mask_asl.header)
         mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
