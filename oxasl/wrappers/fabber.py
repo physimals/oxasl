@@ -141,7 +141,10 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
 
         # Write output data or save it as required
         for data_name, data in run.data.items():
-            img = Image(nib.Nifti1Image(data, header=header, affine=affine))
+            nii = nib.Nifti1Image(data, header=header, affine=affine)
+            nii.update_header()
+            nii.header.set_data_dtype(data.dtype)
+            img = Image(nii)
             if output == LOAD:
                 # Return in-memory data items as the same type as image as the main data
                 ret[data_name] = _matching_image(main_data, img)
