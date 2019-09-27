@@ -444,6 +444,8 @@ def apply_corrections(wsp):
      - ``cref``       : Corrected calibration reference image
      - ``cblip``      : Corrected calibration BLIP image
     """
+    reg.init(wsp)
+
     wsp.log.write("\nApplying preprocessing corrections\n")
     if wsp.corrected is None:
         wsp.sub("corrected")
@@ -487,16 +489,19 @@ def apply_corrections(wsp):
         wsp.corrected.jacobian = Image(jacobian.data, header=wsp.corrected.total_warp.header)
 
     if not warps and moco_mats is None:
-        wsp.log.write("   - No corrections to apply\n")
+        wsp.log.write("   - No corrections to apply to ASL data\n")
     else:
         # Apply all corrections to ASL data - note that we make sure the output keeps all the ASL metadata
-        wsp.log.write("   - Applying to ASL data\n")
+        wsp.log.write("   - Applying corrections to ASL data\n")
         asldata_corr = correct_img(wsp, wsp.input.asldata, moco_mats)
         wsp.corrected.asldata = wsp.input.asldata.derived(asldata_corr.data)
 
-        # Apply corrections to calibration images
-        if wsp.input.calib is not None:
-            wsp.log.write("   - Applying to calibration data\n")
+    if wsp.input.calib is not None:
+        # Apply corrections to calibration images if we have calib2asl registration or any other correction
+        if not warps and moco_mats is None and wsp.reg.calib2asl is None:
+            wsp.log.write("   - No corrections to apply to calibration data\n")
+        else:
+            wsp.log.write("   - Applying corrections to calibration data\n")
             wsp.corrected.calib = correct_img(wsp, wsp.corrected.calib, wsp.reg.calib2asl)
 
             if wsp.cref is not None:
