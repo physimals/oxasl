@@ -526,6 +526,8 @@ def basil_steps_multite(wsp, asldata, mask=None, **kwargs):
         options["infertau"] = True
     if wsp.infert1:
         options["infert1"] = True
+    if wsp.infert2:
+        options["infert2"] = True
 
     # Keep track of the number of spatial priors specified by name
     spriors = 1
