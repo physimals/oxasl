@@ -41,6 +41,7 @@ class AslImageOptions(OptionCategory):
         group.add_option("--sliceband", help="Number of slices per pand in multi-band setup", type=int)
         group.add_option("--artsupp", help="Arterial suppression (vascular crushing) was used", action="store_true", default=False)
         group.add_option("--ibf", help="input block format - alternative to --order for compatibility. rpt=Blocks of repeats (i.e. repeats are slowest varying), tis=Blocsk of TIs/PLDs")
+        group.add_option("--calib-first-vol", help="First volume of the data is an M0 image for calibration - remainder is ASL data", action="store_true", default=False)
         return [group, ]
 
 def summary(img, log=sys.stdout):
@@ -186,10 +187,21 @@ class AslImage(Image):
             raise ValueError("No image data (filename, Nibabel object or Numpy array)")
 
         # This is sort-of a bug in nibabel or fslpy - it passes the kwargs to the
-        # nibabel.load function which does not expect extra keyword arguments
+        # nibabel.load function which does not expect extra keyword arguments. So we will extract
+        # those that fslpy/nibabel might expect and only pass these
         img_kwargs = ("header", "xform", "loadData", "calcRange", "indexed", "threaded", "dataSource")
         img_args = dict([(k, v) for k, v in kwargs.items() if k in img_kwargs])
-        Image.__init__(self, image, name=name, **img_args)
+
+        if kwargs.pop("calib_first_vol", False):
+            # First volume is an M0 calibration image - stip it off and initialize the image with the
+            # remaining data
+            temp_img = Image(image, name="temp", **img_args)
+            img_args.pop("header", None)
+            self.calib = Image(temp_img.data[..., 0], name="calib", header=temp_img.header, **img_args)
+            Image.__init__(self, temp_img.data[..., 1:], name=name, header=temp_img.header, **img_args)
+        else:
+            self.calib = None
+            Image.__init__(self, image, name=name, **img_args)
 
         order = kwargs.pop("order", None)
         iaf = kwargs.pop("iaf", None)

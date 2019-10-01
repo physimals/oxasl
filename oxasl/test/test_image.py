@@ -666,3 +666,22 @@ def test_multite_mean_across_repeats_ibf_rpt():
     for z in range(8):
         # e.g. mean of 0th and 8th image = 4
         assert np.all(imgmar.data[..., z] == (z + 4))
+
+def test_calib_first_vol():
+    """ Calibration image as first vol """
+    d = np.random.rand(5, 5, 5, 9)
+    img = AslImage(name="asldata", image=d, tis=[1.5, 2.0], iaf="tc", order="lrt", calib_first_vol=True)
+    assert img.ntis == 2
+    assert img.tis == [1.5, 2.0]
+    assert not img.have_plds
+    assert img.rpts == [2, 2]
+    assert img.order == "lrt"
+    assert np.all(img.data == d[..., 1:]) 
+    assert img.calib is not None
+    assert np.all(img.calib.data == d[..., 0])
+
+def test_calib_first_vol_fail():
+    """ Claim there is a calibration image as first vol but actually there isn't """
+    d = np.random.rand(5, 5, 5, 8)
+    with pytest.raises(Exception):
+        img = AslImage(name="asldata", image=d, tis=[1.5, 2.0], iaf="tc", order="lrt", calib_first_vol=True)
