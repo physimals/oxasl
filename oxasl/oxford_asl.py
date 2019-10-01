@@ -120,7 +120,7 @@ class OxfordAslOptions(OptionCategory):
         g = IgnorableOptionGroup(parser, "Physiological parameters (all have default values from literature)")
         g.add_option("--bat", help="Estimated bolus arrival time (s) - default=0.7 (pASL), 1.3 (cASL)", type=float)
         g.add_option("--t1", "--t1t", help="Tissue T1 (s)", type=float, default=1.3)
-        g.add_option("--t2", "--t2t", help="Tissue T2 (ms)", type=float, default=30)
+        g.add_option("--t2", "--t2t", help="Tissue T2 (ms)", type=float, default=50)
         g.add_option("--t2s", help="Tissue T2* (ms)", type=float, default=20)
         g.add_option("--t1b", help="Blood T1 (s)", type=float, default=1.65)
         g.add_option("--t2b", help="Blood T2 (ms) - Lu et al. 2012 MRM 67:42-49, 3T during normoxia", type=float, default=150)
@@ -252,6 +252,9 @@ def oxasl_preproc(wsp):
     This method requires wsp to be a Workspace containing certain standard information.
     As a minimum, the attribute ``asldata`` must contain an AslImage object.
     """
+    if wsp.calib_first_vol and wsp.calib is None:
+        wsp.calib = wsp.asldata.calib
+
     report_asl(wsp)
 
     struc.init(wsp)
