@@ -336,8 +336,8 @@ def model_paired(wsp):
             oxasl_surfpvc.prepare_surf_pvs(wsp)
             basil.basil(wsp, output_wsp=wsp.sub("basil_surf_pvcorr"), prefit=False)
 
-            wsp.output.sub('output_surf_pvcorr')
-            output_native(wsp.output_surf_pvcorr, wsp.basil_surf_pvcorr)   
+            wsp.sub('output_surf_pvcorr')
+            output_native(wsp.output_surf_pvcorr, wsp.basil_surf_pvcorr)
             output_trans(wsp.output_surf_pvcorr)
 
 def redo_reg(wsp, pwi):
