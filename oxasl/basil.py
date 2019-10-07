@@ -125,6 +125,12 @@ def basil(wsp, output_wsp=None, prefit=True):
     # Pick up extra BASIL options
     extra_options = dict(wsp.ifnone("basil_options", {}))
 
+    # If we only have one volume, set a nominal noise prior as it is not possible to
+    # estimate from the data
+    if wsp.asldata.nvols / wsp.asldata.ntc == 1:
+        wsp.log.write(" - Restricting noise prior as only one ASL volume\n")
+        extra_options["prior-noise-stddev"] = 1.0
+    
     if prefit and max(wsp.asldata.rpts) > 1:
         # Initial BASIL run on mean data
         wsp.log.write(" - Doing initial fit on mean at each TI\n\n")
