@@ -66,7 +66,7 @@ class DistcorrOptions(OptionCategory):
         g = IgnorableOptionGroup(parser, "General distortion correction options")
         g.add_option("--echospacing", help="Effective EPI echo spacing (sometimes called dwell time) - in seconds", type=float)
         g.add_option("--pedir", help="Phase encoding direction, dir = x/y/z/-x/-y/-z")
-        g.add_option("--gdcwarp", help="Additional warp image for gradient distortion correction - will be combined with fieldmap or TOPUP distortion correction", type="image")
+        g.add_option("--gdc-warp", "--gdcwarp", help="Additional warp image for gradient distortion correction - will be combined with fieldmap or TOPUP distortion correction", type="image")
         ret.append(g)
 
         g = IgnorableOptionGroup(parser, "Sensitivity correction")
@@ -570,9 +570,9 @@ def correct_img(wsp, img, linear_mat):
     else:
         img = reg.transform(wsp, img, trans=linear_mat, ref=wsp.nativeref)
 
-    if wsp.corrected.total_jacobian is not None:
+    if wsp.corrected.jacobian is not None:
         wsp.log.write("   - Correcting for local volume scaling using Jacobian\n")
-        jdata = wsp.corrected.total_jacobian.data
+        jdata = wsp.corrected.jacobian.data
         if img.data.ndim == 4:
             # Required to make broadcasting work
             jdata = jdata[..., np.newaxis]
