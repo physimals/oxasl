@@ -485,21 +485,36 @@ def output_trans(wsp):
     """
     Create transformed output, i.e. in structural and/or standard space
 
-    FIXME std space not implemented yet
+    FIXME ugly code duplication
     """
-    if not wsp.output_struc or wsp.reg.asl2struc is None:
-        return
+    if wsp.output_struc and wsp.reg.asl2struc is not None:
+        wsp.log.write("\nGenerating output in structural space\n")
+        wsp.sub("struct")
+        for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
+            for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
+                native_output = getattr(wsp.native, output + suffix)
+                # Don't transform 4D output (e.g. modelfit) - too large!
+                if native_output is not None and native_output.ndim == 3:
+                    if wsp.reg.asl2struc is not None:
+                        setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output == 'mask')))
+        wsp.log.write(" - DONE\n")
 
-    wsp.log.write("\nGenerating output in structural space\n")
-    wsp.sub("struct")
-    for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
-        for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
-            native_output = getattr(wsp.native, output + suffix)
-            # Don't transform 4D output (e.g. modelfit) - too large!
-            if native_output is not None and native_output.ndim == 3:
-                if wsp.reg.asl2struc is not None:
-                    setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output == 'mask')))
-    wsp.log.write(" - DONE\n")
+    if wsp.output_mni:
+        wsp.log.write("\nGenerating output in standard (MNI) space\n")
+        if wsp.reg.struc2asl is None:
+            wsp.log.write(" - WARNING: No structural registration - cannot output in standard space\n")
+        else:
+            reg.reg_struc2std(wsp)
+            wsp.sub("mni")
+            for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
+                for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
+                    native_output = getattr(wsp.native, output + suffix)
+                    # Don't transform 4D output (e.g. modelfit) - too large!
+                    if native_output is not None and native_output.ndim == 3:
+                        struc_output = reg.asl2struc(wsp, native_output, mask=(output == 'mask'))
+                        setattr(wsp.mni, output + suffix, reg.struc2std(wsp, struc_output))
+
+            wsp.log.write(" - DONE\n")
 
 def do_cleanup(wsp):
     """
