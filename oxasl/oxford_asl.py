@@ -321,7 +321,8 @@ def model_paired(wsp):
             wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
             wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
 
-            wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, "pgm" : wsp.structural.gm_pv_asl})
+            wsp.basil_options.update({"pwm" : wsp.ifnone("pvwm", wsp.structural.wm_pv_asl), 
+                                      "pgm" : wsp.ifnone("pvgm", wsp.structural.gm_pv_asl)})
             basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
 
             wsp.sub("output_pvcorr")
