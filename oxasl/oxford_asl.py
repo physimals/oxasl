@@ -317,12 +317,17 @@ def model_paired(wsp):
             # But would need to make sure corrections module re-transforms things like sensitivity map
             
             # Prepare GM and WM partial volume maps from FAST segmentation
-            struc.segment(wsp)
-            wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
-            wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
+            if (wsp.pvwm is not None) and (wsp.pvgm is not None):
+                wsp.log.write("\nUsing user-supplied PV estimates\n")
+                wsp.structural.wm_pv_asl = wsp.pvwm 
+                wsp.structural.gm_pv_asl = wsp.pvgm 
+            else: 
+                struc.segment(wsp)
+                wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
+                wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
 
-            wsp.basil_options.update({"pwm" : wsp.ifnone("pvwm", wsp.structural.wm_pv_asl), 
-                                      "pgm" : wsp.ifnone("pvgm", wsp.structural.gm_pv_asl)})
+            wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
+                                      "pgm" : wsp.structural.gm_pv_asl})
             basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
 
             wsp.sub("output_pvcorr")
