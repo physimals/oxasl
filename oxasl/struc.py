@@ -30,8 +30,6 @@ class StructuralImageOptions(OptionCategory):
         group.add_option("--struc-brain", "--sbet", "--struc-bet", type="image", help="Structural image (brain extracted)", default=None)
         group.add_option("--struc2asl", help="Structural->ASL transformation matrix", default=None)
         group.add_option("--asl2struc", help="ASL->Structural transformation matrix", default=None)
-        group.add_option("--pvwm", help="White matter partial volume image in ASL space", type="image", default=None)
-        group.add_option("--pvgm", help="Grey matter partial volume image in ASL space", type="image", default=None)
         group.add_option("--wm-seg", help="White matter segmentation of structural image", type="image", default=None)
         group.add_option("--gm-seg", help="Grey matter segmentation of structural image", type="image", default=None)
         group.add_option("--csf-seg", help="CSF segmentation of structural image", type="image", default=None)

@@ -302,7 +302,9 @@ def model_paired(wsp):
     output_native(wsp.output, wsp.basil)
     output_trans(wsp.output)
 
-    if wsp.pvcorr or wsp.surf_pvcorr:
+    # If the user has provided manual PV maps (pvgm and pvgm) then do PVEc, even if they
+    # have not explicitly given the --pvcorr option 
+    if wsp.pvcorr or wsp.surf_pvcorr or ((wsp.pvwm is not None) and (wsp.pvgm is not None)):
         # Partial volume correction is very sensitive to the mask, so recreate it
         # if it came from the structural image as this requires accurate ASL->Struc registration
         if wsp.rois.mask_src == "struc":

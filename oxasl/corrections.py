@@ -77,9 +77,11 @@ class DistcorrOptions(OptionCategory):
         g.add_option("--senscorr-off", help="Do not apply any sensitivity correction", action="store_true", default=False)
         ret.append(g)
 
-        g = IgnorableOptionGroup(parser, "Partial volume correction")
-        g.add_option("--pvcorr", help="Apply partial volume correction", action="store_true", default=False)
-        g.add_option("--surf-pvcorr", help="Apply SURFACE PVEc, not mutually exclusive with --pvcorr", action="store_true", default=False)
+        g = IgnorableOptionGroup(parser, "Partial volume correction (PVEc)")
+        g.add_option("--pvcorr", help="Apply PVEc using FAST estimates taken from --fslanat dir", action="store_true", default=False)
+        g.add_option("--surf-pvcorr", help="Apply PVEc using surface PV estimates taken from --fslanat dir w/ surfaces", action="store_true", default=False)
+        g.add_option("--pvgm", help="GM PV estimates in ASL space (apply PVEc only, don't estimate PVs)", type="image", default=None)
+        g.add_option("--pvwm", help="As above, WM PV estimates in ASL space", type="image", default=None)
         ret.append(g)
 
         return ret
