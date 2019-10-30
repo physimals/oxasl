@@ -304,7 +304,8 @@ def model_paired(wsp):
 
     # If the user has provided manual PV maps (pvgm and pvgm) then do PVEc, even if they
     # have not explicitly given the --pvcorr option 
-    if wsp.pvcorr or wsp.surf_pvcorr or ((wsp.pvwm is not None) and (wsp.pvgm is not None)):
+    user_pv_flag = ((wsp.pvwm is not None) and (wsp.pvgm is not None))
+    if (wsp.pvcorr) or (wsp.surf_pvcorr) or user_pv_flag:
         # Partial volume correction is very sensitive to the mask, so recreate it
         # if it came from the structural image as this requires accurate ASL->Struc registration
         if wsp.rois.mask_src == "struc":
@@ -312,17 +313,18 @@ def model_paired(wsp):
             wsp.rois.mask = None
             mask.generate_mask(wsp)
 
-        if wsp.pvcorr:
+        if wsp.pvcorr or user_pv_flag:
             # Do partial volume correction fitting
             #
             # FIXME: We could at this point re-apply all corrections derived from structural space?
             # But would need to make sure corrections module re-transforms things like sensitivity map
             
             # Prepare GM and WM partial volume maps from FAST segmentation
-            if (wsp.pvwm is not None) and (wsp.pvgm is not None):
+            if user_pv_flag:
                 wsp.log.write("\nUsing user-supplied PV estimates\n")
-                wsp.structural.wm_pv_asl = wsp.pvwm 
-                wsp.structural.gm_pv_asl = wsp.pvgm 
+                wsp.structural.wm_pv_asl = wsp.pvwm
+                wsp.structural.gm_pv_asl = wsp.pvgm
+                
             else: 
                 struc.segment(wsp)
                 wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
@@ -334,7 +336,7 @@ def model_paired(wsp):
 
             wsp.sub("output_pvcorr")
             output_native(wsp.output_pvcorr, wsp.basil_pvcorr)
-            output_trans(wsp.output_pvcorr)    
+            output_trans(wsp.output_pvcorr)      
 
         if wsp.surf_pvcorr:
             if oxasl_surfpvc is None:
