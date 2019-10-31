@@ -80,6 +80,7 @@ class DistcorrOptions(OptionCategory):
         g = IgnorableOptionGroup(parser, "Partial volume correction (PVEc)")
         g.add_option("--pvcorr", help="Apply PVEc using FAST estimates taken from --fslanat dir", action="store_true", default=False)
         g.add_option("--surf-pvcorr", help="Apply PVEc using surface PV estimates taken from --fslanat dir w/ surfaces", action="store_true", default=False)
+        g.add_option('--cores', help="Number of processor cores to use for --surf-pvcorr", type=int)
         g.add_option("--pvgm", help="GM PV estimates in ASL space (apply PVEc only, don't estimate PVs)", type="image", default=None)
         g.add_option("--pvwm", help="As above, WM PV estimates in ASL space", type="image", default=None)
         ret.append(g)
