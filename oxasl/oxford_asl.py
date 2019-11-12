@@ -324,8 +324,7 @@ def model_paired(wsp):
                 wsp.log.write("\nUsing user-supplied PV estimates\n")
                 wsp.structural.wm_pv_asl = wsp.pvwm
                 wsp.structural.gm_pv_asl = wsp.pvgm
-                
-            else: 
+            else:
                 struc.segment(wsp)
                 wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
                 wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
@@ -336,12 +335,13 @@ def model_paired(wsp):
 
             wsp.sub("output_pvcorr")
             output_native(wsp.output_pvcorr, wsp.basil_pvcorr)
-            output_trans(wsp.output_pvcorr)      
+            output_trans(wsp.output_pvcorr)
 
         if wsp.surf_pvcorr:
             if oxasl_surfpvc is None:
                 raise RuntimeError("Surface-based PVC requested but oxasl_surfpvc is not installed")
-                
+            if user_pv_flag:
+                wsp.log.write(" - WARNING: Performing surface based PVC ignores user-specified PV maps\n")
             # Prepare GM and WM partial volume maps from surface using Toblerone plugin
             oxasl_surfpvc.prepare_surf_pvs(wsp)
             basil.basil(wsp, output_wsp=wsp.sub("basil_surf_pvcorr"), prefit=False)
