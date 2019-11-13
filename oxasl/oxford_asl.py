@@ -147,6 +147,7 @@ def main():
     Entry point for oxasl command line tool
     """
     debug = True
+    wsp = None
     try:
         parser = AslOptionParser(usage="oxasl -i <asl_image> [options]", version=__version__)
         parser.add_category(image.AslImageOptions())
@@ -193,6 +194,9 @@ def main():
         sys.stderr.write("ERROR: " + str(e) + "\n")
         if debug:
             traceback.print_exc()
+        if wsp is not None:
+            wsp.log.write("ERROR: " + str(e) + "\n")
+            wsp.log.write(traceback.format_exc() + "\n")
         sys.exit(1)
 
 def oxasl(wsp):
@@ -343,7 +347,13 @@ def model_paired(wsp):
             if user_pv_flag:
                 wsp.log.write(" - WARNING: Performing surface based PVC ignores user-specified PV maps\n")
             # Prepare GM and WM partial volume maps from surface using Toblerone plugin
+            # Then reform the ASL ROI mask - Toblerone does not handle the cerebellum so need
+            # to mask it out
             oxasl_surfpvc.prepare_surf_pvs(wsp)
+            wsp.rois.mask_pvcorr = wsp.rois.mask
+            min_pv = 0.01
+            new_roi = (wsp.basil_options["pwm"].data > min_pv) | (wsp.basil_options["pgm"].data > min_pv)
+            wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
             basil.basil(wsp, output_wsp=wsp.sub("basil_surf_pvcorr"), prefit=False)
 
             wsp.sub('output_surf_pvcorr')
