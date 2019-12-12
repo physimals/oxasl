@@ -430,7 +430,7 @@ def output_native(wsp, basil_wsp, report=None):
             if img is not None:
                 # Make negative/nan values = 0 and ensure masked value zeroed
                 data = np.copy(img.data)
-                #data[~np.isfinite(data)] = 0
+                data[~np.isfinite(data)] = 0
                 data[img.data < 0] = 0
                 data[wsp.rois.mask.data == 0] = 0
                 img = Image(data, header=img.header)
