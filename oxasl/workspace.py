@@ -122,8 +122,14 @@ class Workspace(object):
         self._defaults = list(defaults)
         self._stuff = {}
         if create_savedir:
-            mkdir(savedir, log=self.ifnone("log", kwargs.get("log", sys.stdout)))
-
+            if parent is not None:
+                warn_overwrite = not parent._overwrite_warned
+            else:
+                warn_overwrite = True
+            mkdir(savedir, log=self.ifnone("log", kwargs.get("log", sys.stdout)), 
+                  warn_if_exists=warn_overwrite)
+            self._overwrite_warned = True
+    
         # Defaults - these can be overridden by kwargs but might be
         # already defined in parent workspace
         if "log" in kwargs or self.log is None:

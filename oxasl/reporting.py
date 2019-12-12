@@ -138,6 +138,7 @@ class LightboxImage(object):
 
             if self._img:
                 data = self._img.data[:, :, slice_idx].T
+                data[~np.isfinite(data)] = 0
 
                 if issubclass(data.dtype.type, np.integer):
                     cmap = "Reds"
