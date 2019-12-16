@@ -118,6 +118,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--infert1", help="Infer T1 value", action="store_true", default=False)
         g.add_option("--infert2", help="Infer T2 value (multi-TE data only)", action="store_true", default=False)
         g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
+        ret.append(g)
         
         g = IgnorableOptionGroup(parser, "Physiological parameters (all have default values from literature)")
         g.add_option("--bat", help="Estimated bolus arrival time (s) - default=0.7 (pASL), 1.3 (cASL)", type=float)
