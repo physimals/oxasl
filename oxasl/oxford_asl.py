@@ -87,6 +87,11 @@ try:
 except ImportError:
     oxasl_surfpvc = None
 
+try:
+    import oxasl_multite
+except ImportError:
+    oxasl_multite = None
+
 from oxasl import Workspace, __version__, image, calib, struc, basil, mask, corrections, reg
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.reporting import LightboxImage
@@ -163,6 +168,8 @@ def main():
             parser.add_category(oxasl_mp.MultiphaseOptions())
         if oxasl_enable:
             parser.add_category(oxasl_enable.EnableOptions(ignore=["regfrom",]))
+        if oxasl_multite:
+            parser.add_category(oxasl_multite.MultiTEOptions())
         parser.add_category(GenericOptions())
 
         options, _ = parser.parse_args()
@@ -205,7 +212,7 @@ def oxasl(wsp):
     Main oxasl pipeline script
     """
     wsp.log.write("OXASL version: %s\n" % __version__)
-    for plugin in (oxasl_ve, oxasl_mp, oxasl_deblur, oxasl_enable, oxasl_surfpvc):
+    for plugin in (oxasl_ve, oxasl_mp, oxasl_deblur, oxasl_enable, oxasl_surfpvc, oxasl_multite):
         if plugin is not None:
             wsp.log.write(" - Found plugin: %s (version %s)\n" % (plugin.__name__, getattr(plugin, "__version__", "unknown")))
 
@@ -216,7 +223,13 @@ def oxasl(wsp):
     calib.init(wsp)
 
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
-        model_paired(wsp)
+        if wsp.ntes == 1:
+            model_basil(wsp)
+        elif oxasl_multite is None:
+            raise ValueError("Multi-TE data supplied but oxasl_multite is not installed")
+        else:
+            oxasl_multite.model_multite(wsp)
+
     elif wsp.asldata.iaf in ("ve", "vediff"):
         if oxasl_ve is None:
             raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
@@ -285,7 +298,7 @@ def oxasl_preproc(wsp):
         oxasl_enable.enable(wsp.enable)
         wsp.corrected.asldata = wsp.enable.asldata_enable
 
-def model_paired(wsp):
+def model_basil(wsp):
     """
     Do model fitting on TC/CT or subtracted data
 
