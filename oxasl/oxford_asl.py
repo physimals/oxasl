@@ -223,7 +223,7 @@ def oxasl(wsp):
     calib.init(wsp)
 
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
-        if wsp.ntes == 1:
+        if wsp.asldata.ntes == 1:
             model_basil(wsp)
         elif oxasl_multite is None:
             raise ValueError("Multi-TE data supplied but oxasl_multite is not installed")
@@ -408,6 +408,7 @@ OUTPUT_ITEMS = {
     "deltwm" : ("arrival_wm", 1, False, "s", "", ""),
     "modelfit" : ("modelfit", 1, False, "", "", ""),
     "asldata_diff" : ("asldata_diff", 1, False, "", "", ""),
+    "T_exch" : ("texch", 1, False, "", "", ""),
 }
 
 def output_native(wsp, basil_wsp, report=None):
