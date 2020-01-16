@@ -222,6 +222,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         "save-mvn" : True,
         "save-std" : True,
         "save-model-fit" : True,
+        "save-residuals" : wsp.ifnone("output_residuals", False),
     }
 
     if mask is not None:

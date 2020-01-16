@@ -143,6 +143,7 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--save-all", help="Save all output (enabled when --debug specified)", action="store_true", default=False)
         g.add_option("--output-stddev", "--output-std", help="Output standard deviation of estimated variables", action="store_true", default=False)
         g.add_option("--output-var", "--vars", help="Output variance of estimated variables", action="store_true", default=False)
+        g.add_option("--output-residuals", help="Output residuals (model fit - actual data)", action="store_true", default=False)
         g.add_option("--output-mni", help="Output in MNI standard space", action="store_true", default=False)
         g.add_option("--no-report", dest="save_report", help="Don't try to generate an HTML report", action="store_false", default=True)
         ret.append(g)
@@ -407,6 +408,7 @@ OUTPUT_ITEMS = {
     "fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "", "10-20"),
     "deltwm" : ("arrival_wm", 1, False, "s", "", ""),
     "modelfit" : ("modelfit", 1, False, "", "", ""),
+    "residuals" : ("residuals", 1, False, "", "", ""),
     "asldata_diff" : ("asldata_diff", 1, False, "", "", ""),
     "T_exch" : ("texch", 1, False, "", "", ""),
 }
@@ -527,7 +529,7 @@ def output_trans(wsp):
         wsp.log.write("\nGenerating output in structural space\n")
         wsp.sub("struct")
         for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
-            for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
+            for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "residuals", "texch", "mask"):
                 native_output = getattr(wsp.native, output + suffix)
                 # Don't transform 4D output (e.g. modelfit) - too large!
                 if native_output is not None and native_output.ndim == 3:
