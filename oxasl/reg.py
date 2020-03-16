@@ -128,6 +128,31 @@ def reg_asl2calib(wsp):
         _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.regfrom, wsp.calib)
         wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
 
+def reg_asl2custom(wsp):
+    """
+    Register custom output image to ASL space, via structural. 
+
+    If no output_custom_mat (struc -> custom) has been provided, then
+    FLIRT will be used to generate this. The overall transformation
+    is the concatenation of asl2struc and struc2custom. 
+    """
+
+    if wsp.output_custom:
+        init(wsp)
+        setattr(wsp.reg, 'customref', Image(wsp.output_custom))
+
+        if wsp.output_custom_mat is not None:
+            struc2custom = np.loadtxt(wsp.output_custom_mat)
+
+        else:  
+            wsp.log.write("Registering calibration image to ASL image\n")
+            _, custom2struc = reg_flirt(wsp, wsp.reg.customref,
+                wsp.structural.struc)
+            struc2custom = np.linalg.inv(custom2struc)
+
+        wsp.reg.asl2custom = struc2custom @ wsp.reg.asl2struc
+        wsp.reg.custom2asl = np.linalg.inv(wsp.reg.asl2custom)
+
 def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
     """
     Registration of ASL images to structural image
@@ -247,6 +272,13 @@ def struc2std(wsp, img, **kwargs):
     """
     ref = Image(os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"))
     return transform(wsp, img, wsp.reg.struc2std, ref, **kwargs)
+
+def asl2custom(wsp, img, **kwargs):
+    """
+    Transform an image from ASL space to custom output (via structural)
+    """
+    init(wsp)
+    return transform(wsp, img, wsp.reg.asl2custom, wsp.reg.customref, **kwargs)
 
 def struc2asl(wsp, img, **kwargs):
     """
