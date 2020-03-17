@@ -147,7 +147,8 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--output-residuals", help="Output residuals (model fit - actual data)", action="store_true", default=False)
         g.add_option("--output-mni", help="Output in MNI standard space", action="store_true", default=False)
         g.add_option("--output-custom", help="Output in custom space (provide path to reference image in space)", type=str)
-        g.add_option("--output-custom-mat", help="FLIRT transformation matrix from structural space to custom space", type=str)
+        g.add_option("--output-custom-mat", help="(Optional) FLIRT transformation from structural space to custom space. " +
+                        "If not provided, will FLIRT registration from structural to --output-custom will be used.", type=str)
         g.add_option("--no-report", dest="save_report", help="Don't try to generate an HTML report", action="store_false", default=True)
         ret.append(g)
         return ret
