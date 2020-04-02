@@ -164,8 +164,9 @@ def get_m0_voxelwise(wsp):
     wsp.log.write(" - Using partition coefficient: %f\n" % pct)
     m0 /= pct
 
+    edgecorr = wsp.ifnone("calib_edgecorr", True)
     if wsp.rois is not None and wsp.rois.mask is not None:
-        if wsp.ifnone("calib_edgecorr", True):
+        if edgecorr:
             wsp.log.write(" - Doing edge correction\n")
             m0 = _edge_correct(m0, wsp.rois.mask)
         wsp.log.write(" - Masking M0 image")
@@ -191,7 +192,7 @@ def get_m0_voxelwise(wsp):
 
     if wsp.rois is not None and wsp.rois.mask is not None:
         table.append(["Mean M0 (within mask)", "%.3g" % np.mean(m0[wsp.rois.mask.data > 0])])
-        table.append(["Edge correction", "Enabled" if wsp.edgecorr else "Disabled"])
+        table.append(["Edge correction", "Enabled" if edgecorr else "Disabled"])
     else:
         table.append(["Mean M0", "%.3g" % np.mean(m0)])
     page.table(table)
