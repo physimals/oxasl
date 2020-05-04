@@ -274,7 +274,7 @@ def oxasl_preproc(wsp):
     As a minimum, the attribute ``asldata`` must contain an AslImage object.
     """
     if wsp.calib_first_vol and wsp.calib is None:
-        wsp.calib = wsp.asldata.calib
+        wsp.input.calib = wsp.asldata.calib
 
     report_asl(wsp)
 
