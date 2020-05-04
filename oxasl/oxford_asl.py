@@ -425,6 +425,12 @@ def output_native(wsp, basil_wsp, report=None):
     if not wsp.output_native: return
 
     wsp.sub("native")
+
+    # Output the differenced data averaged across repeats for kinetic curve comparison
+    # with the model
+    wsp.native.diffdata_mean = wsp.asldata.diff().mean_across_repeats()
+
+    # Output model fitting results
     prefixes = ["", "mean"]
     if wsp.output_stddev:
         prefixes.append("std")
