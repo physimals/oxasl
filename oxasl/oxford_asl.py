@@ -408,6 +408,7 @@ OUTPUT_ITEMS = {
     "fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "", "10-20"),
     "deltwm" : ("arrival_wm", 1, False, "s", "", ""),
     "modelfit" : ("modelfit", 1, False, "", "", ""),
+    "modelfit_mean" : ("modelfit_mean", 1, False, "", "", ""),
     "residuals" : ("residuals", 1, False, "", "", ""),
     "asldata_diff" : ("asldata_diff", 1, False, "", "", ""),
     "T_exch" : ("texch", 1, False, "", "", ""),
@@ -529,7 +530,7 @@ def output_trans(wsp):
         wsp.log.write("\nGenerating output in structural space\n")
         wsp.sub("struct")
         for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
-            for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "residuals", "texch", "mask"):
+            for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "modelfit_mean", "residuals", "texch", "mask"):
                 native_output = getattr(wsp.native, output + suffix)
                 # Don't transform 4D output (e.g. modelfit) - too large!
                 if native_output is not None and native_output.ndim == 3:
@@ -545,7 +546,7 @@ def output_trans(wsp):
             reg.reg_struc2std(wsp)
             wsp.sub("mni")
             for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
-                for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "mask"):
+                for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "modelfit_mean", "mask"):
                     native_output = getattr(wsp.native, output + suffix)
                     # Don't transform 4D output (e.g. modelfit) - too large!
                     if native_output is not None and native_output.ndim == 3:

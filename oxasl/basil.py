@@ -179,6 +179,12 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
                           fabber_corelib=wsp.fabber_corelib, fabber_libs=wsp.fabber_libs,
                           fabber_coreexe=wsp.fabber_coreexe, fabber_exes=wsp.fabber_exes)
         for key, value in result.items():
+            if key == "modelfit":
+                # Treat model fit specially - make it an AslImage and also output a mean
+                # across repeats version for comparison
+                value = output_wsp.asldata_diff.derived(value.data)
+                modelfit_mean = value.mean_across_repeats()
+                setattr(step_wsp, "modelfit_mean", modelfit_mean)
             setattr(step_wsp, key, value)
 
         if step_wsp.logfile is not None and step_wsp.savedir is not None:
