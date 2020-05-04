@@ -197,10 +197,10 @@ class AslImage(Image):
             # remaining data
             temp_img = Image(image, name="temp", **img_args)
             img_args.pop("header", None)
-            self.calib = Image(temp_img.data[..., 0], name="calib", header=temp_img.header, **img_args)
+            self.setMeta("calib", Image(temp_img.data[..., 0], name="calib", header=temp_img.header, **img_args))
             Image.__init__(self, temp_img.data[..., 1:], name=name, header=temp_img.header, **img_args)
         else:
-            self.calib = None
+            self.setMeta("calib", kwargs.pop("calib", None))
             Image.__init__(self, image, name=name, **img_args)
 
         order = kwargs.pop("order", None)
@@ -806,7 +806,7 @@ class AslImage(Image):
         name = name + suffix
 
         derived_attrs = ["iaf", "order", "rpts", "taus", "phases", "tes",
-                         "casl", "sliceband", "slicedt", "artsupp"]
+                         "casl", "sliceband", "slicedt", "artsupp", "calib"]
         if self.have_plds:
             derived_attrs.append("plds")
             derived_attrs.append("nplds")
