@@ -99,6 +99,8 @@ from oxasl.reporting import LightboxImage
 class OxfordAslOptions(OptionCategory):
     """
     OptionCategory which contains options for preprocessing ASL data
+
+    Note that we effectively reproduce some BASIL options here
     """
 
     def __init__(self, **kwargs):
@@ -122,6 +124,8 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--infertexch", help="Infer exchange time (multi-TE data only)", action="store_true", default=False)
         g.add_option("--infert1", help="Infer T1 value", action="store_true", default=False)
         g.add_option("--infert2", help="Infer T2 value (multi-TE data only)", action="store_true", default=False)
+        g.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
+        g.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
         g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
         ret.append(g)
         

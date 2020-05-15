@@ -347,8 +347,15 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         options["continue-from-mvn"] = wsp.initmvn
 
     # T1 image prior
-    if wsp.t1im:
+    if wsp.t1im is not None:
         spriors = _add_prior(options, spriors, "T_1", type="I", image=wsp.t1im)
+
+    # BAT image prior
+    if wsp.batim is not None:
+        # With a BAT image prior we must include BAT even if we are not inferring it
+        # (in this case the image prior will be treated as ground truth)
+        spriors = _add_prior(options, spriors, "delttiss", type="I", image=wsp.batim)
+        options["incbat"] = True
 
     steps = []
     components = ""
@@ -554,6 +561,13 @@ def basil_steps_multite(wsp, asldata, mask=None, **kwargs):
     if wsp.t1im:
         spriors = _add_prior(options, spriors, "T_1", type="I", image=wsp.t1im)
 
+    # BAT image prior
+    if wsp.batim is not None:
+        # With a BAT image prior we must include BAT even if we are not inferring it
+        # (in this case the image prior will be treated as ground truth)
+        spriors = _add_prior(options, spriors, "delttiss", type="I", image=wsp.batim)
+        options["incbat"] = True
+
     steps = []
     components = ""
 
@@ -708,6 +722,7 @@ class BasilOptions(OptionCategory):
 
         group = IgnorableOptionGroup(parser, "Special options", ignore=self.ignore)
         group.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
+        group.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
         groups.append(group)
 
         return groups
