@@ -183,7 +183,7 @@ def main():
             options.output = "oxasl"
 
         # Some oxasl command-line specific defaults
-        if options.calib is not None and options.calib_method is None:
+        if (options.calib is not None or options.calib_first_vol) and options.calib_method is None:
             if options.struc is not None:
                 options.calib_method = "refregion"
             else:
