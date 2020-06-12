@@ -55,6 +55,7 @@ from __future__ import print_function
 import sys
 import os
 import traceback
+import itertools
 
 import numpy as np
 
@@ -149,6 +150,9 @@ class OxfordAslOptions(OptionCategory):
         g.add_option("--output-var", "--vars", help="Output variance of estimated variables", action="store_true", default=False)
         g.add_option("--output-residuals", help="Output residuals (model fit - actual data)", action="store_true", default=False)
         g.add_option("--output-mni", help="Output in MNI standard space", action="store_true", default=False)
+        g.add_option("--output-custom", help="Output in custom space (provide path to reference image in space)", type=str)
+        g.add_option("--output-custom-mat", help="(Optional) FLIRT transformation from structural space to custom space. " +
+                        "If not provided, will FLIRT registration from structural to --output-custom will be used.", type=str)
         g.add_option("--no-report", dest="save_report", help="Don't try to generate an HTML report", action="store_false", default=True)
         ret.append(g)
         return ret
@@ -290,6 +294,7 @@ def oxasl_preproc(wsp):
 
     reg.reg_asl2calib(wsp)
     reg.reg_asl2struc(wsp, True, False)
+    reg.reg_asl2custom(wsp)
 
     corrections.get_fieldmap_correction(wsp)
     corrections.get_cblip_correction(wsp)
@@ -531,12 +536,29 @@ def output_report(wsp, report=None):
             page.heading("Image", level=1)
             page.image("%s_img" % name, LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
 
+def __output_trans_helper(wsp):
+    """
+    Generator to provide all the combinations of variables for the output_
+    trans() function. Note that 4D data and upwards will be skipped. 
+    """
+
+    # We loop over these combinations of variables for each output space
+    # (structural, standard, custom)
+    suffixes = ("", "_std", "_var", "_calib", "_std_calib", "_var_calib")
+    outputs = ("perfusion", "aCBV", "arrival", "perfusion_wm", 
+        "arrival_wm", "modelfit", "residuals", "texch", "mask")
+
+    for suff, out in itertools.product(suffixes, outputs):
+        data = getattr(wsp.native, out + suff)
+        # Don't transform 4D output (e.g. modelfit) - too large!
+        if (data is not None) and data.ndim == 3:
+            yield suff, out, data
+
 def output_trans(wsp):
     """
     Create transformed output, i.e. in structural and/or standard space
-
-    FIXME ugly code duplication
     """
+    
     if wsp.output_struc and wsp.reg.asl2struc is not None:
         wsp.log.write("\nGenerating output in structural space\n")
         wsp.sub("struct")
@@ -563,8 +585,16 @@ def output_trans(wsp):
                     if native_output is not None and native_output.ndim == 3:
                         struc_output = reg.asl2struc(wsp, native_output, mask=(output == 'mask'))
                         setattr(wsp.mni, output + suffix, reg.struc2std(wsp, struc_output))
-
             wsp.log.write(" - DONE\n")
+
+    if wsp.output_custom: 
+        wsp.log.write("\nGenerating output in custom space\n")
+        wsp.sub("custom")
+        for suffix, output, native_output in __output_trans_helper(wsp): 
+            if wsp.reg.asl2custom is not None:
+                setattr(wsp.custom, output + suffix, reg.asl2custom(wsp, native_output, mask=(output == 'mask')))
+        wsp.log.write(" - DONE\n")
+
 
 def do_cleanup(wsp):
     """
