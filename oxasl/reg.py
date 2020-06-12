@@ -16,7 +16,7 @@ import traceback
 
 import numpy as np
 
-from fsl.data.image import Image
+from fsl.data.image import Image, defaultExt
 import fsl.wrappers as fsl
 
 from oxasl import __version__, Workspace, struc, brain
@@ -405,7 +405,8 @@ def reg_bbr(wsp):
         result = pyepi.epi_reg(wsp, wsp.reg.regfrom)
     else:
         result = epi_reg(epi=wsp.reg.regfrom, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight, log=wsp.fsllog)
-    return result["out.nii.gz"], result["out"]
+    wsp.log.write("BBR output: %s\n" % str(result))
+    return result["out%s" % defaultExt()], result["out"]
 
     #OUTPUT
     #echo "Saving FINAL output"
