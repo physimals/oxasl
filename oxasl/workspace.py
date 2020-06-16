@@ -264,7 +264,7 @@ class Workspace(object):
                         tfile.write(matrix_to_text(value))
                 elif not name.startswith("_") and isinstance(value, pd.DataFrame):
                     # Save data frame in CSV file
-                    value.to_csv(os.path.join(self.savedir, save_name + ".csv"), index=True, header=True)
+                    value.to_csv(os.path.join(self.savedir, save_name + ".csv"), index=False, header=True)
                 elif not name.startswith("_") and isinstance(value, (int, float, six.string_types)):
                     # Save other attributes in JSON file
                     self._stuff[name] = value
