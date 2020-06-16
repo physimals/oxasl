@@ -93,6 +93,7 @@ Current ASL processing modules
  - :mod:`oxford_asl` - Unified processing pipeline for ASL brain data
  - :mod:`preproc` - Basic ASL preprocessing (label-control subtraction, etc)
  - :mod:`reg` - Registration between ASL, structural and standard spaces
+ - :mod:`region_analysis` - Summary stats within ROIs
 
 Other modules
 ~~~~~~~~~~~~~

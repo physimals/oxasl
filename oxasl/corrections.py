@@ -44,7 +44,7 @@ from oxasl.wrappers import epi_reg, fnirtfileutils
 
 class DistcorrOptions(OptionCategory):
     """
-    OptionCategory which contains options for distortion correction
+    OptionCategory which contains options for corrections of the input data
     """
 
     def __init__(self, **kwargs):
