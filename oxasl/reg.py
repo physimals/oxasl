@@ -324,7 +324,20 @@ def asl2calib(wsp, img, **kwargs):
     init(wsp)
     return transform(wsp, img, wsp.reg.asl2calib, wsp.structural.struc, **kwargs)
 
-def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None, mask=False, mask_thresh=0.5):
+def std2asl(wsp, img, **kwargs):
+    """
+    Transform an image from standard (MNI) space to native (ASL) space
+    """
+    return transform(wsp, img, wsp.reg.std2struc, wsp.nativeref, postmat=wsp.reg.struc2asl, **kwargs)
+
+def asl2std(wsp, img, **kwargs):
+    """
+    Transform an image from  native (ASL) space to standard (MNI) space
+    """
+    stdref = Image(os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"))
+    return transform(wsp, img, wsp.reg.struc2std, stdref, premat=wsp.reg.asl2struc, **kwargs)
+
+def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None, postmat=None, mask=False, mask_thresh=0.5):
     """
     Transform an image
 
@@ -351,9 +364,9 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
         ret = fsl.applyxfm(img, ref, trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
     else:
         if have_warp:
-            kwargs = {"warp" : trans, "premat" : premat, "rel" : True}
-        elif premat:
-            raise ValueError("Can't set a pre-transformation matrix unless using a warp")
+            kwargs = {"warp" : trans, "premat" : premat, "rel" : True, "postmat" : postmat}
+        elif premat is not None or postmat is not None:
+            raise ValueError("Can't set a pre/post transformation matrix unless using a warp")
         else:
             kwargs = {"premat" : trans}
         ret = fsl.applywarp(img, ref, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog, **kwargs)["out"]
