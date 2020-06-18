@@ -1,7 +1,7 @@
 """
-Structural data module for ASL
+OXASL - Structural data moduleL
 
-Copyright (c) 2008-2018 University of Oxford
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 import os
 import glob
@@ -15,7 +15,7 @@ from fsl.utils.path import PathError
 from oxasl.options import OptionCategory, IgnorableOptionGroup
 from oxasl.reporting import LightboxImage
 
-class StructuralImageOptions(OptionCategory):
+class Options(OptionCategory):
     """
     OptionGroup which contains options for describing a structural image
     """
@@ -40,15 +40,12 @@ class StructuralImageOptions(OptionCategory):
 
         return [group, ]
 
-def init(wsp):
+def run(wsp):
     """
     Do initialization on supplied structural data - copy relevant image and do brain extraction
 
     FIXME copy across all supplied structural data
     """
-    if wsp.structural is not None:
-        return
-
     wsp.log.write("\nInitialising structural data\n")
     wsp.sub("structural")
 
@@ -93,9 +90,7 @@ def segment(wsp):
     """
     Segment the structural image
     """
-    init(wsp)
     if None in (wsp.structural.wm_seg, wsp.structural.gm_seg, wsp.structural.csf_seg):
-        init(wsp)
         page = wsp.report.page("seg")
         page.heading("Segmentation of structural image")
 

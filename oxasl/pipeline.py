@@ -1,11 +1,7 @@
 #!/bin/env python
 """
-OXASL: Converts ASL images into perfusion maps
-==============================================
-
-Michael Chappell, FMRIB Image Analysis Group & IBME
-
-Copyright (c) 2008-2013 Univerisity of Oxford
+OXASL: ASL processing pipeline
+==============================
 
 Overview
 --------
@@ -93,14 +89,14 @@ try:
 except ImportError:
     oxasl_multite = None
 
-from oxasl import Workspace, __version__, image, calib, struc, basil, mask, corrections, reg, region_analysis
+from oxasl import Workspace, __version__, image, preproc, moco, calib, struc, basil, mask, corrections, reg, region_analysis
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.reporting import LightboxImage
 
-class OxfordAslOptions(OptionCategory):
+class PipelineOptions(OptionCategory):
     """
-    OptionCategory which contains options for preprocessing ASL data
-
+    Options for the pipeline as a whole
+   
     Note that we effectively reproduce some BASIL options here
     """
 
@@ -165,12 +161,12 @@ def main():
     wsp = None
     try:
         parser = AslOptionParser(usage="oxasl -i <asl_image> [options]", version=__version__)
-        parser.add_category(image.AslImageOptions())
-        parser.add_category(struc.StructuralImageOptions())
-        parser.add_category(OxfordAslOptions())
-        parser.add_category(calib.CalibOptions(ignore=["perf", "tis"]))
-        parser.add_category(reg.RegOptions())
-        parser.add_category(corrections.DistcorrOptions())
+        parser.add_category(image.Options())
+        parser.add_category(struc.Options())
+        parser.add_category(PipelineOptions())
+        parser.add_category(calib.Options(ignore=["perf", "tis"]))
+        parser.add_category(reg.Options())
+        parser.add_category(corrections.Options())
         if oxasl_ve:
             parser.add_category(oxasl_ve.VeaslOptions())
         if oxasl_mp:
@@ -179,7 +175,7 @@ def main():
             parser.add_category(oxasl_enable.EnableOptions(ignore=["regfrom",]))
         if oxasl_multite:
             parser.add_category(oxasl_multite.MultiTEOptions())
-        parser.add_category(region_analysis.RegionAnalysisOptions())
+        parser.add_category(region_analysis.Options())
         parser.add_category(GenericOptions())
 
         options, _ = parser.parse_args()
@@ -193,6 +189,7 @@ def main():
                 options.calib_method = "refregion"
             else:
                 options.calib_method = "voxelwise"
+
         if options.debug:
             options.save_all = True
         options.output_native = True
@@ -228,31 +225,40 @@ def oxasl(wsp):
 
     wsp.log.write("\nInput ASL data: %s\n" % wsp.asldata.name)
     wsp.asldata.summary(wsp.log)
+    report_asl(wsp)
 
-    oxasl_preproc(wsp)
-    calib.init(wsp)
+    basil.init(wsp)
 
-    if wsp.asldata.iaf in ("tc", "ct", "diff"):
-        if wsp.asldata.ntes == 1:
-            model_basil(wsp)
-        elif oxasl_multite is None:
-            raise ValueError("Multi-TE data supplied but oxasl_multite is not installed")
-        else:
-            oxasl_multite.model_multite(wsp)
+    preproc.run(wsp)
+    struc.run(wsp)
+    moco.run(wsp)
+    reg.run(wsp)
+    corrections.run(wsp)
+    mask.run(wsp)
+    calib.run(wsp)
 
-    elif wsp.asldata.iaf in ("ve", "vediff"):
-        if oxasl_ve is None:
-            raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
-        oxasl_ve.model_ve(wsp)
-    else:
-        if oxasl_mp is None:
-            raise ValueError("Multiphase data supplied but oxasl_mp is not installed")
-        oxasl_mp.model_mp(wsp)
+    if oxasl_enable and wsp.use_enable:
+        oxasl_enable.init()
+        #wsp.sub("enable")
+        oxasl_enable.run(wsp)
+        #wsp.corrected.asldata = wsp.enable.asldata_enable
 
-    region_analysis.run(wsp)
+    quantify = get_quantify_method(wsp)
+    quantify.run(wsp)
+    reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False)
+    output_run(wsp)
+    pvc_run(wsp)
+
+    for quantify_space in ("struc", "std"):
+        quantify.run(wsp, space=quantify_space)
+
+
+    region_analysis.run(wsp.output)
+    if wsp.pvcorr:
+        region_analysis.run(wsp.output_pvcorr)
 
     if wsp.save_report:
-        do_report(wsp)
+        report_run(wsp)
 
     do_cleanup(wsp)
     wsp.log.write("\nOutput is %s\n" % wsp.savedir)
@@ -277,41 +283,25 @@ def report_asl(wsp):
     page.heading(img_type, level=1)
     page.image("asldata", LightboxImage(img))
 
-def oxasl_preproc(wsp):
-    """
-    Run standard processing on ASL data
+def get_quantify_method(wsp):
+    if wsp.asldata.iaf in ("tc", "ct", "diff"):
+        if wsp.asldata.ntes == 1:
+            return basil
+        elif oxasl_multite is None:
+            raise ValueError("Multi-TE data supplied but oxasl_multite is not installed")
+        else:
+            return oxasl_multite
 
-    This method requires wsp to be a Workspace containing certain standard information.
-    As a minimum, the attribute ``asldata`` must contain an AslImage object.
-    """
-    if wsp.calib_first_vol and wsp.calib is None:
-        wsp.input.calib = wsp.asldata.calib
+    elif wsp.asldata.iaf in ("ve", "vediff"):
+        if oxasl_ve is None:
+            raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
+        return oxasl_ve
+    else:
+        if oxasl_mp is None:
+            raise ValueError("Multiphase data supplied but oxasl_mp is not installed")
+        return oxasl_mp
 
-    report_asl(wsp)
-
-    struc.init(wsp)
-    corrections.apply_corrections(wsp)
-
-    corrections.get_motion_correction(wsp)
-    corrections.apply_corrections(wsp)
-
-    reg.reg_asl2calib(wsp)
-    reg.reg_asl2struc(wsp, True, False)
-    reg.reg_asl2custom(wsp)
-
-    corrections.get_fieldmap_correction(wsp)
-    corrections.get_cblip_correction(wsp)
-    corrections.get_sensitivity_correction(wsp)
-    corrections.apply_corrections(wsp)
-
-    mask.generate_mask(wsp)
-
-    if oxasl_enable and wsp.use_enable:
-        wsp.sub("enable")
-        oxasl_enable.enable(wsp.enable)
-        wsp.corrected.asldata = wsp.enable.asldata_enable
-
-def model_basil(wsp):
+def output_run(wsp, name=""):
     """
     Do model fitting on TC/CT or subtracted data
 
@@ -324,25 +314,21 @@ def model_basil(wsp):
      - ``output.native`` - Native (ASL) space output from last Basil modelling output
      - ``output.struc``  - Structural space output
     """
-    wsp.basil_options = wsp.ifnone("basil_options", {})
+    output_wsp = wsp.sub("output" + name)
+    output_native(output_wsp, getattr(wsp, "basil" + name))
+    output_trans(output_wsp)
 
-    basil.basil(wsp, output_wsp=wsp.sub("basil"))
-    redo_reg(wsp, wsp.basil.finalstep.mean_ftiss)
-
-    wsp.sub("output")
-    output_native(wsp.output, wsp.basil)
-    output_trans(wsp.output)
-
+def pvc_run(wsp):
     # If the user has provided manual PV maps (pvgm and pvgm) then do PVEc, even if they
     # have not explicitly given the --pvcorr option 
     user_pv_flag = ((wsp.pvwm is not None) and (wsp.pvgm is not None))
-    if (wsp.pvcorr) or (wsp.surf_pvcorr) or user_pv_flag:
+    if wsp.pvcorr or wsp.surf_pvcorr or user_pv_flag:
         # Partial volume correction is very sensitive to the mask, so recreate it
         # if it came from the structural image as this requires accurate ASL->Struc registration
         if wsp.rois.mask_src == "struc":
             wsp.rois.mask_orig = wsp.rois.mask
             wsp.rois.mask = None
-            mask.generate_mask(wsp)
+            mask.run(wsp)
 
         if wsp.pvcorr or user_pv_flag:
             # Do partial volume correction fitting
@@ -356,17 +342,13 @@ def model_basil(wsp):
                 wsp.structural.wm_pv_asl = wsp.pvwm
                 wsp.structural.gm_pv_asl = wsp.pvgm
             else:
-                struc.segment(wsp)
                 wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
                 wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
 
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
                                       "pgm" : wsp.structural.gm_pv_asl})
-            basil.basil(wsp, output_wsp=wsp.sub("basil_pvcorr"), prefit=False)
-
-            wsp.sub("output_pvcorr")
-            output_native(wsp.output_pvcorr, wsp.basil_pvcorr)
-            output_trans(wsp.output_pvcorr)
+            basil.run(wsp, name="_pvcorr", prefit=False)
+            output_run(wsp, "_pvcorr")
 
         if wsp.surf_pvcorr:
             if oxasl_surfpvc is None:
@@ -381,26 +363,11 @@ def model_basil(wsp):
             min_pv = 0.01
             new_roi = (wsp.basil_options["pwm"].data > min_pv) | (wsp.basil_options["pgm"].data > min_pv)
             wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
-            basil.basil(wsp, output_wsp=wsp.sub("basil_surf_pvcorr"), prefit=False)
+        
+            basil.run(wsp, name="_surf_pvcorr", prefit=False)
+            output_run(wsp, "_surf_pvcorr")
 
-            wsp.sub('output_surf_pvcorr')
-            output_native(wsp.output_surf_pvcorr, wsp.basil_surf_pvcorr)
-            output_trans(wsp.output_surf_pvcorr)
-
-def redo_reg(wsp, pwi):
-    """
-    Re-do ASL->structural registration using BBR and perfusion image
-    """
-    wsp.reg.regfrom_orig = wsp.reg.regfrom
-    wsp.reg.regto_orig = wsp.reg.regto
-    new_regfrom = np.copy(pwi.data)
-    new_regfrom[new_regfrom < 0] = 0
-    wsp.reg.regfrom = Image(new_regfrom, header=pwi.header)
-    wsp.reg.asl2struc_initial = wsp.reg.asl2struc
-    wsp.reg.struc2asl_initial = wsp.reg.struc2asl
-    reg.reg_asl2struc(wsp, False, True, name="final")
-
-def do_report(wsp):
+def report_run(wsp):
     """
     Generate HTML report
     """
@@ -549,7 +516,7 @@ def __output_trans_helper(wsp):
     # (structural, standard, custom)
     suffixes = ("", "_std", "_var", "_calib", "_std_calib", "_var_calib")
     outputs = ("perfusion", "aCBV", "arrival", "perfusion_wm", 
-        "arrival_wm", "modelfit", "residuals", "texch", "mask")
+        "arrival_wm", "modelfit", "modelfit_mean", "residuals", "texch", "mask")
 
     for suff, out in itertools.product(suffixes, outputs):
         data = getattr(wsp.native, out + suff)
@@ -561,17 +528,11 @@ def output_trans(wsp):
     """
     Create transformed output, i.e. in structural and/or standard space
     """
-    
     if wsp.output_struc and wsp.reg.asl2struc is not None:
         wsp.log.write("\nGenerating output in structural space\n")
         wsp.sub("struct")
-        for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
-            for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "modelfit_mean", "residuals", "texch", "mask"):
-                native_output = getattr(wsp.native, output + suffix)
-                # Don't transform 4D output (e.g. modelfit) - too large!
-                if native_output is not None and native_output.ndim == 3:
-                    if wsp.reg.asl2struc is not None:
-                        setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output == 'mask')))
+        for suffix, output, native_output in __output_trans_helper(wsp): 
+            setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output == 'mask')))
         wsp.log.write(" - DONE\n")
 
     if wsp.output_mni:
@@ -581,13 +542,8 @@ def output_trans(wsp):
         else:
             reg.reg_struc2std(wsp)
             wsp.sub("mni")
-            for suffix in ("", "_std", "_var", "_calib", "_std_calib", "_var_calib"):
-                for output in ("perfusion", "aCBV", "arrival", "perfusion_wm", "arrival_wm", "modelfit", "modelfit_mean", "mask"):
-                    native_output = getattr(wsp.native, output + suffix)
-                    # Don't transform 4D output (e.g. modelfit) - too large!
-                    if native_output is not None and native_output.ndim == 3:
-                        struc_output = reg.asl2struc(wsp, native_output, mask=(output == 'mask'))
-                        setattr(wsp.mni, output + suffix, reg.struc2std(wsp, struc_output))
+            for suffix, output, native_output in __output_trans_helper(wsp): 
+                setattr(wsp.struct, output + suffix, reg.asl2std(wsp, native_output, mask=(output == 'mask')))
             wsp.log.write(" - DONE\n")
 
     if wsp.output_custom: 
@@ -597,7 +553,6 @@ def output_trans(wsp):
             if wsp.reg.asl2custom is not None:
                 setattr(wsp.custom, output + suffix, reg.asl2custom(wsp, native_output, mask=(output == 'mask')))
         wsp.log.write(" - DONE\n")
-
 
 def do_cleanup(wsp):
     """

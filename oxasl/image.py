@@ -1,5 +1,7 @@
 """
-Classes for representing ASL data and constructing instances from command line parameters
+OXASL -  Classes for representing ASL data and constructing instances from command line parameters
+
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 import sys
 import warnings
@@ -12,7 +14,7 @@ from fsl.data.image import Image
 
 from .options import OptionCategory, IgnorableOptionGroup
 
-class AslImageOptions(OptionCategory):
+class Options(OptionCategory):
     """
     OptionGroup which contains options for describing an ASL image
     """

@@ -1,10 +1,10 @@
 #!/bin/env python
 """
-ASL_REG: Registration for ASL data
+OXASL - Registration for ASL data
 
 Michael Chappell, IBME QuBIc & FMRIB Image Analysis Groups
 
-Copyright (c) 2008-2018 University of Oxford
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 from __future__ import unicode_literals
 
@@ -24,12 +24,60 @@ from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, Ignor
 from oxasl.wrappers import epi_reg
 from oxasl.reporting import LightboxImage
 
-def init(wsp):
+class Options(OptionCategory):
     """
-    Create registration sub-workspace if not already there
+    OptionCategory which contains options for registration of ASL data to structural image
     """
+
+    def __init__(self, **kwargs):
+        OptionCategory.__init__(self, "reg", **kwargs)
+
+    def groups(self, parser):
+        groups = []
+
+        group = IgnorableOptionGroup(parser, "Registration", ignore=self.ignore)
+        group.add_option("--regfrom", help="Registration image (e.g. perfusion weighted image)", type="image")
+        #group.add_option("--omat", help="Output file for transform matrix", default=None)
+        #group.add_option("--bbr", dest="do_bbr", help="Include BBR registration step using EPI_REG", action="store_true", default=False)
+        #group.add_option("--flirt", dest="do_flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
+        #group.add_option("--flirtsch", help="user-specified FLIRT schedule for registration")
+        groups.append(group)
+
+        #group = IgnorableOptionGroup(parser, "Extra BBR registration refinement", ignore=self.ignore)
+        #group.add_option("-c", dest="cfile", help="ASL control/calibration image for initial registration - brain extracted")
+        #group.add_option("--wm_seg", dest="wm_seg", help="tissue segmenation image for bbr (in structural image space)")
+        #groups.append(group)
+
+        #group = IgnorableOptionGroup(parser, "Distortion correction using fieldmap (see epi_reg)", ignore=self.ignore)
+        #g.add_option("--nofmapreg", dest="nofmapreg", help="do not perform registration of fmap to T1 (use if fmap already registered)", action="store_true", default=False)
+        #groups.append(group)
+
+        #group = IgnorableOptionGroup(parser, "Deprecated", ignore=self.ignore)
+        #g.add_option("-r", dest="lowstruc", help="extra low resolution structural image - brain extracted")
+        #g.add_option("--inweight", dest="inweight", help="specify weights for input image - same functionality as the flirt -inweight option", type="float")
+        #groups.append(group)
+
+        return groups
+
+def run(wsp, redo=False, struc_flirt=True, struc_bbr=False):
     if wsp.reg is None:
         wsp.sub("reg")
+        redo = True
+
+    if redo:
+        # Save any previous registration data
+        if wsp.reg.regfrom is not None:
+            idx = 1
+            while getattr(wsp.reg, "regfrom_old_%i" % idx) is not None:
+                idx += 1
+            for attr in ("regfrom", "asl2struc", "struc2asl"):
+                setattr(wsp.reg, "%s_old_%i" % (attr, idx), getattr(wsp.reg, attr))
+
+        wsp.reg.nativeref = wsp.input.asldata.mean()
+        get_regfrom(wsp)
+        reg_asl2calib(wsp)
+        reg_asl2struc(wsp, flirt=struc_flirt, bbr=struc_bbr)
+        reg_asl2custom(wsp)
 
 def get_regfrom(wsp):
     """
@@ -49,71 +97,25 @@ def get_regfrom(wsp):
 
      - ``regfrom``    : Registration reference image in ASL space
     """
-    init(wsp)
-    if wsp.reg.regfrom is None:
-        wsp.log.write("\nGetting the ASL image to use for registration)\n")
-        if wsp.regfrom is not None:
-            wsp.log.write(" - Registration reference image supplied by user\n")
-            wsp.reg.regfrom = wsp.regfrom
-        elif wsp.asldata.iaf in ("tc", "ct"):
-            wsp.log.write(" - Registration reference is mean ASL signal (brain extracted)\n")
-            wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
-        elif wsp.calib is not None and wsp.calib.sameSpace(wsp.asldata):
-            wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
-            wsp.reg.regfrom = brain.brain(wsp, wsp.calib, thresh=0.2)
-        else:
-            wsp.log.write(" - Registration reference is mean ASL image (brain extracted)\n")
-            wsp.reg.regfrom = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
+    wsp.log.write("\nGetting the ASL image to use for registration)\n")
 
-def get_motion_params(mat):
-    """
-    Get motion parameters from a Flirt motion correction matrix
-
-    This is done under the assumption that the matrix may contain
-    rotation, translation and possibly minor scaling but no reflection,
-    shear etc. So the output could be incorrect for some extreme
-    correction matrices, but this probably indicates an error in the
-    registration process. We wrap the whole thing in a try block so
-    if anything goes horribly wrong it does not at least stop the
-    pipeline running
-
-    See http://en.wikipedia.org/wiki/Rotation_matrix for details
-    of the rotation calculation.
-
-    :return: magnitude of translation, angle and rotation axis
-    """
-    if tuple(mat.shape) != (4, 4):
-        raise ValueError("Not a 4x4 Flirt matrix")
-
-    try:
-        # Extract scales - last one is the magnitude of the translation
-        scales = np.linalg.norm(mat[:3, :], axis=0)
-
-        # Normalise unit vectors by scaling before extracting rotation
-        mat[:, 0] /= scales[0]
-        mat[:, 1] /= scales[1]
-        mat[:, 2] /= scales[2]
-
-        # Rotation axis
-        rot_axis = np.array([
-            mat[2, 1] - mat[1, 2],
-            mat[0, 2] - mat[2, 0],
-            mat[1, 0] - mat[0, 1],
-        ], dtype=np.float)
-
-        # Rotation angle - note that we need to check the sign
-        trace = np.trace(mat[:3, :3])
-        costheta = (float(trace)-1) / 2
-        sintheta = math.sqrt(1-costheta*costheta)
-        theta = math.acos(costheta)
-        test_element = rot_axis[1]*rot_axis[0]*(1-costheta) + rot_axis[2]*sintheta
-        if np.abs(test_element - mat[1, 0]) > np.abs(test_element - mat[0, 1]):
-            theta = -theta
-        return scales[-1], math.degrees(theta), rot_axis
-    except:
-        warnings.warn("Error extracting motion parameters from transformation matrix - check registration/moco looks OK!")
-        traceback.print_exc()
-        return 1, 0, [0, 0, 1]
+    if wsp.basil is not None:
+        wsp.log.write(" - Registration reference image is PWI image generated by Basil\n")
+        pwi = np.copy(wsp.basil.finalstep.mean_ftiss.data)
+        pwi[pwi < 0] = 0
+        wsp.reg.regfrom = Image(pwi, header=wsp.basil.finalstep.mean_ftiss.header)
+    elif wsp.input.regfrom is not None:
+        wsp.log.write(" - Registration reference image supplied by user\n")
+        wsp.reg.regfrom = wsp.input.regfrom
+    elif wsp.preproc.asldata.iaf in ("tc", "ct"):
+        wsp.log.write(" - Registration reference is mean ASL signal (brain extracted)\n")
+        wsp.reg.regfrom = brain.brain(wsp, wsp.preproc.asldata.mean(), thresh=0.2)
+    elif wsp.preproc.calib is not None and wsp.preproc.calib.sameSpace(wsp.preproc.asldata):
+        wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
+        wsp.reg.regfrom = brain.brain(wsp, wsp.preproc.calib, thresh=0.2)
+    else:
+        wsp.log.write(" - Registration reference is mean ASL image (brain extracted)\n")
+        wsp.reg.regfrom = brain.brain(wsp, wsp.preproc.asldata.mean(), thresh=0.2)
 
 def reg_asl2calib(wsp):
     """
@@ -121,11 +123,13 @@ def reg_asl2calib(wsp):
 
     Note that this might already have been done as part of motion correction
     """
-    init(wsp)
-    if wsp.calib is not None and wsp.reg.asl2calib is None:
-        get_regfrom(wsp)
+    if wsp.moco.asl2calib is not None:
+        wsp.log.write("Calibration image registered to ASL image as part of motion correction\n")
+        wsp.reg.asl2calib = wsp.moco.asl2calib
+        wsp.reg.calib2asl = wsp.moco.calib2asl
+    elif wsp.calib is not None:
         wsp.log.write("Registering calibration image to ASL image\n")
-        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.regfrom, wsp.calib)
+        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.regfrom, wsp.preproc.calib)
         wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
 
 def reg_asl2custom(wsp):
@@ -136,18 +140,15 @@ def reg_asl2custom(wsp):
     FLIRT will be used to generate this. The overall transformation
     is the concatenation of asl2struc and struc2custom. 
     """
+    if wsp.input.output_custom:
+        wsp.reg.customref = wsp.input.output_custom
 
-    if wsp.output_custom:
-        init(wsp)
-        setattr(wsp.reg, 'customref', Image(wsp.output_custom))
-
-        if wsp.output_custom_mat is not None:
-            struc2custom = np.loadtxt(wsp.output_custom_mat)
+        if wsp.input.output_custom_mat is not None:
+            struc2custom = np.loadtxt(wsp.input.output_custom_mat)
 
         else:  
             wsp.log.write("Registering calibration image to ASL image\n")
-            _, custom2struc = reg_flirt(wsp, wsp.reg.customref,
-                wsp.structural.struc)
+            _, custom2struc = reg_flirt(wsp, wsp.reg.customref, wsp.structural.struc)
             struc2custom = np.linalg.inv(custom2struc)
 
         wsp.reg.asl2custom = struc2custom @ wsp.reg.asl2struc
@@ -173,10 +174,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
      - ``struc2asl``    : Structural->ASL transformation matrix
      - ``regto``        : ``regfrom`` image transformed to structural space
     """
-    init(wsp)
-    struc.init(wsp)
     if wsp.structural.struc is not None:
-        get_regfrom(wsp)
         wsp.log.write("\nRegistering ASL data to structural data\n")
         if flirt:
             wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.regfrom, wsp.structural.brain, wsp.reg.asl2struc)
@@ -193,7 +191,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
         page = wsp.report.page("asl2struc_%s" % name)
         page.heading("%s ASL -> Structural registration" % name.title(), level=0)
         page.heading("Transformation parameters", level=1)
-        motion_params = get_motion_params(wsp.reg.asl2struc)
+        motion_params = get_transform_params(wsp.reg.asl2struc)
         page.table([
             ["Translation magnitude", "%.3g mm" % motion_params[0]],
             ["Rotation magnitude", "%.3g \N{DEGREE SIGN}" % motion_params[1]],
@@ -227,8 +225,6 @@ def reg_struc2std(wsp, fnirt=False):
      - ``reg.struc2std``    : Structural->MNI transformation matrix - either warp image or FLIRT matrix
      - ``reg.std2struc``    : MNI->structural transformation - either warp image or FLIRT matrix
     """
-    init(wsp)
-
     if wsp.reg.std2struc is not None:
         return
 
@@ -243,7 +239,6 @@ def reg_struc2std(wsp, fnirt=False):
             wsp.reg.struc2std = load_matrix(mat)
 
     if wsp.reg.struc2std is None:
-        struc.init(wsp)
         wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
         flirt_result = fsl.flirt(wsp.structural.brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
         wsp.reg.struc2std = flirt_result["omat"]
@@ -277,7 +272,6 @@ def asl2custom(wsp, img, **kwargs):
     """
     Transform an image from ASL space to custom output (via structural)
     """
-    init(wsp)
     return transform(wsp, img, wsp.reg.asl2custom, wsp.reg.customref, **kwargs)
 
 def struc2asl(wsp, img, **kwargs):
@@ -287,8 +281,7 @@ def struc2asl(wsp, img, **kwargs):
     :param img: Image object in structural space
     :return: Transformed Image object in ASL (native) space
     """
-    init(wsp)
-    return transform(wsp, img, wsp.reg.struc2asl, wsp.nativeref, **kwargs)
+    return transform(wsp, img, wsp.reg.struc2asl, wsp.reg.nativeref, **kwargs)
 
 def asl2struc(wsp, img, **kwargs):
     """
@@ -299,7 +292,6 @@ def asl2struc(wsp, img, **kwargs):
     :param img: Image object in native (ASL) space
     :return: Transformed Image object in structural space
     """
-    init(wsp)
     return transform(wsp, img, wsp.reg.asl2struc, wsp.structural.struc, **kwargs)
 
 def calib2asl(wsp, img, **kwargs):
@@ -309,8 +301,7 @@ def calib2asl(wsp, img, **kwargs):
     :param img: Image object in calibration space
     :return: Transformed Image object in ASL (native) space
     """
-    init(wsp)
-    return transform(wsp, img, wsp.reg.calib2asl, wsp.nativeref, **kwargs)
+    return transform(wsp, img, wsp.reg.calib2asl, wsp.reg.nativeref, **kwargs)
 
 def asl2calib(wsp, img, **kwargs):
     """
@@ -321,14 +312,13 @@ def asl2calib(wsp, img, **kwargs):
     :param img: Image object in native (ASL) space
     :return: Transformed Image object in calibration space
     """
-    init(wsp)
     return transform(wsp, img, wsp.reg.asl2calib, wsp.structural.struc, **kwargs)
 
 def std2asl(wsp, img, **kwargs):
     """
     Transform an image from standard (MNI) space to native (ASL) space
     """
-    return transform(wsp, img, wsp.reg.std2struc, wsp.nativeref, postmat=wsp.reg.struc2asl, **kwargs)
+    return transform(wsp, img, wsp.reg.std2struc, wsp.reg.nativeref, postmat=wsp.reg.struc2asl, **kwargs)
 
 def asl2std(wsp, img, **kwargs):
     """
@@ -469,40 +459,55 @@ def reg_bbr(wsp):
     # imcp $wm_seg $outdir/wm_seg
     #imcp $tempdir/low2high_final_fast_wmedge $outdir/tissedge
 
-class RegOptions(OptionCategory):
+def get_transform_params(mat):
     """
-    OptionCategory which contains options for registration of ASL data to structural image
+    Get motion parameters from a Flirt motion correction matrix
+
+    This is done under the assumption that the matrix may contain
+    rotation, translation and possibly minor scaling but no reflection,
+    shear etc. So the output could be incorrect for some extreme
+    correction matrices, but this probably indicates an error in the
+    registration process. We wrap the whole thing in a try block so
+    if anything goes horribly wrong it does not at least stop the
+    pipeline running
+
+    See http://en.wikipedia.org/wiki/Rotation_matrix for details
+    of the rotation calculation.
+
+    :return: Tuple of magnitude of translation, angle and rotation axis
     """
+    if tuple(mat.shape) != (4, 4):
+        raise ValueError("Not a 4x4 Flirt matrix")
 
-    def __init__(self, **kwargs):
-        OptionCategory.__init__(self, "reg", **kwargs)
+    try:
+        # Extract scales - last one is the magnitude of the translation
+        scales = np.linalg.norm(mat[:3, :], axis=0)
 
-    def groups(self, parser):
-        groups = []
+        # Normalise unit vectors by scaling before extracting rotation
+        mat[:, 0] /= scales[0]
+        mat[:, 1] /= scales[1]
+        mat[:, 2] /= scales[2]
 
-        group = IgnorableOptionGroup(parser, "Registration", ignore=self.ignore)
-        group.add_option("--regfrom", help="Registration image (e.g. perfusion weighted image)", type="image")
-        #group.add_option("--omat", help="Output file for transform matrix", default=None)
-        #group.add_option("--bbr", dest="do_bbr", help="Include BBR registration step using EPI_REG", action="store_true", default=False)
-        #group.add_option("--flirt", dest="do_flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
-        #group.add_option("--flirtsch", help="user-specified FLIRT schedule for registration")
-        groups.append(group)
+        # Rotation axis
+        rot_axis = np.array([
+            mat[2, 1] - mat[1, 2],
+            mat[0, 2] - mat[2, 0],
+            mat[1, 0] - mat[0, 1],
+        ], dtype=np.float)
 
-        #group = IgnorableOptionGroup(parser, "Extra BBR registration refinement", ignore=self.ignore)
-        #group.add_option("-c", dest="cfile", help="ASL control/calibration image for initial registration - brain extracted")
-        #group.add_option("--wm_seg", dest="wm_seg", help="tissue segmenation image for bbr (in structural image space)")
-        #groups.append(group)
-
-        #group = IgnorableOptionGroup(parser, "Distortion correction using fieldmap (see epi_reg)", ignore=self.ignore)
-        #g.add_option("--nofmapreg", dest="nofmapreg", help="do not perform registration of fmap to T1 (use if fmap already registered)", action="store_true", default=False)
-        #groups.append(group)
-
-        #group = IgnorableOptionGroup(parser, "Deprecated", ignore=self.ignore)
-        #g.add_option("-r", dest="lowstruc", help="extra low resolution structural image - brain extracted")
-        #g.add_option("--inweight", dest="inweight", help="specify weights for input image - same functionality as the flirt -inweight option", type="float")
-        #groups.append(group)
-
-        return groups
+        # Rotation angle - note that we need to check the sign
+        trace = np.trace(mat[:3, :3])
+        costheta = (float(trace)-1) / 2
+        sintheta = math.sqrt(1-costheta*costheta)
+        theta = math.acos(costheta)
+        test_element = rot_axis[1]*rot_axis[0]*(1-costheta) + rot_axis[2]*sintheta
+        if np.abs(test_element - mat[1, 0]) > np.abs(test_element - mat[0, 1]):
+            theta = -theta
+        return scales[-1], math.degrees(theta), rot_axis
+    except:
+        warnings.warn("Error extracting motion parameters from transformation matrix - check registration/moco looks OK!")
+        traceback.print_exc()
+        return 1, 0, [0, 0, 1]
 
 def main():
     """

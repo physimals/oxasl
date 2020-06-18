@@ -1,6 +1,8 @@
 #!/bin/env python
 """
 OXASL - Module which generates perfusion stats within various ROIs
+
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 import os
 import sys
@@ -23,9 +25,9 @@ from oxasl.options import OptionCategory, IgnorableOptionGroup
 # consider a voxel relevant to GM/WM averages
 PVE_THRESHOLD_BASE = 0.1
 
-class RegionAnalysisOptions(OptionCategory):
+class Options(OptionCategory):
     """
-    OptionGroup which contains options for region analysis
+    Options for region analysis
     """
 
     def __init__(self, title="Region analysis", **kwargs):
@@ -79,8 +81,11 @@ def i2(val, var):
 
     #out = []
     Q = np.sum(prec * (val - mu_bar)**2)
+    if Q == 0:
+        i2 = 0
+    else:
+        i2 = (Q-(n-1))/Q
     #H = np.sqrt(Q/(n - 1))
-    i2 = (Q-(n-1))/Q
 
     # Negative values map to 0 (see https://www.ncbi.nlm.nih.gov/pmc/articles/PMC192859/)
     i2 = max(i2, 0)
@@ -136,6 +141,8 @@ def get_stats(stats, img, var_img, roi, suffix="", ignore_nan=True, ignore_inf=T
 
     sample_data = img[effective_roi]
     sample_var = var_img[effective_roi]
+    # Variance should not be zero but sometimes is - maybe masking?
+    sample_var[sample_var == 0] = 1e-6
     nvoxels = len(sample_data)
     stats["Nvoxels" + suffix] = nvoxels
     for stat, fn in STATS_FNS.items():
@@ -181,24 +188,24 @@ def oxasl_perfusion_data(wsp):
     perfusion_data = [
         {
             "suffix" : "", 
-            "f" : wsp.output.native.perfusion_calib,
-            "var" :  wsp.output.native.perfusion_var_calib,
+            "f" : wsp.native.perfusion_calib,
+            "var" :  wsp.native.perfusion_var_calib,
             "mask" : None,
         },
     ]
-    if wsp.pvcorr:
+    if wsp.native.perfusion_wm_calib is not None:
         wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (threshold: %.2f)\n" % PVE_THRESHOLD_BASE)
         perfusion_data.extend([
             {
                 "suffix" : "_gm", 
-                "f" : wsp.output_pvcorr.native.perfusion_calib,
-                "var" : wsp.output_pvcorr.native.perfusion_var_calib,
+                "f" : wsp.native.perfusion_calib,
+                "var" : wsp.native.perfusion_var_calib,
                 "mask" : wsp.structural.gm_pv_asl.data > PVE_THRESHOLD_BASE,
             },
             {
                 "suffix" : "_wm", 
-                "f" : wsp.output_pvcorr.native.pvcorr.perfusion_wm_calib,
-                "var" : wsp.output_pvcorr.native.perfusion_wm_var_calib,
+                "f" : wsp.native.perfusion_wm_calib,
+                "var" : wsp.native.perfusion_wm_var_calib,
                 "mask" : wsp.structural.wm_pv_asl.data > PVE_THRESHOLD_BASE,
             },
         ])
@@ -207,14 +214,14 @@ def oxasl_perfusion_data(wsp):
         perfusion_data.extend([
             {
                 "suffix" : "_gm",
-                "f" : wsp.output.native.perfusion_calib,
-                "var" :  wsp.output.native.perfusion_var_calib,
+                "f" : wsp.native.perfusion_calib,
+                "var" :  wsp.native.perfusion_var_calib,
                 "mask" : wsp.structural.gm_pv_asl.data > wsp.gm_thresh,
             },
             {
                 "suffix" : "_wm",
-                "f" : wsp.output.native.perfusion_calib,
-                "var" :  wsp.output.native.perfusion_var_calib,
+                "f" : wsp.native.perfusion_calib,
+                "var" :  wsp.native.perfusion_var_calib,
                 "mask" : wsp.structural.wm_pv_asl.data > wsp.wm_thresh,
             },
         ])

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-BASIL - Bayesian model fitting for ASL
+OXASL - Bayesian model fitting for ASL
 
 The BASIL module is a little more complex than the other Workspace based
 modules because of the number of options available and the need for flexibility
@@ -28,7 +28,7 @@ options relevant only to Basil:
 All options specified in basil_options are either consumed by Basil, or
 if not passed directly to the model.
 
-Copyright (c) 2008-2018 University of Oxford
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 
 import sys
@@ -42,7 +42,13 @@ from fsl.data.image import Image
 from oxasl import __version__, __timestamp__, AslImage, Workspace, image
 from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 
-def basil(wsp, output_wsp=None, prefit=True):
+def init(wsp):
+    wsp.basil_options = wsp.ifnone("basil_options", {})
+
+def run(wsp, name="", **kwargs):
+    basil(wsp, output_wsp=wsp.sub("basil" + name), **kwargs)
+
+def basil(wsp, output_wsp, prefit=True, space=None):
     """
     Run BASIL modelling on ASL data in a workspace
 
@@ -79,8 +85,6 @@ def basil(wsp, output_wsp=None, prefit=True):
      - ``basil_options`` : Optional dictionary of additional options for underlying model
     """
     wsp.log.write("\nRunning BASIL Bayesian modelling on ASL data\n")
-    if output_wsp is None:
-        output_wsp = wsp.sub("modelling")
 
     # Single or Multi TI setup
     if wsp.asldata.ntis == 1:
@@ -448,170 +452,6 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
 
     return steps
 
-def basil_steps_multite(wsp, asldata, mask=None, **kwargs):
-    """
-    Get the steps required for a BASIL run on multi-TE data
-
-    This is separated for the case where an alternative process wants to run
-    the actual modelling, or so that the steps can be checked prior to doing
-    an actual run.
-
-    Arguments are the same as the ``basil`` function.
-    """
-    if asldata is None:
-        raise ValueError("Input ASL data is None")
-
-    wsp.log.write("BASIL v%s\n" % __version__)
-    asldata.summary(log=wsp.log)
-    asldata = asldata.diff().reorder("rt")
-
-    # Default Fabber options for VB runs and spatial steps. Note that attributes
-    # which are None (e.g. sliceband) are not passed to Fabber
-    options = {
-        "data" : asldata,
-        "model" : "asl_multite",
-        "method" : "vb",
-        "noise" : "white",
-        "allow-bad-voxels" : True,
-        "max-iterations" : 20,
-        "convergence" : "trialmode",
-        "max-trials" : 10,
-        "save-mean" : True,
-        "save-mvn" : True,
-        "save-std" : True,
-        "save-model-fit" : True,
-    }
-
-    if mask is not None:
-        options["mask"] = mask
-
-    # We choose to pass TIs (not PLDs). The asldata object ensures that
-    # TIs are correctly derived from PLDs, when these are specified, by adding
-    # the bolus duration.
-    _list_option(options, asldata.tis, "ti")
-
-    # Pass multiple TEs
-    _list_option(options, asldata.tes, "te")
-
-    # Bolus duration must be constant for multi-TE model
-    if min(asldata.taus) != max(asldata.taus):
-        raise ValueError("Multi-TE model does not support variable bolus durations")
-    else:
-        options["tau"] = asldata.taus[0]
-
-    # Repeats must be constant for multi-TE model
-    if min(asldata.rpts) != max(asldata.rpts):
-        raise ValueError("Multi-TE model does not support variable repeats")
-    else:
-        options["repeats"] = asldata.rpts[0]
-
-    # Other asl data parameters
-    for attr in ("casl", "slicedt", "sliceband"):
-        if getattr(asldata, attr, None) is not None:
-            options[attr] = getattr(asldata, attr)
-
-    # Keyword arguments override options
-    options.update(kwargs)
-
-    # Additional optional workspace arguments
-    for attr in ("t1", "t1b", "t2", "t2b", "mask"):
-        value = getattr(wsp, attr)
-        if value is not None:
-            if attr.startswith("t2"):
-                # Model expects T2 in seconds not ms
-                options[attr] = float(value) / 1000
-            else:
-                options[attr] = value
-
-    # Options for final spatial step
-    prior_type_spatial = "M"
-    prior_type_mvs = "A"
-    options_svb = {
-        "method" : "spatialvb",
-        "param-spatial-priors" : "N+",
-        "convergence" : "maxits",
-        "max-iterations": 20,
-    }
-
-    wsp.log.write("Model (in fabber) is : %s\n" % options["model"])
-    
-    # Set general parameter inference and inclusion
-    if not wsp.infertiss:
-        wsp.log.write("WARNING: infertiss=False but ftiss is always inferred in multi-TE model\n")
-    if not wsp.inferbat:
-        wsp.log.write("WARNING: inferbat=False but BAT is always inferred in multi-TE model\n")
-    if wsp.inferart:
-        wsp.log.write("WARNING: inferart=True but multi-TE model does not support arterial component\n")
-    if wsp.infertau:
-        options["infertau"] = True
-    if wsp.infert1:
-        options["infert1"] = True
-    if wsp.infert2:
-        options["infert2"] = True
-
-    # Keep track of the number of spatial priors specified by name
-    spriors = 1
-
-    if wsp.initmvn:
-        # we are being supplied with an initial MVN
-        wsp.log.write("Initial MVN being loaded %s\n" % wsp.initmvn.name)
-        options["continue-from-mvn"] = wsp.initmvn
-
-    # T1 image prior
-    if wsp.t1im:
-        spriors = _add_prior(options, spriors, "T_1", type="I", image=wsp.t1im)
-
-    # BAT image prior
-    if wsp.batim is not None:
-        # With a BAT image prior we must include BAT even if we are not inferring it
-        # (in this case the image prior will be treated as ground truth)
-        spriors = _add_prior(options, spriors, "delttiss", type="I", image=wsp.batim)
-        options["incbat"] = True
-
-    steps = []
-    components = ""
-
-    ### --- TISSUE MODULE ---
-    #if wsp.infertiss:
-    if True:
-        components += " Tissue"
-
-        ### Inference options
-        if wsp.infertau:
-            components += " Bolus duration"
-            options["infertau"] = True
-        if wsp.infert1:
-            components += " T1"
-            options["infert1"] = True
-        if wsp.infertexch:
-            components += " Exchange time"
-            options["infertexch"] = True
-
-        step_desc = "VB - %s" % components
-        if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
-
-        # Setup spatial priors ready
-        spriors = _add_prior(options_svb, spriors, "ftiss", type=prior_type_spatial)
-
-    ### --- SPATIAL MODULE ---
-    if wsp.spatial:
-        step_desc = "Spatial VB - %s" % components
-        options.update(options_svb)
-        del options["max-trials"]
-
-        if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
-
-    ### --- SINGLE-STEP OPTION ---
-    if wsp.onestep:
-        steps.append(FabberStep(options, step_desc))
-
-    if not steps:
-        raise ValueError("No steps were generated - no parameters were set to be inferred")
-
-    return steps
-
 def _list_option(options, values, name):
     for idx, value in enumerate(values):
         options["%s%i" % (name, idx+1)] = value
@@ -626,9 +466,18 @@ class Step(object):
     """
     A step in the Basil modelling process
     """
-    def __init__(self, options, desc):
+    def __init__(self, options, desc, img_space=None):
         self.options = dict(options)
         self.desc = desc
+        if img_space is not None:
+            # Need to convert all images to target image space
+            for key in list(options.keys()):
+                poss_img = self.options[key]
+                if isinstance(poss_img, Image):
+                    self.options[key] = self._convert_img_space(poss_img, img_space)
+
+    def _convert_img_space(self, img, space):
+        return img
 
 class FabberStep(Step):
     """

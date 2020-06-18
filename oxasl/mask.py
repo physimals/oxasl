@@ -1,5 +1,7 @@
 """
-Functions for generating a suitable mask for ASL data
+OXASL - Module to generate a suitable mask for ASL data
+
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 import sys
 
@@ -13,7 +15,7 @@ from oxasl import __version__, AslImage, Workspace, image, reg, struc
 from oxasl.options import AslOptionParser, GenericOptions
 from oxasl.reporting import LightboxImage
 
-def generate_mask(wsp):
+def run(wsp):
     """
     Generate mask for ASL data
 
@@ -58,7 +60,6 @@ def generate_mask(wsp):
     elif wsp.structural.struc is not None:
         # Preferred option is to use brain extracted structural
         wsp.rois.mask_src = "struc"
-        struc.init(wsp)
         page.heading("Brain extracted structural image", level=1)
         page.image("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
         brain_mask_asl = reg.struc2asl(wsp, wsp.structural.brain_mask)

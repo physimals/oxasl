@@ -1,8 +1,8 @@
 #!/bin/env python
 """
-Brain extraction
+OXASL - Brain extraction
 
-Copyright (c) 2008-2013 Univerisity of Oxford
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 
 import fsl.wrappers as fsl

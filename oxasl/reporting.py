@@ -1,5 +1,5 @@
 """
-For generating human-readable output reports
+OXASL - module for generating human-readable output reports
 
 Example usage:
 

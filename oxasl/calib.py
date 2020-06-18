@@ -1,10 +1,10 @@
 #!/bin/env python
 """
-ASL_CALIB: Calibration for ASL data
+OXASL - Calibration module
 
 Michael Chappell & Brad MacIntosh, FMRIB Image Analysis & Physics Groups
 
-Copyright (c) 2008-2013 Univerisity of Oxford
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 
 import sys
@@ -23,12 +23,61 @@ from oxasl.image import summary
 from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 from oxasl.reporting import LightboxImage
 
-def init(wsp):
-    """ Initialize calibration sub-workspace """
-    if wsp.calibration is None:
-        wsp.sub("calibration")
+class Options(OptionCategory):
+    """
+    Options for calibration
+    """
 
-def calculate_m0(wsp):
+    def __init__(self, **kwargs):
+        OptionCategory.__init__(self, "calib", **kwargs)
+
+    def groups(self, parser):
+        groups = []
+        group = IgnorableOptionGroup(parser, "Calibration", ignore=self.ignore)
+        group.add_option("--calib", "-c", help="Calibration image", type="image")
+        group.add_option("--perf", "-i", help="Perfusion image for calibration, in same image space as calibration image", type="image")
+        group.add_option("--calib-method", "--cmethod", help="Calibration method: voxelwise or refregion")
+        group.add_option("--calib-alpha", "--alpha", help="Inversion efficiency", type=float, default=None)
+        group.add_option("--calib-gain", "--cgain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
+        group.add_option("--calib-aslreg", help="Calibration image is already aligned with ASL image", action="store_true", default=False)
+
+        group.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
+        groups.append(group)
+
+        group = IgnorableOptionGroup(parser, "Voxelwise calibration", ignore=self.ignore)
+        group.add_option("--pct", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
+        groups.append(group)
+
+        group = IgnorableOptionGroup(parser, "Reference region calibration", ignore=self.ignore)
+        group.add_option("--mode", help="Calibration mode (longtr or satrevoc)", default="longtr")
+        group.add_option("--tissref", help="Tissue reference type (csf, wm, gm or none)", default="csf")
+        group.add_option("--te", help="Sequence TE (ms)", type=float, default=0.0)
+        group.add_option("--refmask", "--csf", help="Reference tissue mask in calibration image space", type="image")
+        group.add_option("--t1r", help="T1 of reference tissue (s) - defaults: csf 4.3, gm 1.3, wm 1.0", type=float, default=None)
+        group.add_option("--t2r", help="T2/T2* of reference tissue (ms) - defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50", type=float, default=None)
+        group.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
+        group.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
+        groups.append(group)
+
+        group = IgnorableOptionGroup(parser, "longtr mode (calibration image is a control image with a long TR)", ignore=self.ignore)
+        groups.append(group)
+
+        group = IgnorableOptionGroup(parser, "satrecov mode (calibration image is a sequnce of control images at various TIs)", ignore=self.ignore)
+        group.add_option("--tis", help="Comma separated list of inversion times, e.group. --tis 0.2,0.4,0.6")
+        group.add_option("--fa", help="Flip angle (in degrees) for Look-Locker readouts", type=float)
+        group.add_option("--lfa", help="Lower flip angle (in degrees) for dual FA calibration", type=float)
+        group.add_option("--calib-nphases", help="Number of phases (repetitions) of higher FA", type=int)
+        group.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
+        groups.append(group)
+
+        #group = IgnorableOptionGroup(parser, "CSF masking options (only for --tissref csf)", ignore=self.ignore)
+        #group.add_option("--csfmaskingoff", action="store_true", default=False, help="Turn off the ventricle masking, reference is based on segmentation only.")
+        #group.add_option("--str2std", help="Structural to MNI152 linear registration (.mat)")
+        #group.add_option("--warp", help="Structural to MNI152 non-linear registration (warp)")
+
+        return groups
+
+def run(wsp):
     """
     Calculate M0 value for use in calibration of perfusion images
 
@@ -56,18 +105,17 @@ def calculate_m0(wsp):
 
      - ``calibration.m0`` : M0 value, either a single value or an voxelwise Image
     """
-    init(wsp)
+    wsp.sub("calibration")
 
-    if wsp.calibration.m0 is None:
-        wsp.log.write("\nCalibration - calculating M0\n")
-        if wsp.calib_method in ("voxel", "voxelwise"):
-            wsp.calibration.m0 = get_m0_voxelwise(wsp)
-        elif wsp.calib_method in ("refregion", "single"):
-            wsp.calibration.m0 = get_m0_refregion(wsp)
-        elif wsp.calib_method == "wholebrain":
-            wsp.calibration.m0 = get_m0_wholebrain(wsp)
-        else:
-            raise ValueError("Unknown calibration method: %s" % wsp.calib_method)
+    wsp.log.write("\nCalibration - calculating M0\n")
+    if wsp.calib_method in ("voxel", "voxelwise"):
+        wsp.calibration.m0 = get_m0_voxelwise(wsp)
+    elif wsp.calib_method in ("refregion", "single"):
+        wsp.calibration.m0 = get_m0_refregion(wsp)
+    elif wsp.calib_method == "wholebrain":
+        wsp.calibration.m0 = get_m0_wholebrain(wsp)
+    else:
+        raise ValueError("Unknown calibration method: %s" % wsp.calib_method)
 
 def calibrate(wsp, perf_img, multiplier=1.0, alpha=1.0, var=False):
     """
@@ -91,8 +139,6 @@ def calibrate(wsp, perf_img, multiplier=1.0, alpha=1.0, var=False):
     if not wsp.calib:
         raise ValueError("No calibration data supplied")
 
-    init(wsp)
-    calculate_m0(wsp)
     wsp.log.write("\nCalibrating perfusion data: %s\n" % perf_img.name)
     m0 = wsp.calibration.m0
     if isinstance(m0, Image):
@@ -670,60 +716,6 @@ def tissue_defaults(tiss_type=None):
         return TISS_DEFAULTS[tiss_type.lower()]
     else:
         raise ValueError("Invalid tissue type: %s" % tiss_type)
-
-class CalibOptions(OptionCategory):
-    """
-    OptionCategory which contains options for preprocessing ASL data
-    """
-
-    def __init__(self, **kwargs):
-        OptionCategory.__init__(self, "calib", **kwargs)
-
-    def groups(self, parser):
-        groups = []
-        group = IgnorableOptionGroup(parser, "Calibration", ignore=self.ignore)
-        group.add_option("--calib", "-c", help="Calibration image", type="image")
-        group.add_option("--perf", "-i", help="Perfusion image for calibration, in same image space as calibration image", type="image")
-        group.add_option("--calib-method", "--cmethod", help="Calibration method: voxelwise or refregion")
-        group.add_option("--calib-alpha", "--alpha", help="Inversion efficiency", type=float, default=None)
-        group.add_option("--calib-gain", "--cgain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
-        group.add_option("--calib-aslreg", help="Calibration image is already aligned with ASL image", action="store_true", default=False)
-
-        group.add_option("--tr", help="TR used in calibration sequence (s)", type=float, default=3.2)
-        groups.append(group)
-
-        group = IgnorableOptionGroup(parser, "Voxelwise calibration", ignore=self.ignore)
-        group.add_option("--pct", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
-        groups.append(group)
-
-        group = IgnorableOptionGroup(parser, "Reference region calibration", ignore=self.ignore)
-        group.add_option("--mode", help="Calibration mode (longtr or satrevoc)", default="longtr")
-        group.add_option("--tissref", help="Tissue reference type (csf, wm, gm or none)", default="csf")
-        group.add_option("--te", help="Sequence TE (ms)", type=float, default=0.0)
-        group.add_option("--refmask", "--csf", help="Reference tissue mask in calibration image space", type="image")
-        group.add_option("--t1r", help="T1 of reference tissue (s) - defaults: csf 4.3, gm 1.3, wm 1.0", type=float, default=None)
-        group.add_option("--t2r", help="T2/T2* of reference tissue (ms) - defaults T2/T2*: csf 750/400, gm 100/60,  wm 50/50", type=float, default=None)
-        group.add_option("--t2star", action="store_true", default=False, help="Correct with T2* rather than T2 (alters the default T2 values)")
-        group.add_option("--pcr", help="Reference tissue partition coefficiant (defaults csf 1.15, gm 0.98,  wm 0.82)", type=float, default=None)
-        groups.append(group)
-
-        group = IgnorableOptionGroup(parser, "longtr mode (calibration image is a control image with a long TR)", ignore=self.ignore)
-        groups.append(group)
-
-        group = IgnorableOptionGroup(parser, "satrecov mode (calibration image is a sequnce of control images at various TIs)", ignore=self.ignore)
-        group.add_option("--tis", help="Comma separated list of inversion times, e.group. --tis 0.2,0.4,0.6")
-        group.add_option("--fa", help="Flip angle (in degrees) for Look-Locker readouts", type=float)
-        group.add_option("--lfa", help="Lower flip angle (in degrees) for dual FA calibration", type=float)
-        group.add_option("--calib-nphases", help="Number of phases (repetitions) of higher FA", type=int)
-        group.add_option("--fixa", action="store_true", default=False, help="Fix the saturation efficiency to 100% (useful if you have a low number of samples)")
-        groups.append(group)
-
-        #group = IgnorableOptionGroup(parser, "CSF masking options (only for --tissref csf)", ignore=self.ignore)
-        #group.add_option("--csfmaskingoff", action="store_true", default=False, help="Turn off the ventricle masking, reference is based on segmentation only.")
-        #group.add_option("--str2std", help="Structural to MNI152 linear registration (.mat)")
-        #group.add_option("--warp", help="Structural to MNI152 non-linear registration (warp)")
-
-        return groups
 
 def main():
     """
