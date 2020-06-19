@@ -296,8 +296,8 @@ def oxasl_preproc(wsp):
     reg.reg_asl2struc(wsp, True, False)
     reg.reg_asl2custom(wsp)
 
-    corrections.get_fieldmap_correction(wsp)
     corrections.get_cblip_correction(wsp)
+    corrections.get_fieldmap_correction(wsp)
     corrections.get_sensitivity_correction(wsp)
     corrections.apply_corrections(wsp)
 

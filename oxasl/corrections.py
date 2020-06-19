@@ -37,7 +37,7 @@ import numpy as np
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from oxasl import reg, struc
+from oxasl import reg, struc, brain
 from oxasl.options import OptionCategory, IgnorableOptionGroup
 from oxasl.reporting import LightboxImage, LineGraph
 from oxasl.wrappers import epi_reg, fnirtfileutils
@@ -168,6 +168,11 @@ def get_cblip_correction(wsp):
     wsp.topup.fieldcoef, wsp.topup.movpar = topup_result["out_fieldcoef"], topup_result["out_movpar"]
     wsp.topup.iout = topup_result["iout"]
     wsp.topup.fout = topup_result["fout"]
+
+    # Hack - put field maps in input wsp for now
+    wsp.input.fmap = Image(wsp.topup.fout.data * 2 * np.pi, header=wsp.topup.fout.header)
+    wsp.input.fmapmag = Image(np.mean(wsp.topup.iout.data, -1), header=wsp.topup.iout.header)
+    wsp.input.fmapmagbrain = brain.brain(wsp, wsp.topup.fmapmag)
 
     page = wsp.report.page("topup")
     page.heading("TOPUP distortion correction", level=0)
@@ -512,30 +517,30 @@ def apply_corrections(wsp):
             if wsp.cblip is not None:
                 wsp.corrected.cblip = correct_img(wsp, wsp.corrected.cblip, wsp.reg.calib2asl)
 
-    if wsp.topup is not None:
-        wsp.log.write(" - Adding TOPUP distortion correction\n")
-        # This can't currently be done using the FSL wrappers - we need the TOPUP output as two prefixed files
-        # Only workaround currently is to create a temp directory to store appropriately named input files
-        topup_input = tempfile.mkdtemp(prefix="topup_input")
-        try:
-            wsp.topup.fieldcoef.save("%s/topup_fieldcoef" % topup_input)
-            movpar_file = open("%s/topup_movpar.txt" % topup_input, "w")
-            for row in wsp.topup.movpar:
-                movpar_file.write("\t".join([str(val) for val in row]) + "\n")
-            movpar_file.close()
-            # TOPUP does not do the jacboian magntiude correction - so only okay if using voxelwise calibration
-            wsp.corrected.calib = fsl.applytopup(wsp.corrected.calib, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
-            wsp.corrected.cblip = fsl.applytopup(wsp.corrected.cblip, datain=wsp.topup.params, index=2, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
-            if wsp.cref:
-                wsp.corrected.cref = fsl.applytopup(wsp.corrected.cref, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
-            post_topup = fsl.applytopup(wsp.corrected.asldata, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
-            wsp.corrected.asldata = wsp.corrected.asldata.derived(post_topup.data)
-            #if wsp.calib_method != "voxel":
-            #    wsp.log.write("WARNING: Using TOPUP does not correct for magntiude using the jocbian in distortion correction")
-            #    wsp.log.write("         This is not optimal when not using voxelwise calibration\n")
-            #    wsp.log.write("         To avoid this supply structural image(s)\n")
-        finally:
-            shutil.rmtree(topup_input)
+    #if wsp.topup is not None:
+    #    wsp.log.write(" - Adding TOPUP distortion correction\n")
+    #    # This can't currently be done using the FSL wrappers - we need the TOPUP output as two prefixed files
+    #    # Only workaround currently is to create a temp directory to store appropriately named input files
+    #    topup_input = tempfile.mkdtemp(prefix="topup_input")
+    #    try:
+    #        wsp.topup.fieldcoef.save("%s/topup_fieldcoef" % topup_input)
+    #        movpar_file = open("%s/topup_movpar.txt" % topup_input, "w")
+    #        for row in wsp.topup.movpar:
+    #            movpar_file.write("\t".join([str(val) for val in row]) + "\n")
+    #        movpar_file.close()
+    #        # TOPUP does not do the jacboian magntiude correction - so only okay if using voxelwise calibration
+    #        wsp.corrected.calib = fsl.applytopup(wsp.corrected.calib, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
+    #        wsp.corrected.cblip = fsl.applytopup(wsp.corrected.cblip, datain=wsp.topup.params, index=2, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
+    #        if wsp.cref:
+    #            wsp.corrected.cref = fsl.applytopup(wsp.corrected.cref, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
+    #        post_topup = fsl.applytopup(wsp.corrected.asldata, datain=wsp.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
+    #        wsp.corrected.asldata = wsp.corrected.asldata.derived(post_topup.data)
+    #        #if wsp.calib_method != "voxel":
+    #        #    wsp.log.write("WARNING: Using TOPUP does not correct for magntiude using the jocbian in distortion correction")
+    #        #    wsp.log.write("         This is not optimal when not using voxelwise calibration\n")
+    #        #    wsp.log.write("         To avoid this supply structural image(s)\n")
+    #    finally:
+    #        shutil.rmtree(topup_input)
 
     if wsp.senscorr and wsp.corrected.calib:
         # Apply sensitivity correction to calibration image only. In principle we could
