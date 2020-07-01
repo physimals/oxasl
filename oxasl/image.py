@@ -797,6 +797,9 @@ class AslImage(Image):
         attributes, so this can be used to create a derived image with different numbers of
         repeats, etc, provided the data is consistent with this.
 
+        Note that the image space does not have to match, however in this case the 'header'
+        kwarg should be passed to create the new image header
+
         :param data: Numpy data for derived image
         :param name: Name for new image (can be simple name or full filename)
         :param suffix: If name not specified, construct by adding suffix to original image name
@@ -823,7 +826,7 @@ class AslImage(Image):
             derived_kwargs["nenc"] = self.nenc
 
         try:
-            return AslImage(image=image, name=name, header=self.header, **derived_kwargs)
+            return AslImage(image=image, name=name, header=kwargs.get("header", self.header), **derived_kwargs)
         except ValueError as exc:
             warnings.warn("AslImage.derived failed (%s) - returning fsl.data.image.Image" % str(exc))
-            return Image(image=image, name=name, header=self.header, **kwargs)
+            return Image(image=image, name=name, header=kwargs.get("header", self.header), **kwargs)

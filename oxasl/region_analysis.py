@@ -174,14 +174,13 @@ def oxasl_add_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.5):
     :param threshold: Threshold for probabilistic atlases
     """
     wsp.log.write("\nAdding ROIs from standard atlas: %s (resolution=%imm, thresholding at %.2f)\n" % (atlas_name, resolution, threshold))
-    reg.reg_struc2std(wsp, fnirt=True)
     registry = atlases.registry
     registry.rescanAtlases()
     desc = registry.getAtlasDescription(atlas_name)
     atlas = registry.loadAtlas(desc.atlasID, resolution=2)
     for label in desc.labels[:3]:
         roi_mni = atlas.get(label=label)
-        roi_native = reg.std2asl(wsp, roi_mni)
+        roi_native = reg.change_space(wsp, roi_mni, "native")
         oxasl_add_roi(wsp, rois, label.name, roi_native, threshold=50, roi_mni=roi_mni)
 
 def oxasl_perfusion_data(wsp):
@@ -232,12 +231,12 @@ def run(wsp):
     if wsp.pvwm is not None:
         wsp.structural.wm_pv_asl = wsp.pvwm
     else:
-        wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
+        wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "native")
 
     if wsp.pvwm is not None:
         wsp.structural.gm_pv_asl = wsp.pvgm
     else:
-        wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
+        wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "native")
     
     wsp.gm_thresh, wsp.wm_thresh = wsp.ifnone("gm_thresh", 0.8), wsp.ifnone("wm_thresh", 0.9)
 

@@ -176,7 +176,7 @@ def main():
         if oxasl_mp:
             parser.add_category(oxasl_mp.MultiphaseOptions())
         if oxasl_enable:
-            parser.add_category(oxasl_enable.EnableOptions(ignore=["regfrom",]))
+            parser.add_category(oxasl_enable.EnableOptions(ignore=["nativeref",]))
         if oxasl_multite:
             parser.add_category(oxasl_multite.MultiTEOptions())
         parser.add_category(region_analysis.RegionAnalysisOptions())
@@ -357,8 +357,8 @@ def model_basil(wsp):
                 wsp.structural.gm_pv_asl = wsp.pvgm
             else:
                 struc.segment(wsp)
-                wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
-                wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
+                wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv)
+                wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv)
 
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
                                       "pgm" : wsp.structural.gm_pv_asl})
@@ -391,11 +391,11 @@ def redo_reg(wsp, pwi):
     """
     Re-do ASL->structural registration using BBR and perfusion image
     """
-    wsp.reg.regfrom_orig = wsp.reg.regfrom
+    wsp.reg.nativeref_orig = wsp.reg.nativeref
     wsp.reg.regto_orig = wsp.reg.regto
-    new_regfrom = np.copy(pwi.data)
-    new_regfrom[new_regfrom < 0] = 0
-    wsp.reg.regfrom = Image(new_regfrom, header=pwi.header)
+    new_nativeref = np.copy(pwi.data)
+    new_nativeref[new_nativeref < 0] = 0
+    wsp.reg.nativeref = Image(new_nativeref, header=pwi.header)
     wsp.reg.asl2struc_initial = wsp.reg.asl2struc
     wsp.reg.struc2asl_initial = wsp.reg.struc2asl
     reg.reg_asl2struc(wsp, False, True, name="final")
@@ -505,8 +505,8 @@ def output_report(wsp, report=None):
 
     roi = wsp.rois.mask.data
     if wsp.structural.struc is not None:
-        gm = reg.struc2asl(wsp, wsp.structural.gm_pv).data
-        wm = reg.struc2asl(wsp, wsp.structural.wm_pv).data
+        gm = reg.change_space(wsp, wsp.structural.gm_pv).data
+        wm = reg.change_space(wsp, wsp.structural.wm_pv).data
 
     for oxasl_name, multiplier, calibrate, units, normal_gm, normal_wm in OUTPUT_ITEMS.values():
         name = oxasl_name + "_calib"

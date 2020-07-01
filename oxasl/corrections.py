@@ -209,7 +209,7 @@ def get_fieldmap_correction(wsp):
     # version is better tested
     if sys.platform.startswith("win"):
         import oxasl.epi_reg as pyepi
-        result = pyepi.epi_reg(wsp, epi=wsp.reg.regfrom, **epi_reg_opts)
+        result = pyepi.epi_reg(wsp, epi=wsp.reg.nativeref, **epi_reg_opts)
     else:
         result = epi_reg(epi=wsp.asldata.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, log=wsp.fsllog, **epi_reg_opts)
 
@@ -276,7 +276,7 @@ def get_sensitivity_correction(wsp):
         sensitivity = Image(wsp.calib.data.astype(np.float) / cref_data, header=wsp.calib.header)
     elif wsp.senscorr_auto and wsp.structural.bias is not None:
         wsp.log.write(" - Sensitivity image calculated from bias field\n")
-        bias = reg.struc2asl(wsp, wsp.structural.bias)
+        bias = reg.change_space(wsp, wsp.structural.bias, "native")
         sensitivity = Image(np.reciprocal(bias.data), header=bias.header)
     else:
         wsp.log.write(" - No source of sensitivity correction was found\n")
@@ -469,7 +469,8 @@ def apply_sensitivity_correction(wsp, *imgs):
         wsp.log.write(" - Applying sensitivity correction\n")
         ret = []
         for img in imgs:
-            ret.append(Image(img.data / wsp.senscorr.sensitivity.data, header=img.header))
+            sens_img = reg.change_space(wsp, wsp.senscorr.sensitivity, img)
+            ret.append(Image(img.data / sens_img.data, header=img.header))
         return tuple(ret)
     else:
         return tuple(imgs)

@@ -338,7 +338,7 @@ def get_m0_wholebrain(wsp):
     for tiss_type in ("wm", "gm", "csf"):
         pve_struc = getattr(wsp.structural, "%s_pv" % tiss_type)
         wsp.log.write(" - Transforming %s tissue PVE into ASL space\n" % tiss_type)
-        pve = reg.struc2asl(wsp, pve_struc)
+        pve = reg.change_space(wsp, pve_struc, "native")
         t1r, t2r, t2sr, pcr = tissue_defaults(tiss_type)
         if t2star:
             t2r = t2sr
@@ -480,7 +480,7 @@ def get_m0_refregion(wsp, mode="longtr"):
             wsp.calibration.refmask_trans = wsp.calibration.refmask
         else:
             wsp.log.write(" (Transforming to ASL image space)\n")
-            wsp.calibration.refmask_trans = reg.calib2asl(wsp, wsp.calibration.refmask, mask=True)
+            wsp.calibration.refmask_trans = reg.change_space(wsp, wsp.calibration.refmask, "native", mask=True)
         refmask = wsp.calibration.refmask_trans.data
     elif wsp.tissref.lower() in ("csf", "wm", "gm"):
         get_tissrefmask(wsp)
@@ -660,9 +660,8 @@ def get_tissrefmask(wsp):
         page.image("ventricles_std", LightboxImage(wsp.calibration.ventricles, bgimage=std_img))
 
         page.heading("Structural space ventricles mask", level=1)
-        reg.reg_struc2std(wsp)
         # FIXME nearest neighbour interpolation?
-        wsp.calibration.ventricles_struc = reg.std2struc(wsp, wsp.calibration.ventricles)
+        wsp.calibration.ventricles_struc = reg.change_space(wsp, wsp.calibration.ventricles, "struc")
         page.text("This is the above image transformed into structural space. The transformation was obtained by registering the structural image to the standard brain image")
         page.image("ventricles_struc", LightboxImage(wsp.calibration.ventricles_struc, bgimage=wsp.structural.brain))
 
@@ -679,7 +678,7 @@ def get_tissrefmask(wsp):
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
     # FIXME calibration image may not be in ASL space! Oxford_asl does not handle this currently
-    wsp.calibration.refpve_calib = reg.struc2asl(wsp, wsp.calibration.refpve)
+    wsp.calibration.refpve_calib = reg.change_space(wsp, wsp.calibration.refpve, "native")
     #wsp.calibration.refpve_calib.data[wsp.calibration.refpve_calib.data < 0.001] = 0 # Better for display
     page.heading("Reference region in ASL space", level=1)
     page.text("Partial volume map")

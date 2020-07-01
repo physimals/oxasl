@@ -67,10 +67,10 @@ def run(wsp):
     nvols = wsp.preproc.asldata.shape[3]
     # If available, use the calibration image as reference since this will be most consistent if the data has a range
     # of different TIs and background suppression etc. This also removes motion effects between asldata and calibration image
-    if wsp.input.regfrom is not None:
-        wsp.log.write(" - Using user-specified regfrom as reference\n")
-        ref_source = "User specified: %s" % (wsp.input.regfrom.name)
-        mcflirt_result = fsl.mcflirt(wsp.preproc.asldata, reffile=wsp.input.regfrom, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
+    if wsp.input.nativeref is not None:
+        wsp.log.write(" - Using user-specified nativeref as reference\n")
+        ref_source = "User specified: %s" % (wsp.input.nativeref.name)
+        mcflirt_result = fsl.mcflirt(wsp.preproc.asldata, reffile=wsp.input.nativeref, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         mats = [mcflirt_result[os.path.join("out.mat", "MAT_%04i" % vol)] for vol in range(nvols)]
     elif wsp.preproc.calib is not None:
         wsp.log.write(" - Using calibration image as reference\n")

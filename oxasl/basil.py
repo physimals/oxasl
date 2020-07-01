@@ -12,7 +12,7 @@ in the Workspace ``asldata`` attribute.
     wsp = Workspace()
     wsp.asldata = AslImage("asldata.nii.gz", tis=[1.6,])
     wsp.infertiss = True
-    basil(wsp, output_wsp=wsp.sub("basil"))
+    basil(wsp.sub("basil"))
     basil.finalstep.mean_ftiss.save("mean_ftiss.nii.gz")
 
 Because of the number of options possible for the modelling process, the
@@ -22,7 +22,7 @@ options relevant only to Basil:
     wsp = Workspace()
     wsp.asldata = AslImage("asldata.nii.gz", tis=[1.6,])
     wsp.basil_options = {"infertiss" : True, "spatial" : True}
-    basil(wsp, output_wsp=wsp.sub("basil"))
+    basil(wsp.sub("basil"))
     basil.finalstep.mean_ftiss.save("mean_ftiss.nii.gz")
 
 All options specified in basil_options are either consumed by Basil, or
@@ -39,22 +39,14 @@ import numpy as np
 from fsl.wrappers import LOAD
 from fsl.data.image import Image
 
-from oxasl import __version__, __timestamp__, AslImage, Workspace, image
+from oxasl import __version__, __timestamp__, AslImage, Workspace, image, reg
 from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
 
-def init(wsp):
-    wsp.basil_options = wsp.ifnone("basil_options", {})
-
-def run(wsp, name="", **kwargs):
-    basil(wsp, output_wsp=wsp.sub("basil" + name), **kwargs)
-
-def basil(wsp, output_wsp, prefit=True, space=None):
+def run(wsp, prefit=True, **kwargs):
     """
     Run BASIL modelling on ASL data in a workspace
 
     :param wsp: Workspace object
-    :param output_wsp: Optional Workspace object for storing output. If not specified
-                       will use ``wsp``
     :param prefit: If True, run a pre-fitting step using the mean over repeats of the ASL data
 
     Required workspace attributes
@@ -84,7 +76,7 @@ def basil(wsp, output_wsp, prefit=True, space=None):
      - ``onestep`` : If True, do all inference in a single step (default: False)
      - ``basil_options`` : Optional dictionary of additional options for underlying model
     """
-    wsp.log.write("\nRunning BASIL Bayesian modelling on ASL data\n")
+    wsp.log.write("\nRunning BASIL Bayesian modelling on ASL data in '%s' data space\n" % wsp.ifnone("image_space", "native"))
 
     # Single or Multi TI setup
     if wsp.asldata.ntis == 1:
@@ -127,31 +119,31 @@ def basil(wsp, output_wsp, prefit=True, space=None):
         wsp.infertau = not wsp.asldata.casl
 
     # Pick up extra BASIL options
-    extra_options = dict(wsp.ifnone("basil_options", {}))
+    wsp.basil_options = dict(wsp.ifnone("basil_options", {}))
 
     # If we only have one volume, set a nominal noise prior as it is not possible to
     # estimate from the data
     if wsp.asldata.nvols / wsp.asldata.ntc == 1:
         wsp.log.write(" - Restricting noise prior as only one ASL volume\n")
-        extra_options["prior-noise-stddev"] = 1.0
+        wsp.basil_options["prior-noise-stddev"] = 1.0
     
     if prefit and max(wsp.asldata.rpts) > 1:
         # Initial BASIL run on mean data
         wsp.log.write(" - Doing initial fit on mean at each TI\n\n")
-        init_wsp = output_wsp.sub("init")
-        main_wsp = output_wsp.sub("main")
-        basil_fit(wsp, wsp.asldata.mean_across_repeats(), mask=wsp.rois.mask, output_wsp=init_wsp, **extra_options)
-        extra_options["continue-from-mvn"] = output_wsp.init.finalstep.finalMVN
-        main_wsp.initmvn = extra_options["continue-from-mvn"]
+        init_wsp = wsp.sub("init")
+        main_wsp = wsp.sub("main")
+        basil_fit(init_wsp, wsp.asldata.mean_across_repeats(), mask=wsp.rois.mask)
+        wsp.basil_options["continue-from-mvn"] = wsp.init.finalstep.finalMVN
+        main_wsp.initmvn = wsp.basil_options["continue-from-mvn"]
     else:
-        main_wsp = output_wsp
+        main_wsp = wsp
 
     # Main run on full ASL data
     wsp.log.write("\n - Doing fit on full ASL data\n\n")
-    basil_fit(wsp, wsp.asldata, mask=wsp.rois.mask, output_wsp=main_wsp, **extra_options)
-    output_wsp.finalstep = main_wsp.finalstep
+    basil_fit(main_wsp, wsp.asldata, mask=wsp.rois.mask)
+    wsp.finalstep = main_wsp.finalstep
 
-def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
+def basil_fit(wsp, asldata, mask=None):
     """
     Run Bayesian model fitting on ASL data
 
@@ -159,22 +151,17 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
 
     :param wsp: Workspace object
     :param asldata: AslImage object to use as input data
-    :param output_wsp: Optional Workspace object for storing output files. If not specified
-                       ``wsp`` is used instead
     """
     if len(asldata.tes) > 1:
-        steps = basil_steps_multite(wsp, asldata, mask, **kwargs)
+        steps = basil_steps_multite(wsp, asldata, mask)
     else:
-        steps = basil_steps(wsp, asldata, mask, **kwargs)
-
-    if output_wsp is None:
-        output_wsp = wsp
+        steps = basil_steps(wsp, asldata, mask)
 
     prev_result = None
-    output_wsp.asldata_diff = asldata.diff().reorder("rt")
+    wsp.asldata_diff = asldata.diff().reorder("rt")
 
     for idx, step in enumerate(steps):
-        step_wsp = output_wsp.sub("step%i" % (idx+1))
+        step_wsp = wsp.sub("step%i" % (idx+1))
         desc = "Step %i of %i: %s" % (idx+1, len(steps), step.desc)
         if prev_result is not None:
             desc += " - Initialise with step %i" % idx
@@ -186,7 +173,7 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
             if key == "modelfit":
                 # Treat model fit specially - make it an AslImage and also output a mean
                 # across repeats version for comparison
-                value = output_wsp.asldata_diff.derived(value.data)
+                value = wsp.asldata_diff.derived(value.data, header=value.header)
                 modelfit_mean = value.mean_across_repeats()
                 setattr(step_wsp, "modelfit_mean", modelfit_mean)
             setattr(step_wsp, key, value)
@@ -195,10 +182,41 @@ def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
             step_wsp.set_item("logfile", step_wsp.logfile, save_fn=str)
 
         prev_result = result
-    output_wsp.finalstep = step_wsp
+    wsp.finalstep = step_wsp
     wsp.log.write("\nEnd\n")
 
-def basil_steps(wsp, asldata, mask=None, **kwargs):
+def _calc_slicedt(wsp, options):
+    """
+    Calculate the slicedt for basil given that we may be quantifying in
+    a space other than the usual ASL space
+
+    We do this by generating a slice time offset image and transforming it
+    to quantification space. Since this could be rotated wrt to the asl data
+    we may need to warn if the resulting image has significant slice time variation
+    across X or Y axes
+    """
+    img_space = wsp.ifnone("image_space", "native")
+    if img_space != "native":
+        asldata = options["data"]
+        _x, _y, z, _t = np.indices(list(asldata.data.shape[:3]) + [asldata.ntis,])
+        print(z.shape)
+        tis_arr = np.array(asldata.tis) + (z.astype(np.float32) * options["slicedt"])
+        print(tis_arr.shape)
+
+        tis_img = Image(tis_arr, header=options["data"].header)
+        wsp.tiimg = reg.change_space(wsp, tis_img, wsp.ifnone("image_space", "native"))
+        
+        #print(ztrans.data)
+        print(wsp.tiimg.data.shape)
+        del options["slicedt"]
+        ti_idx = 1
+        while "ti%i" % ti_idx in options:
+            del options["ti%i" % ti_idx]
+            ti_idx += 1
+
+        options["tiimg"] = wsp.tiimg
+
+def basil_steps(wsp, asldata, mask=None):
     """
     Get the steps required for a BASIL run
 
@@ -258,6 +276,8 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         if getattr(asldata, attr, None) is not None:
             options[attr] = getattr(asldata, attr)
 
+    _calc_slicedt(wsp, options)
+
     if wsp.noiseprior:
         # Use an informative noise prior
         if wsp.noisesd is None:
@@ -277,8 +297,8 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         wsp.log.write(" - Using a prior noise sd of: %f\n" % noisesd)
         options["prior-noise-stddev"] = noisesd
 
-    # Keyword arguments override options
-    options.update(kwargs)
+    # Add Basil-specific options defined on the workspace
+    options.update(wsp.ifnone("basil_options", {}))
 
     # Additional optional workspace arguments
     for attr in ("t1", "t1b", "bat", "FA", "mask", "pwm", "pgm", "batsd"):
@@ -305,6 +325,10 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
     # Partial volume correction
     pvcorr = "pgm" in options or "pwm" in options
     if pvcorr:
+        if not wsp.infertiss:
+            raise ValueError("ERROR: PV correction is not compatible with --artonly option (there is no tissue component)")
+
+        options["incpve"] = True
         if "pgm" not in options or "pwm" not in options:
             raise ValueError("Only one partial volume map (GM / WM) was supplied for PV correctioN")
         # Need a spatial step with more iterations for the PV correction
@@ -322,9 +346,6 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         pgm = Image(pgm, header=pgm_img.header)
         pwm = Image(pwm, header=pwm_img.header)
 
-    if pvcorr and not wsp.infertiss:
-        raise ValueError("ERROR: PV correction is not compatible with --artonly option (there is no tissue component)")
-
     # Set general parameter inference and inclusion
     if wsp.infertiss:
         options["inctiss"] = True
@@ -339,8 +360,6 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         options["inctau"] = True
     if wsp.infert1:
         options["inct1"] = True
-    if pvcorr:
-        options["incpve"] = True
 
     # Keep track of the number of spatial priors specified by name
     spriors = 1
@@ -370,7 +389,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         options["infertiss"] = True
         step_desc = "VB - %s" % components
         if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
+            steps.append(FabberStep(wsp, options, step_desc))
 
         # setup spatial priors ready
         spriors = _add_prior(options_svb, spriors, "ftiss", type=prior_type_spatial)
@@ -381,7 +400,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         options["inferart"] = True
         step_desc = "VB - %s" % components
         if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
+            steps.append(FabberStep(wsp, options, step_desc))
 
         # setup spatial priors ready
         spriors = _add_prior(options_svb, spriors, "fblood", type=prior_type_mvs)
@@ -392,7 +411,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         options["infertau"] = True
         step_desc = "VB - %s" % components
         if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
+            steps.append(FabberStep(wsp, options, step_desc))
 
     ### --- MODEL EXTENSIONS MODULE ---
     # Add variable dispersion and/or exchange parameters and/or pre-capiliary
@@ -409,7 +428,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
 
         step_desc = "VB - %s" % components
         if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
+            steps.append(FabberStep(wsp, options, step_desc))
 
     ### --- T1 MODULE ---
     if wsp.infert1:
@@ -417,7 +436,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         options["infert1"] = True
         step_desc = "VB - %s" % components
         if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
+            steps.append(FabberStep(wsp, options, step_desc))
 
     ### --- PV CORRECTION MODULE ---
     if pvcorr:
@@ -432,7 +451,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
 
         if steps:
             # Add initialisaiton step for PV correction - ONLY if we have something to init from
-            steps.append(PvcInitStep({"data" : asldata, "mask" : wsp.rois.mask, "pgm" : pgm, "pwm" : pwm}, "PVC initialisation"))
+            steps.append(PvcInitStep(wsp, {"data" : asldata, "mask" : wsp.rois.mask, "pgm" : pgm, "pwm" : pwm}, "PVC initialisation"))
 
     ### --- SPATIAL MODULE ---
     if wsp.spatial:
@@ -441,11 +460,11 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
         del options["max-trials"]
 
         if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
+            steps.append(FabberStep(wsp, options, step_desc))
 
     ### --- SINGLE-STEP OPTION ---
     if wsp.onestep:
-        steps.append(FabberStep(options, step_desc))
+        steps.append(FabberStep(wsp, options, step_desc))
 
     if not steps:
         raise ValueError("No steps were generated - no parameters were set to be inferred")
@@ -466,18 +485,15 @@ class Step(object):
     """
     A step in the Basil modelling process
     """
-    def __init__(self, options, desc, img_space=None):
+    def __init__(self, wsp, options, desc):
         self.options = dict(options)
         self.desc = desc
-        if img_space is not None:
-            # Need to convert all images to target image space
-            for key in list(options.keys()):
-                poss_img = self.options[key]
-                if isinstance(poss_img, Image):
-                    self.options[key] = self._convert_img_space(poss_img, img_space)
-
-    def _convert_img_space(self, img, space):
-        return img
+        # Need to convert all images to target image space
+        for key in list(options.keys()):
+            poss_img = self.options[key]
+            if isinstance(poss_img, Image):
+                image_space = wsp.ifnone("image_space", "native")
+                self.options[key] = reg.change_space(wsp, poss_img, image_space, mask=(key == 'mask'))
 
 class FabberStep(Step):
     """

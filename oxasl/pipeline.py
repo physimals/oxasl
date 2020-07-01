@@ -172,7 +172,7 @@ def main():
         if oxasl_mp:
             parser.add_category(oxasl_mp.MultiphaseOptions())
         if oxasl_enable:
-            parser.add_category(oxasl_enable.EnableOptions(ignore=["regfrom",]))
+            parser.add_category(oxasl_enable.EnableOptions(ignore=["nativeref",]))
         if oxasl_multite:
             parser.add_category(oxasl_multite.MultiTEOptions())
         parser.add_category(region_analysis.Options())
@@ -227,8 +227,6 @@ def oxasl(wsp):
     wsp.asldata.summary(wsp.log)
     report_asl(wsp)
 
-    basil.init(wsp)
-
     preproc.run(wsp)
     struc.run(wsp)
     moco.run(wsp)
@@ -237,21 +235,26 @@ def oxasl(wsp):
     mask.run(wsp)
     calib.run(wsp)
 
-    if oxasl_enable and wsp.use_enable:
-        oxasl_enable.init()
-        #wsp.sub("enable")
-        oxasl_enable.run(wsp)
-        #wsp.corrected.asldata = wsp.enable.asldata_enable
+    # Filtering plugins - pre-differencing
+    prefilter_run(wsp)
+    
+    # Pre-quantification plugins - the equivalent of label-control subtraction
+    prequantify_run(wsp)
 
+    # Quantification in native space
     quantify = get_quantify_method(wsp)
-    quantify.run(wsp)
+    quantify.run(wsp.sub("basil"))
+
     reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False)
-    output_run(wsp)
+    output_run(wsp.basil, wsp.sub("output"))
     pvc_run(wsp)
 
+    # Quantification in alternate spaces
     for quantify_space in ("struc", "std"):
-        quantify.run(wsp, space=quantify_space)
-
+        basil_wsp = wsp.sub("basil_%s" % quantify_space)
+        basil_wsp.image_space = quantify_space
+        quantify.run(basil_wsp)
+        output_run(basil_wsp, wsp.sub("output_%s" % quantify_space))    
 
     region_analysis.run(wsp.output)
     if wsp.pvcorr:
@@ -283,6 +286,23 @@ def report_asl(wsp):
     page.heading(img_type, level=1)
     page.image("asldata", LightboxImage(img))
 
+def prefilter_run(wsp):
+    if oxasl_enable and wsp.use_enable:
+        oxasl_enable.init()
+        #wsp.sub("enable")
+        oxasl_enable.run(wsp)
+        #wsp.corrected.asldata = wsp.enable.asldata_enable
+
+def prequantify_run(wsp):
+    if wsp.asldata.iaf in ("ve", "vediff"):
+        if oxasl_ve is None:
+            raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
+        oxasl_ve.run(wsp)
+    elif wsp.asldata.iaf == "mp":
+        if oxasl_mp is None:
+            raise ValueError("Multiphase data supplied but oxasl_mp is not installed")
+        oxasl_mp.run(wsp)
+
 def get_quantify_method(wsp):
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
         if wsp.asldata.ntes == 1:
@@ -292,16 +312,7 @@ def get_quantify_method(wsp):
         else:
             return oxasl_multite
 
-    elif wsp.asldata.iaf in ("ve", "vediff"):
-        if oxasl_ve is None:
-            raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
-        return oxasl_ve
-    else:
-        if oxasl_mp is None:
-            raise ValueError("Multiphase data supplied but oxasl_mp is not installed")
-        return oxasl_mp
-
-def output_run(wsp, name=""):
+def output_run(basil_wsp, output_wsp):
     """
     Do model fitting on TC/CT or subtracted data
 
@@ -314,9 +325,11 @@ def output_run(wsp, name=""):
      - ``output.native`` - Native (ASL) space output from last Basil modelling output
      - ``output.struc``  - Structural space output
     """
-    output_wsp = wsp.sub("output" + name)
-    output_native(output_wsp, getattr(wsp, "basil" + name))
-    output_trans(output_wsp)
+    if basil_wsp.image_space is None:
+        output_basil(output_wsp.sub("native"), basil_wsp)
+        output_trans(output_wsp)
+    else:
+        output_basil(output_wsp, basil_wsp)
 
 def pvc_run(wsp):
     # If the user has provided manual PV maps (pvgm and pvgm) then do PVEc, even if they
@@ -342,13 +355,14 @@ def pvc_run(wsp):
                 wsp.structural.wm_pv_asl = wsp.pvwm
                 wsp.structural.gm_pv_asl = wsp.pvgm
             else:
-                wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
-                wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
+                wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "native")
+                wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "native")
 
+            wsp.basil_options = wsp.ifnone("basil_options", {})
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
                                       "pgm" : wsp.structural.gm_pv_asl})
-            basil.run(wsp, name="_pvcorr", prefit=False)
-            output_run(wsp, "_pvcorr")
+            basil.run(wsp.sub("basil_pvcorr", prefit=False))
+            output_run(wsp.basil_pvcorr, wsp.sub("output_pvcorr"))
 
         if wsp.surf_pvcorr:
             if oxasl_surfpvc is None:
@@ -364,8 +378,8 @@ def pvc_run(wsp):
             new_roi = (wsp.basil_options["pwm"].data > min_pv) | (wsp.basil_options["pgm"].data > min_pv)
             wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
         
-            basil.run(wsp, name="_surf_pvcorr", prefit=False)
-            output_run(wsp, "_surf_pvcorr")
+            basil.run(wsp.sub("basil_surf_pvcorr"), prefit=False)
+            output_run(wsp.basil_surf_pvcorr, wsp.sub("output_surf_pvcorr"))
 
 def report_run(wsp):
     """
@@ -393,22 +407,21 @@ OUTPUT_ITEMS = {
     "T_exch" : ("texch", 1, False, "", "", ""),
 }
 
-def output_native(wsp, basil_wsp, report=None):
+def output_basil(wsp, basil_wsp, report=None):
     """
-    Create native space output images
+    Create output images from a Basil run
 
-    :param wsp: Workspace object. Output will be placed in a sub workspace named ``native``
+    This includes basic sanity-processing (removing negatives and NaNs) plus
+    calibration using existing M0
+
+    :param wsp: Workspace object for output
     :param basil_wsp: Workspace in which Basil modelling has been run. The ``finalstep``
                       attribute is expected to point to the final output workspace
     """
-    if not wsp.output_native: return
-
-    wsp.sub("native")
-
     # Output the differenced data averaged across repeats for kinetic curve comparison
     # with the model
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
-        wsp.native.diffdata_mean = wsp.asldata.diff().mean_across_repeats()
+        wsp.diffdata_mean = wsp.asldata.diff().mean_across_repeats()
 
     # Output model fitting results
     prefixes = ["", "mean"]
@@ -436,7 +449,8 @@ def output_native(wsp, basil_wsp, report=None):
                 data = np.copy(img.data)
                 data[~np.isfinite(data)] = 0
                 data[img.data < 0] = 0
-                data[wsp.rois.mask.data == 0] = 0
+                mask = reg.change_space(wsp, wsp.rois.mask, img)
+                data[mask.data == 0] = 0
                 img = Image(data, header=img.header)
                 name, multiplier, calibrate, _, _, _ = oxasl_output
                 if prefix and prefix != "mean":
@@ -448,18 +462,18 @@ def output_native(wsp, basil_wsp, report=None):
 
                 if is_variance:
                     img = Image(np.square(img.data), header=img.header)
-                setattr(wsp.native, name, img)
+                setattr(wsp, name, img)
 
                 if calibrate and wsp.calib is not None:
                     alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
                     img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=is_variance)
                     name = "%s_calib" % name
-                    setattr(wsp.native, name, img)
+                    setattr(wsp, name, img)
 
     if wsp.save_mask:
-        wsp.native.mask = wsp.rois.mask
+        wsp.mask = wsp.rois.mask
 
-    output_report(wsp.native, report=report)
+    output_report(wsp, report=report)
 
 def output_report(wsp, report=None):
     """
@@ -470,11 +484,7 @@ def output_report(wsp, report=None):
     if report is None:
         report = wsp.report
 
-    roi = wsp.rois.mask.data
-    if wsp.structural.struc is not None:
-        gm = reg.struc2asl(wsp, wsp.structural.gm_pv).data
-        wm = reg.struc2asl(wsp, wsp.structural.wm_pv).data
-
+    roi, gm, wm = None, None, None
     for oxasl_name, multiplier, calibrate, units, normal_gm, normal_wm in OUTPUT_ITEMS.values():
         name = oxasl_name + "_calib"
         img = getattr(wsp, name)
@@ -494,9 +504,14 @@ def output_report(wsp, report=None):
 
             page.heading("Metrics", level=1)
             data = img.data
+            if roi is None:
+                roi = reg.change_space(wsp, wsp.rois.mask, img).data
             table = []
             table.append(["Mean within mask", "%.4g %s" % (np.mean(data[roi > 0.5]), units), ""])
             if wsp.structural.struc is not None:
+                if gm is None:
+                    gm = reg.change_space(wsp, wsp.structural.gm_pv, img).data
+                    wm = reg.change_space(wsp, wsp.structural.wm_pv, img).data
                 table.append(["GM mean", "%.4g %s" % (np.mean(data[gm > 0.5]), units), normal_gm])
                 table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[gm > 0.8]), units), normal_gm])
                 table.append(["WM mean", "%.4g %s" % (np.mean(data[wm > 0.5]), units), normal_wm])
@@ -528,30 +543,24 @@ def output_trans(wsp):
     """
     Create transformed output, i.e. in structural and/or standard space
     """
+    output_spaces = []
     if wsp.output_struc and wsp.reg.asl2struc is not None:
-        wsp.log.write("\nGenerating output in structural space\n")
-        wsp.sub("struct")
-        for suffix, output, native_output in __output_trans_helper(wsp): 
-            setattr(wsp.struct, output + suffix, reg.asl2struc(wsp, native_output, mask=(output == 'mask')))
-        wsp.log.write(" - DONE\n")
-
+        output_spaces.append(("struc", "structural"))
+    
     if wsp.output_mni:
-        wsp.log.write("\nGenerating output in standard (MNI) space\n")
         if wsp.reg.struc2asl is None:
             wsp.log.write(" - WARNING: No structural registration - cannot output in standard space\n")
         else:
-            reg.reg_struc2std(wsp)
-            wsp.sub("mni")
-            for suffix, output, native_output in __output_trans_helper(wsp): 
-                setattr(wsp.struct, output + suffix, reg.asl2std(wsp, native_output, mask=(output == 'mask')))
-            wsp.log.write(" - DONE\n")
+            output_spaces.append(("std", "standard (MNI)"))
+    
+    if wsp.output_custom:
+        output_spaces.append(("custom", "user-defined custom"))
 
-    if wsp.output_custom: 
-        wsp.log.write("\nGenerating output in custom space\n")
-        wsp.sub("custom")
+    for space, name in output_spaces:
+        wsp.log.write("\nGenerating output in %s space\n" % name)
+        output_wsp = wsp.sub(space)
         for suffix, output, native_output in __output_trans_helper(wsp): 
-            if wsp.reg.asl2custom is not None:
-                setattr(wsp.custom, output + suffix, reg.asl2custom(wsp, native_output, mask=(output == 'mask')))
+            setattr(output_wsp, output + suffix, reg.change_space(wsp, native_output, space, mask=(output == 'mask')))
         wsp.log.write(" - DONE\n")
 
 def do_cleanup(wsp):
