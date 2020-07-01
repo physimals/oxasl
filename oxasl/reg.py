@@ -122,7 +122,7 @@ def reg_asl2calib(wsp):
     Note that this might already have been done as part of motion correction
     """
     init(wsp)
-    if wsp.calib is not None and wsp.reg.asl2calib is None:
+    if wsp.calib is not None and wsp.reg.asl2calib is None and not wsp.calib_aslreg:
         get_regfrom(wsp)
         wsp.log.write("Registering calibration image to ASL image\n")
         _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.regfrom, wsp.calib)
@@ -177,13 +177,23 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
     struc.init(wsp)
     if wsp.structural.struc is not None:
         get_regfrom(wsp)
-        wsp.log.write("\nRegistering ASL data to structural data\n")
-        if flirt:
-            wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.regfrom, wsp.structural.brain, wsp.reg.asl2struc)
-        if bbr:
-            wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
+        if wsp.struc2asl is not None or wsp.asl2struc is not None:
+            wsp.log.write("\nASL->Structural registration provided by user\n")
 
-        wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
+            wsp.reg.struc2asl = wsp.struc2asl
+            wsp.reg.asl2struc = wsp.asl2struc
+            if wsp.reg.asl2struc is None:
+                wsp.reg.asl2struc = np.linalg.inv(wsp.reg.struc2asl)
+            if wsp.reg.struc2asl is None:
+                wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
+        else:
+            wsp.log.write("\nRegistering ASL data to structural data\n")
+            if flirt:
+                wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.regfrom, wsp.structural.brain, wsp.reg.asl2struc)
+            if bbr:
+                wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
+
+            wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
 
         wsp.log.write(" - ASL->Structural transform\n")
         wsp.log.write(str(wsp.reg.asl2struc) + "\n")
@@ -310,7 +320,10 @@ def calib2asl(wsp, img, **kwargs):
     :return: Transformed Image object in ASL (native) space
     """
     init(wsp)
-    return transform(wsp, img, wsp.reg.calib2asl, wsp.nativeref, **kwargs)
+    if wsp.calib_aslreg:
+        return img
+    else:
+        return transform(wsp, img, wsp.reg.calib2asl, wsp.nativeref, **kwargs)
 
 def asl2calib(wsp, img, **kwargs):
     """
