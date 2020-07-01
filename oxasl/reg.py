@@ -186,6 +186,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
                 wsp.reg.asl2struc = np.linalg.inv(wsp.reg.struc2asl)
             if wsp.reg.struc2asl is None:
                 wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
+            wsp.reg.regto = asl2struc(wsp, wsp.reg.regfrom)
         else:
             wsp.log.write("\nRegistering ASL data to structural data\n")
             if flirt:
