@@ -277,7 +277,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
     options.update(kwargs)
 
     # Additional optional workspace arguments
-    for attr in ("t1", "t1b", "bat", "FA", "mask", "pwm", "pgm", "batsd"):
+    for attr in ("t1", "t1b", "bat", "FA", "pwm", "pgm", "batsd"):
         value = getattr(wsp, attr)
         if value is not None:
             options[attr] = value
@@ -514,7 +514,7 @@ def basil_steps_multite(wsp, asldata, mask=None, **kwargs):
     options.update(kwargs)
 
     # Additional optional workspace arguments
-    for attr in ("t1", "t1b", "t2", "t2b", "mask"):
+    for attr in ("t1", "t1b", "t2", "t2b"):
         value = getattr(wsp, attr)
         if value is not None:
             if attr.startswith("t2"):
