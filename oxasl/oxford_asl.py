@@ -375,7 +375,7 @@ def model_basil(wsp):
             # to mask it out
             oxasl_surfpvc.prepare_surf_pvs(wsp)
             wsp.rois.mask_pvcorr = wsp.rois.mask
-            min_pv = 0.01
+            min_pv = 0.001
             new_roi = (wsp.basil_options["pwm"].data > min_pv) | (wsp.basil_options["pgm"].data > min_pv)
             new_roi = np.logical_and(new_roi, wsp.rois.mask_pvcorr.data)
             wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
