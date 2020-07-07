@@ -7,3 +7,4 @@ oxasl.egg-info
 doc/html
 .vscode
 doc/doctrees
+rebuild.sh
