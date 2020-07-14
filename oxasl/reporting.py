@@ -45,6 +45,19 @@ except ImportError:
 
 from fsl.data.image import Image
 
+def run(wsp):
+    """
+    Generate HTML report from OXASL workspace
+    """
+    report_build_dir = None
+    if wsp.debug:
+        report_build_dir = os.path.join(wsp.savedir, "report_build")
+    wsp.log.write("\nGenerating HTML report\n")
+    report_dir = os.path.join(wsp.savedir, "report")
+    success = wsp.report.generate_html(report_dir, report_build_dir, log=wsp.log)
+    if success:
+        wsp.log.write(" - Report generated in %s\n" % report_dir)
+
 def which(program):
     """
     Simple implementation of which to search for executable

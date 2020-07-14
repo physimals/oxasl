@@ -228,6 +228,9 @@ def oxasl_perfusion_data(wsp):
 
 def run(wsp):
     """ Entry point for OXASL """
+    if not wsp.region_analysis:
+        return
+
     if wsp.pvwm is not None:
         wsp.structural.wm_pv_asl = wsp.pvwm
     else:

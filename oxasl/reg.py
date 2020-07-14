@@ -440,7 +440,7 @@ def reg_bbr(wsp):
     """
     struc.segment(wsp)
 
-    wsp.log.write("  - BBR registration using epi_reg\n")
+    wsp.log.write("  - BBR registration using epi_reg...")
     # Windows can't run epi_reg as it's a batch script. Use our experimental python
     # implementation but use the standard epi_reg on other platforms until the python
     # version is better tested
@@ -449,7 +449,7 @@ def reg_bbr(wsp):
         result = pyepi.epi_reg(wsp, wsp.reg.nativeref)
     else:
         result = epi_reg(epi=wsp.reg.nativeref, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight, log=wsp.fsllog)
-    wsp.log.write("BBR output: %s\n" % str(result))
+    wsp.log.write(" DONE\n")
     return result["out%s" % defaultExt()], result["out"]
 
     #OUTPUT

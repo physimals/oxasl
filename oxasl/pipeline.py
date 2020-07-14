@@ -89,7 +89,7 @@ try:
 except ImportError:
     oxasl_multite = None
 
-from oxasl import Workspace, __version__, image, preproc, moco, calib, struc, basil, mask, corrections, reg, region_analysis
+from oxasl import Workspace, __version__, image, preproc, moco, calib, struc, basil, mask, corrections, reg, pvc, region_analysis, output, reporting
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
 from oxasl.reporting import LightboxImage
 
@@ -136,21 +136,6 @@ class PipelineOptions(OptionCategory):
         g.add_option("--t2sb", help="Blood T2* (ms) - Petersen 2006 MRM 55(2):219-232", type=float, default=50)
         ret.append(g)
 
-        g = IgnorableOptionGroup(parser, "Output options")
-        g.add_option("--save-corrected", help="Save corrected input data", action="store_true", default=False)
-        g.add_option("--save-reg", help="Save registration information (transforms etc)", action="store_true", default=False)
-        g.add_option("--save-basil", help="Save Basil modelling output", action="store_true", default=False)
-        g.add_option("--save-calib", help="Save calibration output", action="store_true", default=False)
-        g.add_option("--save-all", help="Save all output (enabled when --debug specified)", action="store_true", default=False)
-        g.add_option("--output-stddev", "--output-std", help="Output standard deviation of estimated variables", action="store_true", default=False)
-        g.add_option("--output-var", "--vars", help="Output variance of estimated variables", action="store_true", default=False)
-        g.add_option("--output-residuals", help="Output residuals (model fit - actual data)", action="store_true", default=False)
-        g.add_option("--output-mni", help="Output in MNI standard space", action="store_true", default=False)
-        g.add_option("--output-custom", help="Output in custom space (provide path to reference image in space)", type=str)
-        g.add_option("--output-custom-mat", help="(Optional) FLIRT transformation from structural space to custom space. " +
-                        "If not provided, will FLIRT registration from structural to --output-custom will be used.", type=str)
-        g.add_option("--no-report", dest="save_report", help="Don't try to generate an HTML report", action="store_false", default=True)
-        ret.append(g)
         return ret
 
 def main():
@@ -177,11 +162,10 @@ def main():
             parser.add_category(oxasl_multite.MultiTEOptions())
         parser.add_category(region_analysis.Options())
         parser.add_category(GenericOptions())
+        parser.add_category(output.Options())
 
         options, _ = parser.parse_args()
         debug = options.debug
-        if not options.output:
-            options.output = "oxasl"
 
         # Some oxasl command-line specific defaults
         if (options.calib is not None or options.calib_first_vol) and options.calib_method is None:
@@ -243,27 +227,34 @@ def oxasl(wsp):
 
     # Quantification in native space
     quantify = get_quantify_method(wsp)
-    quantify.run(wsp.sub("basil"))
 
+    quantify.run(wsp.sub("basil"))
+    output.run(wsp.basil, wsp.sub("output"))
+
+    # Re-do registration using PWI as reference
     reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False)
-    output_run(wsp.basil, wsp.sub("output"))
-    pvc_run(wsp)
 
     # Quantification in alternate spaces
-    for quantify_space in ("struc", "std"):
-        basil_wsp = wsp.sub("basil_%s" % quantify_space)
-        basil_wsp.image_space = quantify_space
-        quantify.run(basil_wsp)
-        output_run(basil_wsp, wsp.sub("output_%s" % quantify_space))    
+    for quantify_space in ("struc", "std", "custom"):
+        if wsp.ifnone("quantify_%s" % quantify_space, False):
+            basil_wsp = wsp.sub("basil_%s" % quantify_space)
+            basil_wsp.image_space = quantify_space
+            quantify.run(basil_wsp)
+            output.run(basil_wsp, wsp.sub("output_%s" % quantify_space))    
 
+    # Do PVC run in native space
+    pvc.run(wsp)
+
+    # Region analysis
     region_analysis.run(wsp.output)
     if wsp.pvcorr:
         region_analysis.run(wsp.output_pvcorr)
 
+    # Reporting
     if wsp.save_report:
-        report_run(wsp)
+        reporting.run(wsp)
 
-    do_cleanup(wsp)
+    _cleanup(wsp)
     wsp.log.write("\nOutput is %s\n" % wsp.savedir)
     wsp.log.write("OXASL - done\n")
 
@@ -312,258 +303,7 @@ def get_quantify_method(wsp):
         else:
             return oxasl_multite
 
-def output_run(basil_wsp, output_wsp):
-    """
-    Do model fitting on TC/CT or subtracted data
-
-    Workspace attributes updated
-    ----------------------------
-
-     - ``basil``         - Contains model fitting output on data without partial volume correction
-     - ``basil_pvcorr``  - Contains model fitting output with partial volume correction if
-                           ``wsp.pvcorr`` is ``True``
-     - ``output.native`` - Native (ASL) space output from last Basil modelling output
-     - ``output.struc``  - Structural space output
-    """
-    if basil_wsp.image_space is None:
-        output_basil(output_wsp.sub("native"), basil_wsp)
-        output_trans(output_wsp)
-    else:
-        output_basil(output_wsp, basil_wsp)
-
-def pvc_run(wsp):
-    # If the user has provided manual PV maps (pvgm and pvgm) then do PVEc, even if they
-    # have not explicitly given the --pvcorr option 
-    user_pv_flag = ((wsp.pvwm is not None) and (wsp.pvgm is not None))
-    if wsp.pvcorr or wsp.surf_pvcorr or user_pv_flag:
-        # Partial volume correction is very sensitive to the mask, so recreate it
-        # if it came from the structural image as this requires accurate ASL->Struc registration
-        if wsp.rois.mask_src == "struc":
-            wsp.rois.mask_orig = wsp.rois.mask
-            wsp.rois.mask = None
-            mask.run(wsp)
-
-        if wsp.pvcorr or user_pv_flag:
-            # Do partial volume correction fitting
-            #
-            # FIXME: We could at this point re-apply all corrections derived from structural space?
-            # But would need to make sure corrections module re-transforms things like sensitivity map
-            
-            # Prepare GM and WM partial volume maps from FAST segmentation
-            if user_pv_flag:
-                wsp.log.write("\nUsing user-supplied PV estimates\n")
-                wsp.structural.wm_pv_asl = wsp.pvwm
-                wsp.structural.gm_pv_asl = wsp.pvgm
-            else:
-                wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "native")
-                wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "native")
-
-            wsp.basil_options = wsp.ifnone("basil_options", {})
-            wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
-                                      "pgm" : wsp.structural.gm_pv_asl})
-            basil.run(wsp.sub("basil_pvcorr", prefit=False))
-            output_run(wsp.basil_pvcorr, wsp.sub("output_pvcorr"))
-
-        if wsp.surf_pvcorr:
-            if oxasl_surfpvc is None:
-                raise RuntimeError("Surface-based PVC requested but oxasl_surfpvc is not installed")
-            if user_pv_flag:
-                wsp.log.write(" - WARNING: Performing surface based PVC ignores user-specified PV maps\n")
-            # Prepare GM and WM partial volume maps from surface using Toblerone plugin
-            # Then reform the ASL ROI mask - Toblerone does not handle the cerebellum so need
-            # to mask it out
-            oxasl_surfpvc.prepare_surf_pvs(wsp)
-            wsp.rois.mask_pvcorr = wsp.rois.mask
-            min_pv = 0.01
-            new_roi = (wsp.basil_options["pwm"].data > min_pv) | (wsp.basil_options["pgm"].data > min_pv)
-            wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
-        
-            basil.run(wsp.sub("basil_surf_pvcorr"), prefit=False)
-            output_run(wsp.basil_surf_pvcorr, wsp.sub("output_surf_pvcorr"))
-
-def report_run(wsp):
-    """
-    Generate HTML report
-    """
-    report_build_dir = None
-    if wsp.debug:
-        report_build_dir = os.path.join(wsp.savedir, "report_build")
-    wsp.log.write("\nGenerating HTML report\n")
-    report_dir = os.path.join(wsp.savedir, "report")
-    success = wsp.report.generate_html(report_dir, report_build_dir, log=wsp.log)
-    if success:
-        wsp.log.write(" - Report generated in %s\n" % report_dir)
-
-OUTPUT_ITEMS = {
-    "ftiss" : ("perfusion", 6000, True, "ml/100g/min", "30-50", "10-20"),
-    "fblood" : ("aCBV", 100, True, "ml/100g/min", "", ""),
-    "delttiss" : ("arrival", 1, False, "s", "", ""),
-    "fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "", "10-20"),
-    "deltwm" : ("arrival_wm", 1, False, "s", "", ""),
-    "modelfit" : ("modelfit", 1, False, "", "", ""),
-    "modelfit_mean" : ("modelfit_mean", 1, False, "", "", ""),
-    "residuals" : ("residuals", 1, False, "", "", ""),
-    "asldata_diff" : ("asldata_diff", 1, False, "", "", ""),
-    "T_exch" : ("texch", 1, False, "", "", ""),
-}
-
-def output_basil(wsp, basil_wsp, report=None):
-    """
-    Create output images from a Basil run
-
-    This includes basic sanity-processing (removing negatives and NaNs) plus
-    calibration using existing M0
-
-    :param wsp: Workspace object for output
-    :param basil_wsp: Workspace in which Basil modelling has been run. The ``finalstep``
-                      attribute is expected to point to the final output workspace
-    """
-    # Output the differenced data averaged across repeats for kinetic curve comparison
-    # with the model
-    if wsp.asldata.iaf in ("tc", "ct", "diff"):
-        wsp.diffdata_mean = wsp.asldata.diff().mean_across_repeats()
-
-    # Output model fitting results
-    prefixes = ["", "mean"]
-    if wsp.output_stddev:
-        prefixes.append("std")
-    if wsp.output_var:
-        prefixes.append("var")
-    for fabber_name, oxasl_output in OUTPUT_ITEMS.items():
-        for prefix in prefixes:
-            is_variance = prefix == "var"
-            if is_variance:
-                # Variance is not output by Fabber natively so we get it by
-                # squaring the standard deviation. We also pass the flag
-                # to the calibration routine so it can square the correction
-                # factors
-                fabber_output = "std_%s" % fabber_name
-            elif prefix:
-                fabber_output = "%s_%s" % (prefix, fabber_name)
-            else:
-                fabber_output = fabber_name
-
-            img = basil_wsp.finalstep.ifnone(fabber_output, None)
-            if img is not None:
-                # Make negative/nan values = 0 and ensure masked value zeroed
-                data = np.copy(img.data)
-                data[~np.isfinite(data)] = 0
-                data[img.data < 0] = 0
-                mask = reg.change_space(wsp, wsp.rois.mask, img)
-                data[mask.data == 0] = 0
-                img = Image(data, header=img.header)
-                name, multiplier, calibrate, _, _, _ = oxasl_output
-                if prefix and prefix != "mean":
-                    name = "%s_%s" % (name, prefix)
-
-                if calibrate:
-                    # Anything that needs calibration also requires sensitivity correction
-                    img, = corrections.apply_sensitivity_correction(wsp, img)
-
-                if is_variance:
-                    img = Image(np.square(img.data), header=img.header)
-                setattr(wsp, name, img)
-
-                if calibrate and wsp.calib is not None:
-                    alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
-                    img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=is_variance)
-                    name = "%s_calib" % name
-                    setattr(wsp, name, img)
-
-    if wsp.save_mask:
-        wsp.mask = wsp.rois.mask
-
-    output_report(wsp, report=report)
-
-def output_report(wsp, report=None):
-    """
-    Create report pages from output data
-
-    :param wsp: Workspace object containing output
-    """
-    if report is None:
-        report = wsp.report
-
-    roi, gm, wm = None, None, None
-    for oxasl_name, multiplier, calibrate, units, normal_gm, normal_wm in OUTPUT_ITEMS.values():
-        name = oxasl_name + "_calib"
-        img = getattr(wsp, name)
-        if img is None:
-            name = oxasl_name
-            img = getattr(wsp, name)
-
-        if img is not None and img.ndim == 3:
-            page = report.page(name)
-            page.heading("Output image: %s" % name)
-            if calibrate and name.endswith("_calib"):
-                alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
-                page.heading("Calibration", level=1)
-                page.text("Image was calibrated using supplied M0 image")
-                page.text("Inversion efficiency: %f" % alpha)
-                page.text("Multiplier for physical units: %f" % multiplier)
-
-            page.heading("Metrics", level=1)
-            data = img.data
-            if roi is None:
-                roi = reg.change_space(wsp, wsp.rois.mask, img).data
-            table = []
-            table.append(["Mean within mask", "%.4g %s" % (np.mean(data[roi > 0.5]), units), ""])
-            if wsp.structural.struc is not None:
-                if gm is None:
-                    gm = reg.change_space(wsp, wsp.structural.gm_pv, img).data
-                    wm = reg.change_space(wsp, wsp.structural.wm_pv, img).data
-                table.append(["GM mean", "%.4g %s" % (np.mean(data[gm > 0.5]), units), normal_gm])
-                table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[gm > 0.8]), units), normal_gm])
-                table.append(["WM mean", "%.4g %s" % (np.mean(data[wm > 0.5]), units), normal_wm])
-                table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[wm > 0.9]), units), normal_wm])
-            page.table(table, headers=["Metric", "Value", "Typical"])
-
-            page.heading("Image", level=1)
-            page.image("%s_img" % name, LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
-
-def __output_trans_helper(wsp):
-    """
-    Generator to provide all the combinations of variables for the output_
-    trans() function. Note that 4D data and upwards will be skipped. 
-    """
-
-    # We loop over these combinations of variables for each output space
-    # (structural, standard, custom)
-    suffixes = ("", "_std", "_var", "_calib", "_std_calib", "_var_calib")
-    outputs = ("perfusion", "aCBV", "arrival", "perfusion_wm", 
-        "arrival_wm", "modelfit", "modelfit_mean", "residuals", "texch", "mask")
-
-    for suff, out in itertools.product(suffixes, outputs):
-        data = getattr(wsp.native, out + suff)
-        # Don't transform 4D output (e.g. modelfit) - too large!
-        if (data is not None) and data.ndim == 3:
-            yield suff, out, data
-
-def output_trans(wsp):
-    """
-    Create transformed output, i.e. in structural and/or standard space
-    """
-    output_spaces = []
-    if wsp.output_struc and wsp.reg.asl2struc is not None:
-        output_spaces.append(("struc", "structural"))
-    
-    if wsp.output_mni:
-        if wsp.reg.struc2asl is None:
-            wsp.log.write(" - WARNING: No structural registration - cannot output in standard space\n")
-        else:
-            output_spaces.append(("std", "standard (MNI)"))
-    
-    if wsp.output_custom:
-        output_spaces.append(("custom", "user-defined custom"))
-
-    for space, name in output_spaces:
-        wsp.log.write("\nGenerating output in %s space\n" % name)
-        output_wsp = wsp.sub(space)
-        for suffix, output, native_output in __output_trans_helper(wsp): 
-            setattr(output_wsp, output + suffix, reg.change_space(wsp, native_output, space, mask=(output == 'mask')))
-        wsp.log.write(" - DONE\n")
-
-def do_cleanup(wsp):
+def _cleanup(wsp):
     """
     Remove items from the workspace that are not being output. The
     corresponding files will be deleted.

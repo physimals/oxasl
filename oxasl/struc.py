@@ -1,5 +1,5 @@
 """
-OXASL - Structural data moduleL
+OXASL - Structural data module
 
 Copyright (c) 2008-2020 Univerisity of Oxford
 """
