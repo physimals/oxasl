@@ -143,7 +143,7 @@ def get_cblip_correction(wsp):
     wsp.topup.params = my_topup_params
 
     # Run TOPUP to calculate correction
-    wsp.topup.calib_blipped = Image(np.stack((wsp.calib.data, wsp.cblip.data), axis=-1), header=wsp.calib.header)
+    wsp.topup.calib_blipped = reg.change_space(wsp, Image(np.stack((wsp.calib.data, wsp.cblip.data), axis=-1), header=wsp.calib.header), 'native')
     topup_result = fsl.topup(imain=wsp.topup.calib_blipped, datain=wsp.topup.params, config="b02b0.cnf", out=fsl.LOAD, iout=fsl.LOAD, fout=fsl.LOAD, log=wsp.fsllog)
     wsp.topup.fieldcoef, wsp.topup.movpar = topup_result["out_fieldcoef"], topup_result["out_movpar"]
     wsp.topup.iout = topup_result["iout"]
