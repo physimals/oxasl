@@ -151,10 +151,11 @@ class GenericOptions(OptionCategory):
         OptionCategory.__init__(self, "generic", **kwargs)
         self.title = title
         self.output_type = output_type
+        self.default_output = default_output
 
     def groups(self, parser):
         group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
-        group.add_option("--output", "-o", help="Output %s" % self.output_type, default=default_output)
+        group.add_option("--output", "-o", help="Output %s" % self.output_type, default=self.default_output)
         group.add_option("--overwrite", help="Overwrite output %s if it already exists" % self.output_type, action="store_true", default=False)
         group.add_option("--mask", "-m", help="Brain mask image in native ASL space", default=None, type="image")
         group.add_option("--optfile", help="File containing additional options")
