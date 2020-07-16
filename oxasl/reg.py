@@ -112,15 +112,15 @@ def get_ref_imgs(wsp):
     elif wsp.input.nativeref is not None:
         wsp.log.write(" - Registration reference image supplied by user\n")
         wsp.reg.nativeref = wsp.input.nativeref
-    elif wsp.preproc.asldata.iaf in ("tc", "ct"):
+    elif wsp.asldata.iaf in ("tc", "ct"):
         wsp.log.write(" - Registration reference is mean ASL signal (brain extracted)\n")
-        wsp.reg.nativeref = brain.brain(wsp, wsp.preproc.asldata.mean(), thresh=0.2)
-    elif wsp.preproc.calib is not None and wsp.preproc.calib.sameSpace(wsp.preproc.asldata):
+        wsp.reg.nativeref = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
+    elif wsp.preproc.calib is not None and wsp.preproc.calib.sameSpace(wsp.asldata):
         wsp.log.write(" - Registration reference is calibration image (brain extracted)\n")
         wsp.reg.nativeref = brain.brain(wsp, wsp.preproc.calib, thresh=0.2)
     else:
         wsp.log.write(" - Registration reference is mean ASL image (brain extracted)\n")
-        wsp.reg.nativeref = brain.brain(wsp, wsp.preproc.asldata.mean(), thresh=0.2)
+        wsp.reg.nativeref = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
 
     wsp.reg.calibref = wsp.input.calib
     wsp.reg.strucref = wsp.structural.struc
@@ -282,7 +282,7 @@ def get_img_space(wsp, img):
 
     if img_space is None:
         raise RuntimeError("Could not determine space for image: %s" % str(img))
-    print("%s is in space %s" % (str(img), img_space))
+    #print("%s is in space %s" % (str(img), img_space))
     return img_space
 
 def change_space(wsp, img, target_space, **kwargs):
@@ -332,7 +332,7 @@ def change_space(wsp, img, target_space, **kwargs):
     if tform is None:
         raise RuntimeError("No registration available for transform %s->%s" % (source_space, target_space))
 
-    print("Transforming %s from %s to %s" % (str(img), source_space, target_space))
+    #print("Transforming %s from %s to %s" % (str(img), source_space, target_space))
     return transform(wsp, img, tform, target_ref, **kwargs)
 
 def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None, postmat=None, mask=False, mask_thresh=0.5):
