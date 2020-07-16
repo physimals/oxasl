@@ -17,7 +17,8 @@ from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup,
 def run(wsp):
     wsp.sub("preproc")
     wsp.preproc.asldata = wsp.input.asldata
-    
+    wsp.preproc.aslspace = wsp.preproc.asldata.mean()
+
     if wsp.calib_first_vol and wsp.input.calib is None:
         wsp.input.calib = wsp.asldata.calib
 
