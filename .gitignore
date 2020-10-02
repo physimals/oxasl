@@ -8,3 +8,4 @@ doc/html
 .vscode
 doc/doctrees
 rebuild.sh
+scratch.py
