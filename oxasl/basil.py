@@ -40,7 +40,7 @@ from fsl.wrappers import LOAD
 from fsl.data.image import Image
 
 from oxasl import __version__, __timestamp__, AslImage, Workspace, image, reg
-from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
+from oxasl.options import AslOptionParser, OptionCategory, OptionGroup, GenericOptions
 
 def run(wsp, prefit=True, **kwargs):
     """
@@ -553,13 +553,13 @@ class BasilOptions(OptionCategory):
     BASIL option category
     """
 
-    def __init__(self, **kwargs):
-        OptionCategory.__init__(self, "basil", **kwargs)
+    def __init__(self):
+        OptionCategory.__init__(self, "basil")
 
     def groups(self, parser):
         groups = []
 
-        group = IgnorableOptionGroup(parser, "BASIL options", ignore=self.ignore)
+        group = OptionGroup(parser, "BASIL options")
         group.add_option("--infertau", help="Infer bolus duration", action="store_true", default=False)
         group.add_option("--inferart", help="Infer macro vascular (arterial) signal component (not supported for multi-TE data)", action="store_true", default=False)
         group.add_option("--inferpc", help="Infer pre-capillary signal component (not supported for multi-TE data)", action="store_true", default=False)
@@ -575,17 +575,17 @@ class BasilOptions(OptionCategory):
         group.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile")
         groups.append(group)
 
-        group = IgnorableOptionGroup(parser, "Model options", ignore=self.ignore)
+        group = OptionGroup(parser, "Model options")
         group.add_option("--disp", help="Model for label dispersion", default="none")
         group.add_option("--exch", help="Model for tissue exchange (residue function)", default="mix")
         groups.append(group)
 
-        group = IgnorableOptionGroup(parser, "Partial volume correction / CBF estimation (enforces --spatial)", ignore=self.ignore)
+        group = OptionGroup(parser, "Partial volume correction / CBF estimation (enforces --spatial)")
         group.add_option("--pgm", help="Gray matter PV map", type="image")
         group.add_option("--pwm", help="White matter PV map", type="image")
         groups.append(group)
 
-        group = IgnorableOptionGroup(parser, "Special options", ignore=self.ignore)
+        group = OptionGroup(parser, "Special options")
         group.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
         group.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
         groups.append(group)
