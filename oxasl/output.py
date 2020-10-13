@@ -9,8 +9,8 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from oxasl.options import OptionCategory, IgnorableOptionGroup
-from oxasl import reg, corrections, calib
+from oxasl.options import OptionCategory, OptionGroup
+from oxasl import reg, corrections, calibration
 from oxasl.reporting import LightboxImage
 
 class Options(OptionCategory):
@@ -19,12 +19,12 @@ class Options(OptionCategory):
     """
 
     def __init__(self, **kwargs):
-        OptionCategory.__init__(self, "reg", **kwargs)
+        OptionCategory.__init__(self, "output")
 
     def groups(self, parser):
         groups = []
 
-        g = IgnorableOptionGroup(parser, "Output options")
+        g = OptionGroup(parser, "Output options")
         g.add_option("--save-corrected", help="Save corrected input data", action="store_true", default=False)
         g.add_option("--save-reg", help="Save registration information (transforms etc)", action="store_true", default=False)
         g.add_option("--save-basil", help="Save Basil modelling output", action="store_true", default=False)
@@ -55,7 +55,13 @@ OUTPUT_ITEMS = {
     "T_exch" : ("texch", 1, False, "", "", ""),
 }
 
-def run(basil_wsp, output_wsp):
+def run(wsp):
+    for basildir in wsp.basildirs:
+        if basildir:
+            basildir = "_" + basildir
+        _output_basil(getattr(wsp, "basil%s" % basildir), wsp.sub("output%s" % basildir))
+
+def _output_basil(basil_wsp, output_wsp):
     """
     Do model fitting on TC/CT or subtracted data
 
@@ -69,12 +75,12 @@ def run(basil_wsp, output_wsp):
      - ``output.struc``  - Structural space output
     """
     if basil_wsp.image_space is None:
-        output_basil(output_wsp.sub("native"), basil_wsp)
-        output_trans(output_wsp)
+        _output_native(output_wsp.sub("native"), basil_wsp)
+        _output_trans(output_wsp)
     else:
-        output_basil(output_wsp, basil_wsp)
+        _output_native(output_wsp, basil_wsp)
 
-def output_basil(wsp, basil_wsp, report=None):
+def _output_native(wsp, basil_wsp, report=None):
     """
     Create output images from a Basil run
 
@@ -123,17 +129,16 @@ def output_basil(wsp, basil_wsp, report=None):
                 if prefix and prefix != "mean":
                     name = "%s_%s" % (name, prefix)
 
-                if calibrate:
-                    # Anything that needs calibration also requires sensitivity correction
-                    img, = corrections.apply_sensitivity_correction(wsp, img)
+                #if calibrate:
+                #    # Anything that needs calibration also requires sensitivity correction
+                #    img, = corrections.apply_sensitivity_correction(wsp, img)
 
                 if is_variance:
                     img = Image(np.square(img.data), header=img.header)
                 setattr(wsp, name, img)
 
                 if calibrate and wsp.calib is not None:
-                    alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
-                    img = calib.calibrate(wsp, img, multiplier=multiplier, alpha=alpha, var=is_variance)
+                    img = calibration.run(wsp, img, multiplier=multiplier, var=is_variance)
                     name = "%s_calib" % name
                     setattr(wsp, name, img)
 
@@ -206,7 +211,7 @@ def __output_trans_helper(wsp):
         if (data is not None) and data.ndim == 3:
             yield suff, out, data
 
-def output_trans(wsp):
+def _output_trans(wsp):
     """
     Create transformed output, i.e. in structural and/or standard space
     """
