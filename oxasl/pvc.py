@@ -9,6 +9,28 @@ import numpy as np
 from fsl.data.image import Image
 
 from oxasl import basil, mask, reg, output
+from oxasl.options import OptionCategory, OptionGroup
+
+class Options(OptionCategory):
+    """
+    Options for corrections of the input data
+    """
+
+    def __init__(self, **kwargs):
+        OptionCategory.__init__(self, "corrections")
+
+    def groups(self, parser):
+        ret = []
+
+        g = OptionGroup(parser, "Partial volume correction (PVEc)")
+        g.add_option("--pvcorr", help="Apply PVEc using FAST estimates taken from --fslanat dir", action="store_true", default=False)
+        g.add_option("--surf-pvcorr", help="Apply PVEc using surface PV estimates taken from --fslanat dir w/ surfaces (not mutually exclusive with --pvcorr)", action="store_true", default=False)
+        g.add_option('--cores', help="Number of processor cores to use for --surf-pvcorr", type=int)
+        g.add_option("--pvgm", help="GM PV estimates in ASL space (apply PVEc only, don't estimate PVs)", type="image", default=None)
+        g.add_option("--pvwm", help="As above, WM PV estimates in ASL space", type="image", default=None)
+        ret.append(g)
+
+        return ret
 
 def run(wsp):
     # If the user has provided manual PV maps (pvgm and pvgm) then do PVEc, even if they
@@ -41,7 +63,6 @@ def run(wsp):
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
                                       "pgm" : wsp.structural.gm_pv_asl})
             basil.run(wsp.sub("basil_pvcorr", prefit=False))
-            output.run(wsp.basil_pvcorr, wsp.sub("output_pvcorr"))
 
         if wsp.surf_pvcorr:
             if oxasl_surfpvc is None:
@@ -58,4 +79,3 @@ def run(wsp):
             wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
         
             basil.run(wsp.sub("basil_surf_pvcorr"), prefit=False)
-            output.run(wsp.basil_surf_pvcorr, wsp.sub("output_surf_pvcorr"))
