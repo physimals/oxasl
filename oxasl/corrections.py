@@ -101,15 +101,17 @@ def single_volume(wsp, img, moco=True, discard_first=True):
         if img.ndim == 4:
             if discard_first and img.shape[3] > 1:
                 wsp.log.write("   - Removing first volume to ensure data is in steady state\n")
-                img = Image(img.data[..., :-1], header=img.header)
+                img = Image(img.data[..., 1:], header=img.header)
 
-            if moco and img.shape[3] > 1:
+            # Note that image may now be 3d if we have discarded a volume
+            if moco and img.ndim == 4 and img.shape[3] > 1:
                 if moco:
                     wsp.log.write("   - Motion correcting\n")
                     img = fsl.mcflirt(img, out=fsl.LOAD, log=wsp.fsllog)["out"]
 
-            wsp.log.write("   - Taking mean across time axis\n")
-            img = Image(np.mean(img.data, axis=-1), header=img.header)
+            if img.ndim == 4:
+                wsp.log.write("   - Taking mean across time axis\n")
+                img = Image(np.mean(img.data, axis=-1), header=img.header)
 
         return img
     else:
