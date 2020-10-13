@@ -12,7 +12,7 @@ import scipy
 import fsl.wrappers as fsl
 
 from oxasl import Workspace, image
-from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
+from oxasl.options import AslOptionParser, OptionCategory, OptionGroup, GenericOptions
 
 def run(wsp):
     wsp.sub("preproc")
@@ -114,10 +114,10 @@ class AslPreprocOptions(OptionCategory):
     """
 
     def __init__(self, **kwargs):
-        OptionCategory.__init__(self, "preproc", **kwargs)
+        OptionCategory.__init__(self, "preproc")
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, "Preprocessing", ignore=self.ignore)
+        group = OptionGroup(parser, "Preprocessing")
         group.add_option("--diff", help="Perform tag-control subtraction", action="store_true", default=False)
         group.add_option("--smooth", help="Spatially smooth data", action="store_true", default=False)
         group.add_option("--fwhm", help="FWHM for spatial filter kernel", type="float", default=6)
@@ -132,7 +132,7 @@ def main():
     """
     try:
         parser = AslOptionParser(usage="asl_preproc -i <filename> [options]")
-        parser.add_category(GenericOptions(output_type="file", ignore=["mask"]))
+        parser.add_category(GenericOptions(output_type="file"))
         parser.add_category(image.AslImageOptions())
         parser.add_category(AslPreprocOptions())
 
