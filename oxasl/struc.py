@@ -12,7 +12,7 @@ import fsl.wrappers as fsl
 from fsl.data.image import Image
 from fsl.utils.path import PathError
 
-from oxasl.options import OptionCategory, IgnorableOptionGroup
+from oxasl.options import OptionCategory, OptionGroup
 from oxasl.reporting import LightboxImage
 
 class Options(OptionCategory):
@@ -20,12 +20,11 @@ class Options(OptionCategory):
     OptionGroup which contains options for describing a structural image
     """
 
-    def __init__(self, title="Structural image", **kwargs):
-        OptionCategory.__init__(self, "struc", **kwargs)
-        self.title = title
+    def __init__(self):
+        OptionCategory.__init__(self, "struc")
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
+        group = OptionGroup(parser, "Structural data")
         group.add_option("--struc", "-s", help="Structural image", type="image", default=None)
         group.add_option("--struc-brain", "--sbet", "--struc-bet", type="image", help="Structural image (brain extracted)", default=None)
         group.add_option("--struc2asl", help="Structural->ASL transformation matrix", default=None)

@@ -12,20 +12,19 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from .options import OptionCategory, IgnorableOptionGroup
+from .options import OptionCategory, OptionGroup
 
 class Options(OptionCategory):
     """
     OptionGroup which contains options for describing an ASL image
     """
 
-    def __init__(self, title="Input ASL image", fname_opt="-i", **kwargs):
-        OptionCategory.__init__(self, "image", **kwargs)
-        self.title = title
+    def __init__(self, fname_opt="-i"):
+        OptionCategory.__init__(self, "image")
         self.fname_opt = fname_opt
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
+        group = OptionGroup(parser, "ASL data")
         group.add_option("--asldata", self.fname_opt, help="ASL data file")
         group.add_option("--iaf", help="input ASl format: diff=differenced,tc=tag-control,ct=control-tag,mp=multiphase,ve=vessel-encoded,vediff=pairwise subtracted VE data")
         group.add_option("--order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, l=labelling (tag/control/phases etc). First character is fastest varying")

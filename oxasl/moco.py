@@ -20,12 +20,9 @@ from fsl.data.image import Image, defaultExt
 import fsl.wrappers as fsl
 
 from oxasl import __version__, Workspace, struc, brain, reg
-from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup, load_matrix
+from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, OptionGroup, load_matrix
 from oxasl.wrappers import epi_reg
 from oxasl.reporting import LightboxImage, LineGraph
-
-def init(wsp):
-    pass
 
 def run(wsp):
     """

@@ -85,34 +85,12 @@ class AslOptionParser(OptionParser):
             for option in group.option_list:
                 self._categories[category.name].append(option)
 
-    def filter(self, options, category, consume=True):
-        """
-        Filter options, returning only those in a specified category
-
-        :param options: Options dictionary or namespace
-        :param category: Category name
-        :param consume: If True, remove filtered options from the passed dictionary
-
-        :return: Dictionary of options that were found in the specified category
-        """
-        if not isinstance(options, dict):
-            options = vars(options)
-
-        filtered = {}
-        for option in self._categories[category]:
-            if option.dest in options:
-                filtered[option.dest] = options[option.dest]
-                if consume:
-                    options.pop(option.dest)
-        return filtered
-
 class OptionCategory(object):
     """
     A named category of options.
     """
-    def __init__(self, name, ignore=()):
+    def __init__(self, name):
         self.name = name
-        self.ignore = ignore
 
     def groups(self, parser):
         """
@@ -120,27 +98,6 @@ class OptionCategory(object):
         :return: Sequence of OptionGroup instances for this category of options
         """
         return []
-
-class IgnorableOptionGroup(OptionGroup):
-    """
-    OptionGroup with support for ignoring certain options
-    """
-    def __init__(self, *args, **kwargs):
-        """
-        Create AslOptionGroup
-
-        :param ignore: Sequence of option names/destinations to ignore
-        """
-        self._ignore = kwargs.pop("ignore", [])
-        OptionGroup.__init__(self, *args, **kwargs)
-
-    def add_option(self, *args, **kwargs):
-        """
-        Add option - overridden to skip options we have been asked to ignore
-        """
-        name = args[0]
-        if name not in self._ignore and name.lstrip("-") not in self._ignore and ("dest" not in kwargs or kwargs["dest"] not in self._ignore):
-            OptionGroup.add_option(self, *args, **kwargs)
 
 class GenericOptions(OptionCategory):
     """
@@ -154,7 +111,7 @@ class GenericOptions(OptionCategory):
         self.default_output = default_output
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
+        group = OptionGroup(parser, self.title)
         group.add_option("--output", "-o", help="Output %s" % self.output_type, default=self.default_output)
         group.add_option("--overwrite", help="Overwrite output %s if it already exists" % self.output_type, action="store_true", default=False)
         group.add_option("--mask", "-m", help="Brain mask image in native ASL space", default=None, type="image")

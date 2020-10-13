@@ -19,7 +19,7 @@ from fsl.data.image import Image
 import fsl.wrappers as fsl
 
 from oxasl import reg
-from oxasl.options import OptionCategory, IgnorableOptionGroup
+from oxasl.options import OptionCategory, OptionGroup
 
 # This is the probability threshold below which we do not 
 # consider a voxel relevant to GM/WM averages
@@ -30,12 +30,11 @@ class Options(OptionCategory):
     Options for region analysis
     """
 
-    def __init__(self, title="Region analysis", **kwargs):
-        OptionCategory.__init__(self, "struc", **kwargs)
-        self.title = title
+    def __init__(self):
+        OptionCategory.__init__(self, "region_analysis")
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
+        group = OptionGroup(parser, "Region analysis")
         group.add_option("--region-analysis", help="Perform region analysis", action="store_true", default=False)
         group.add_option("--roi-min-nvoxels", default=10, type=int,
                           help="Minimum number of relevant voxels required to report statistics")
