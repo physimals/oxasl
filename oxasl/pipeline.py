@@ -89,54 +89,41 @@ try:
 except ImportError:
     oxasl_multite = None
 
-from oxasl import Workspace, __version__, image, preproc, moco, calib, struc, basil, mask, corrections, reg, pvc, region_analysis, output, reporting
-from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, IgnorableOptionGroup
+from oxasl import *
+from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, OptionGroup
 from oxasl.reporting import LightboxImage
 
-class PipelineOptions(OptionCategory):
-    """
-    Options for the pipeline as a whole
-   
-    Note that we effectively reproduce some BASIL options here
-    """
+def add_options(parser):
+    g = OptionGroup(parser, "General Pipeline Options")
+    g.add_option("--wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
+    g.add_option("--mc", help="Motion correct data", action="store_true", default=False)
+    if oxasl_enable:
+        g.add_option("--use-enable", help="Use ENABLE preprocessing step", action="store_true", default=False)
+    parser.add_option_group(g)
 
-    def __init__(self, **kwargs):
-        OptionCategory.__init__(self, "oxasl", **kwargs)
-
-    def groups(self, parser):
-        ret = []
-        g = IgnorableOptionGroup(parser, "General Pipeline Options")
-        g.add_option("--wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
-        g.add_option("--mc", help="Motion correct data", action="store_true", default=False)
-        if oxasl_enable:
-            g.add_option("--use-enable", help="Use ENABLE preprocessing step", action="store_true", default=False)
-        ret.append(g)
-
-        g = IgnorableOptionGroup(parser, "Model fitting options")
-        g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
-        g.add_option("--batsd", help="Bolus arrival time standard deviation (s) - default 1.0 for multi-PLD, 0.1 otherwise", type=float)
-        g.add_option("--fixbolus", "--fixtau", dest="infertau", help="Fix bolus duration", action="store_false")
-        g.add_option("--art-off", "--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
-        g.add_option("--spatial-off", "--spatialoff", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
-        g.add_option("--infertexch", help="Infer exchange time (multi-TE data only)", action="store_true", default=False)
-        g.add_option("--infert1", help="Infer T1 value", action="store_true", default=False)
-        g.add_option("--infert2", help="Infer T2 value (multi-TE data only)", action="store_true", default=False)
-        g.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
-        g.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
-        g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
-        ret.append(g)
-        
-        g = IgnorableOptionGroup(parser, "Physiological parameters (all have default values from literature)")
-        g.add_option("--bat", help="Estimated bolus arrival time (s) - default=0.7 (pASL), 1.3 (cASL)", type=float)
-        g.add_option("--t1", "--t1t", help="Tissue T1 (s)", type=float, default=1.3)
-        g.add_option("--t2", "--t2t", help="Tissue T2 (ms)", type=float, default=50)
-        g.add_option("--t2s", help="Tissue T2* (ms)", type=float, default=20)
-        g.add_option("--t1b", help="Blood T1 (s)", type=float, default=1.65)
-        g.add_option("--t2b", help="Blood T2 (ms) - Lu et al. 2012 MRM 67:42-49, 3T during normoxia", type=float, default=150)
-        g.add_option("--t2sb", help="Blood T2* (ms) - Petersen 2006 MRM 55(2):219-232", type=float, default=50)
-        ret.append(g)
-
-        return ret
+    g = OptionGroup(parser, "Model fitting options")
+    g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
+    g.add_option("--batsd", help="Bolus arrival time standard deviation (s) - default 1.0 for multi-PLD, 0.1 otherwise", type=float)
+    g.add_option("--fixbolus", "--fixtau", dest="infertau", help="Fix bolus duration", action="store_false")
+    g.add_option("--art-off", "--artoff", dest="inferart", help="Do not infer arterial component", action="store_false", default=True)
+    g.add_option("--spatial-off", "--spatialoff", dest="spatial", help="Do not include adaptive spatial smoothing on CBF", action="store_false", default=True)
+    g.add_option("--infertexch", help="Infer exchange time (multi-TE data only)", action="store_true", default=False)
+    g.add_option("--infert1", help="Infer T1 value", action="store_true", default=False)
+    g.add_option("--infert2", help="Infer T2 value (multi-TE data only)", action="store_true", default=False)
+    g.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
+    g.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
+    g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
+    parser.add_option_group(g)
+    
+    g = OptionGroup(parser, "Physiological parameters (all have default values from literature)")
+    g.add_option("--bat", help="Estimated bolus arrival time (s) - default=0.7 (pASL), 1.3 (cASL)", type=float)
+    g.add_option("--t1", "--t1t", help="Tissue T1 (s)", type=float, default=1.3)
+    g.add_option("--t2", "--t2t", help="Tissue T2 (ms)", type=float, default=50)
+    g.add_option("--t2s", help="Tissue T2* (ms)", type=float, default=20)
+    g.add_option("--t1b", help="Blood T1 (s)", type=float, default=1.65)
+    g.add_option("--t2b", help="Blood T2 (ms) - Lu et al. 2012 MRM 67:42-49, 3T during normoxia", type=float, default=150)
+    g.add_option("--t2sb", help="Blood T2* (ms) - Petersen 2006 MRM 55(2):219-232", type=float, default=50)
+    parser.add_option_group(g)
 
 def main():
     """
@@ -148,16 +135,19 @@ def main():
         parser = AslOptionParser(usage="oxasl -i <asl_image> [options]", version=__version__)
         parser.add_category(image.Options())
         parser.add_category(struc.Options())
-        parser.add_category(PipelineOptions())
-        parser.add_category(calib.Options(ignore=["perf", "tis"]))
+        add_options(parser)
+        m0.add_options(parser)
         parser.add_category(reg.Options())
+        distcorr.add_options(parser)
+        parser.add_category(senscorr.Options())
+        parser.add_category(pvc.Options())
         parser.add_category(corrections.Options())
         if oxasl_ve:
             parser.add_category(oxasl_ve.VeaslOptions())
         if oxasl_mp:
             parser.add_category(oxasl_mp.MultiphaseOptions())
         if oxasl_enable:
-            parser.add_category(oxasl_enable.EnableOptions(ignore=["nativeref",]))
+            parser.add_category(oxasl_enable.EnableOptions())
         if oxasl_multite:
             parser.add_category(oxasl_multite.MultiTEOptions())
         parser.add_category(region_analysis.Options())
@@ -211,46 +201,30 @@ def oxasl(wsp):
     wsp.asldata.summary(wsp.log)
     report_asl(wsp)
 
+    # Preprocessing and preparation
     preproc.run(wsp)
     struc.run(wsp)
     moco.run(wsp)
+    corrections.run(wsp)
     reg.run(wsp)
+    distcorr.run(wsp)
+    senscorr.run(wsp)
     corrections.run(wsp)
     mask.run(wsp)
-    calib.run(wsp)
+    m0.run(wsp)
 
-    # Filtering plugins - pre-differencing
-    prefilter_run(wsp)
-    
-    # Pre-quantification plugins - the equivalent of label-control subtraction
-    prequantify_run(wsp)
-
-    # Quantification in native space
-    quantify = get_quantify_method(wsp)
-
-    quantify.run(wsp.sub("basil"))
-    output.run(wsp.basil, wsp.sub("output"))
-
-    # Re-do registration using PWI as reference
-    reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False)
-
-    # Quantification in alternate spaces
-    for quantify_space in ("struc", "std", "custom"):
-        if wsp.ifnone("quantify_%s" % quantify_space, False):
-            basil_wsp = wsp.sub("basil_%s" % quantify_space)
-            basil_wsp.image_space = quantify_space
-            quantify.run(basil_wsp)
-            output.run(basil_wsp, wsp.sub("output_%s" % quantify_space))    
-
-    # Do PVC run in native space
+    # Quantification
+    prefilter.run(wsp)
+    prequantify.run(wsp)
+    quantify.run(wsp)
     pvc.run(wsp)
+    output.run(wsp)
 
-    # Region analysis
+    # Post processing and reporting
     region_analysis.run(wsp.output)
     if wsp.pvcorr:
         region_analysis.run(wsp.output_pvcorr)
 
-    # Reporting
     if wsp.save_report:
         reporting.run(wsp)
 
@@ -276,32 +250,6 @@ def report_asl(wsp):
 
     page.heading(img_type, level=1)
     page.image("asldata", LightboxImage(img))
-
-def prefilter_run(wsp):
-    if oxasl_enable and wsp.use_enable:
-        oxasl_enable.init()
-        #wsp.sub("enable")
-        oxasl_enable.run(wsp)
-        #wsp.corrected.asldata = wsp.enable.asldata_enable
-
-def prequantify_run(wsp):
-    if wsp.asldata.iaf in ("ve", "vediff"):
-        if oxasl_ve is None:
-            raise ValueError("Vessel encoded data supplied but oxasl_ve is not installed")
-        oxasl_ve.run(wsp)
-    elif wsp.asldata.iaf == "mp":
-        if oxasl_mp is None:
-            raise ValueError("Multiphase data supplied but oxasl_mp is not installed")
-        oxasl_mp.run(wsp)
-
-def get_quantify_method(wsp):
-    if wsp.asldata.iaf in ("tc", "ct", "diff"):
-        if wsp.asldata.ntes == 1:
-            return basil
-        elif oxasl_multite is None:
-            raise ValueError("Multi-TE data supplied but oxasl_multite is not installed")
-        else:
-            return oxasl_multite
 
 def _cleanup(wsp):
     """
