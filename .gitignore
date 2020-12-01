@@ -9,3 +9,4 @@ doc/html
 doc/doctrees
 rebuild.sh
 scratch.py
+.DS_Store
