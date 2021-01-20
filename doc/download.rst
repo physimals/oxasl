@@ -24,5 +24,5 @@ You will need to download a pre-built bundle package containing the OXASL code a
 also the required updated FSL dependencies. This can be found on our GitHub
 release page:
 
-https://github.com/ibme-qubic/oxasl/releases
+https://github.com/physimals/oxasl/releases
 

@@ -182,13 +182,24 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
      - ``regto``        : ``nativeref`` image transformed to structural space
     """
     if wsp.structural.struc is not None:
-        wsp.log.write(" - Registering ASL data to structural data\n")
-        if flirt:
-            wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.nativeref, wsp.structural.brain, wsp.reg.asl2struc)
-        if bbr:
-            wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
+        if wsp.struc2asl is not None or wsp.asl2struc is not None:
+            wsp.log.write("\nASL->Structural registration provided by user\n")
 
-        wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
+            wsp.reg.struc2asl = wsp.struc2asl
+            wsp.reg.asl2struc = wsp.asl2struc
+            if wsp.reg.asl2struc is None:
+                wsp.reg.asl2struc = np.linalg.inv(wsp.reg.struc2asl)
+            if wsp.reg.struc2asl is None:
+                wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
+            wsp.reg.regto = asl2struc(wsp, wsp.reg.nativeref)
+        else:
+            wsp.log.write("\nRegistering ASL data to structural data\n")
+            if flirt:
+                wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.nativeref, wsp.structural.brain, wsp.reg.asl2struc)
+            if bbr:
+                wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
+
+            wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
 
         wsp.log.write(" - ASL->Structural transform\n")
         wsp.log.write(str(wsp.reg.asl2struc) + "\n")

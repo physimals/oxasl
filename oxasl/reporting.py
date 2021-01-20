@@ -224,8 +224,7 @@ class ReportPage(object):
     Simple helper class for creating documents containing ReStructuredText
     """
 
-    def __init__(self, name, report, **kwargs):
-        self._name = name
+    def __init__(self, report, **kwargs):
         self._report = report
         self._content = ""
         self._heading_chars = "=-~+"
@@ -276,11 +275,13 @@ class ReportPage(object):
         self._content += txt + "\n"
         self._content += self._heading_chars[level] * len(txt) + "\n\n"
 
-    def table(self, tabdata, name="", headers=None):
+    def table(self, tabdata, name="", headers=None, align=None):
         """
         Add a table
         """
         self._content += ".. csv-table:: " + name + "\n"
+        if align:
+            self._content += "    :align: " + align + "\n"
         if headers:
             self._content += "    :header: " + ",".join(['"%s"' % h for h in headers]) + "\n"
         self._content += "\n"
@@ -332,43 +333,58 @@ class ReportPage(object):
     def __str__(self):
         return self._content
 
-class Report(object):
+class Report(ReportPage):
     """
     A report consisting of .rst documents and associated images
     which can be turned into a document (HTML, PDF etc)
     """
 
-    def __init__(self, title="OXASL processing report"):
+    def __init__(self, title="OXASL processing report", **kwargs):
+        ReportPage.__init__(self, self)
         self._contents = []
         self._files = {}
         self._start_time = datetime.datetime.now()
         self._end_time = None
+        self._include_timings = kwargs.get("include_timings", True)
+        self._include_toc = kwargs.get("include_toc", True)
         self.title = title
         self.extension = ""
 
-    def generate_html(self, dest_dir, build_dir=None, log=sys.stdout):
-        """
-        Generate an HTML report
-        """
+    def _build_src(self, build_dir=None, log=sys.stdout):
         self._end_time = datetime.datetime.now()
 
-        if build_dir:
-            if os.path.exists(build_dir):
-                if not os.path.isdir(build_dir):
-                    raise ValueError("Report build directory %s exists but is not a directory" % build_dir)
-                else:
-                    warnings.warn("Report build directory %s already exists" % build_dir)
-            is_temp = False
-        else:
-            build_dir = tempfile.mkdtemp("_report")
-            is_temp = True
-
         try:
+            if build_dir:
+                if os.path.exists(build_dir):
+                    if not os.path.isdir(build_dir):
+                        raise ValueError("Report build directory %s exists but is not a directory" % build_dir)
+                    else:
+                        warnings.warn("Report build directory %s already exists" % build_dir)
+            else:
+                build_dir = tempfile.mkdtemp("_report")
+
             self.tofile(build_dir)
 
             with open(os.path.join(build_dir, "conf.py"), "w") as conffile:
                 conffile.write(REPORT_CONF)
+        except:
+            if build_dir is not None: 
+                shutil.rmtree(build_dir)
+            raise
 
+        return build_dir
+
+    def generate_html(self, *args, **kwargs):
+        kwargs["doctype"] = "html"
+        self.generate(*args, **kwargs)
+
+    def generate(self, dest_dir, build_dir=None, log=sys.stdout, keep_build_dir=False, doctype="html", ):
+        """
+        Generate an output report
+        """
+        build_dir = self._build_src(build_dir, log)
+
+        try:
             if os.path.exists(dest_dir):
                 if not os.path.isdir(dest_dir):
                     raise ValueError("Report destination directory %s exists but is not a directory" % dest_dir)
@@ -377,32 +393,32 @@ class Report(object):
                     shutil.rmtree(dest_dir)
             os.makedirs(dest_dir)
 
-            try:
-                # Different sphinx version have different main API.
-                # We try the executable first currently to work around a bug in pyside2
-                args = [which('sphinx-build'), '-b', 'html', build_dir, dest_dir]
-                if args[0] is not None:
-                    import subprocess
-                    result = subprocess.call(args)
+            # Different sphinx version have different main API.
+            # We try the executable first currently to work around a bug in pyside2
+            args = [which('sphinx-build'), '-b', doctype, build_dir, dest_dir]
+            if args[0] is not None:
+                import subprocess
+                result = subprocess.call(args)
+            else:
+                import sphinx
+                if hasattr(sphinx, "main"):
+                    result = sphinx.main(args)
                 else:
-                    import sphinx
-                    if hasattr(sphinx, "main"):
-                        result = sphinx.main(args)
-                    else:
-                        import sphinx.cmd.build
-                        result = sphinx.cmd.build.main(args[1:])
-            except (AttributeError, ImportError, OSError):
-                log.write("WARNING: sphinx not found, HTML report will not be generated\n")
-                return False
-            except Exception as exc:
-                log.write("WARNING: sphinx failed, HTML report will not be generated\n")
-                log.write("Message: %s\n" % str(exc))
-                return False
-
-            return True
+                    import sphinx.cmd.build
+                    result = sphinx.cmd.build.main(args[1:])
+        except (AttributeError, ImportError, OSError):
+            log.write("WARNING: sphinx not found, HTML report will not be generated\n")
+            return False
+        except Exception as exc:
+            log.write("WARNING: sphinx failed, HTML report will not be generated\n")
+            log.write("Message: %s\n" % str(exc))
+            return False
         finally:
-            if is_temp:
+            if not keep_build_dir:
                 shutil.rmtree(build_dir)
+
+        return True
+
 
     def tofile(self, build_dir):
         """
@@ -413,11 +429,14 @@ class Report(object):
         if not os.path.exists(build_dir):
             os.makedirs(build_dir)
 
-        with open(os.path.join(build_dir, "index.rst"), "w") as indexfile:
-            indexfile.write(self.title + "\n")
-            indexfile.write("=" * len(self.title) + "\n\n")
-            self._timings(indexfile)
-            self._toc(indexfile)
+        with open(os.path.join(build_dir, "index.rst"), "wb") as indexfile:
+            indexfile.write(self._encode(self.title + "\n"))
+            indexfile.write(self._encode("=" * len(self.title) + "\n\n"))
+            if self._include_timings:
+                self._timings(indexfile)
+            if self._include_toc:
+                self._toc(indexfile)
+            indexfile.write(self._encode(self._content))
 
         for fname, content in self._files.items():
             try:
@@ -435,7 +454,7 @@ class Report(object):
         :param overwrite: If True, and page already exists with the same ``name``,
                           replace content. Otherwise an exception is thrown.
         """
-        page = ReportPage(name, report=self, **kwargs)
+        page = ReportPage(self, **kwargs)
         self.add(name, page, overwrite)
         return page
 
@@ -466,16 +485,19 @@ class Report(object):
 
     def _timings(self, indexfile):
         if self._start_time:
-            indexfile.write("Start time: %s\n\n" % self._start_time.strftime("%Y-%m-%d %H:%M:%S"))
+            indexfile.write(self._encode("Start time: %s\n\n" % self._start_time.strftime("%Y-%m-%d %H:%M:%S")))
         if self._end_time:
-            indexfile.write("End time: %s\n\n" % self._end_time.strftime("%Y-%m-%d %H:%M:%S"))
+            indexfile.write(self._encode("End time: %s\n\n" % self._end_time.strftime("%Y-%m-%d %H:%M:%S")))
 
     def _toc(self, indexfile):
-        indexfile.write(".. toctree::\n")
-        indexfile.write("  :maxdepth: 1\n")
-        indexfile.write("  :caption: Contents:\n\n")
+        indexfile.write(self._encode(".. toctree::\n"))
+        indexfile.write(self._encode("  :maxdepth: 1\n"))
+        indexfile.write(self._encode("  :caption: Contents:\n\n"))
         for rst_file in self._contents:
-            indexfile.write("  %s\n" % rst_file)
+            indexfile.write(self._encode("  %s\n" % rst_file))
+
+    def _encode(self, text):
+        return text.encode("utf-8")
 
 REPORT_CONF = """
 # This file is execfile()d with the current directory set to its
@@ -516,9 +538,12 @@ latex_elements = {
 }
 
 latex_documents = [
-    (master_doc, 'oxasl.tex', u'oxasl Documentation',
+    (master_doc, 'oxasl.tex', u'oxasl reporting',
      u'oxasl', 'manual'),
 ]
+
+extensions = ['rst2pdf.pdfbuilder']
+pdf_documents = [(master_doc, u'rst2pdf', u'oxasl reporting', u'oxasl'),]
 """
 
 def main():
