@@ -129,7 +129,9 @@ def reg_asl2calib(wsp):
 
     Note that this might already have been done as part of motion correction
     """
-    if wsp.moco is not None and wsp.moco.asl2calib is not None:
+    if wsp.calib_aslreg:
+        wsp.log.write(" - Calibration image already registered to ASL image\n")
+    elif wsp.moco is not None and wsp.moco.asl2calib is not None:
         wsp.log.write(" - Calibration image registered to ASL image as part of motion correction\n")
         wsp.reg.asl2calib = wsp.moco.asl2calib
         wsp.reg.calib2asl = wsp.moco.calib2asl
@@ -278,6 +280,12 @@ def get_img_space(wsp, img):
     """
     Find out what image space an image is in
     
+    Note that this only compares the voxel->world transformation matrix to the
+    reference image for each space. It is quite possible for two images to be in
+    the same space but not be registered to one another. In this case, 
+    the returned space may not be accurate when determining whether a registration
+    is required.
+
     :param wsp: Workspace object
     :param img: Image
     :return: Name of image space for ``img``, e.g. ``native``, ``struc``
@@ -293,16 +301,22 @@ def get_img_space(wsp, img):
         raise RuntimeError("Could not determine space for image: %s" % str(img))
     return img_space
 
-def change_space(wsp, img, target_space, **kwargs):
+def change_space(wsp, img, target_space, source_space=None, **kwargs):
     """
     Convert an image to a different space
     
+    Note that while the source space can be determined from the image, this may
+    not be correct if images (e.g. ASL and calibration) share the same voxel->world
+    transformation but still need registration to one another
+
     :param wsp: Workspace object
     :param img: Image
     :param target_space: Either an Image in the target space, or the name of the target space
+    :param src_space: If specified, explicit indication of source image space
     """
-    source_space = get_img_space(wsp, img)
-    
+    # Source and target space can be specified directly or determined from image
+    if source_space is None:
+        source_space = get_img_space(wsp, img)
     if isinstance(target_space, Image):
         target_space = get_img_space(wsp, target_space)
 
