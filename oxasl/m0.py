@@ -406,7 +406,7 @@ def get_m0_refregion(wsp, mode="longtr"):
             wsp.calibration.refmask_trans = wsp.calibration.refmask
         else:
             wsp.log.write(" (Transforming to ASL image space)\n")
-            wsp.calibration.refmask_trans = reg.change_space(wsp, wsp.calibration.refmask, "native", mask=True)
+            wsp.calibration.refmask_trans = reg.change_space(wsp, wsp.calibration.refmask, "native", source_space="calib", mask=True)
         refmask = wsp.calibration.refmask_trans.data
     elif wsp.tissref.lower() in ("csf", "wm", "gm"):
         get_tissrefmask(wsp)
