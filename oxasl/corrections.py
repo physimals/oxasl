@@ -127,7 +127,7 @@ def run(wsp):
 
     if wsp.preproc.calib is not None:
         # Apply corrections to calibration images if we have calib2asl registration or any other correction
-        if (not warps and moco_mats is None) or wsp.reg is None:
+        if not warps and moco_mats is None and wsp.reg is None:
             wsp.log.write(" - No corrections to apply to calibration data\n")
             wsp.corrected.calib = wsp.preproc.calib
             if wsp.cref is not None:
