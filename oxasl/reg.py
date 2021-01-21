@@ -206,6 +206,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
         wsp.log.write(" - Structural->ASL transform\n")
         wsp.log.write(str(wsp.reg.struc2asl) + "\n")
 
+        name = "final" if bbr else "initial"
         page = wsp.report.page("asl2struc_%s" % name)
         page.heading("%s ASL -> Structural registration" % name.title(), level=0)
         page.heading("Transformation parameters", level=1)
@@ -290,7 +291,6 @@ def get_img_space(wsp, img):
 
     if img_space is None:
         raise RuntimeError("Could not determine space for image: %s" % str(img))
-    #print("%s is in space %s" % (str(img), img_space))
     return img_space
 
 def change_space(wsp, img, target_space, **kwargs):
@@ -340,7 +340,6 @@ def change_space(wsp, img, target_space, **kwargs):
     if tform is None:
         raise RuntimeError("No registration available for transform %s->%s" % (source_space, target_space))
 
-    #print("Transforming %s from %s to %s" % (str(img), source_space, target_space))
     return transform(wsp, img, tform, target_ref, **kwargs)
 
 def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", paddingsize=1, premat=None, postmat=None, mask=False, mask_thresh=0.5):
