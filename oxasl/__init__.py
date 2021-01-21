@@ -90,7 +90,7 @@ Current ASL processing modules
  - :mod:`calib` - Calibration of perfusion data using voxelwise or reference region methods
  - :mod:`corrections` - Calculate and apply corrections (motion, distortion)
  - :mod:`mask` - Calculation of a suitable mask for brain data
- - :mod:`oxford_asl` - Unified processing pipeline for ASL brain data
+ - :mod:`pipeline` - Unified processing pipeline for ASL brain data
  - :mod:`preproc` - Basic ASL preprocessing (label-control subtraction, etc)
  - :mod:`reg` - Registration between ASL, structural and standard spaces
  - :mod:`region_analysis` - Summary stats within ROIs
