@@ -126,7 +126,15 @@ def get_m0_voxelwise(wsp):
     wsp.log.write(" - Calibration gain: %f\n" % gain)
 
     # Calculate M0 value
-    m0 = np.copy(wsp.calib.data).astype(np.float) * gain
+    wsp.calibration.calib_img = wsp.corrected.calib
+    if wsp.calib_aslreg:
+        wsp.log.write(" - Calibration image aligned to ASL image already\n")
+        wsp.calibration.calib_img_trans = wsp.calibration.calib_img
+    else:
+        wsp.log.write(" - Transforming calibration image to ASL space)\n")
+        wsp.calibration.calib_img_trans = reg.change_space(wsp, wsp.calibration.calib_img, "native")
+    calib_data = wsp.calibration.calib_img_trans.data
+    m0 = calib_data.astype(np.float) * gain
 
     shorttr = 1
     if wsp.tr is not None and wsp.tr < 5:
@@ -149,7 +157,7 @@ def get_m0_voxelwise(wsp):
         wsp.log.write(" - Masking M0 image")
         m0[wsp.rois.mask.data == 0] = 0
 
-    m0img = Image(m0, header=wsp.calib.header)
+    m0img = Image(m0, header=wsp.calibration.calib_img_trans.header)
     wsp.log.write(" - Mean M0: %f\n" % np.mean(m0))
 
     # Reporting
@@ -253,11 +261,14 @@ def get_m0_wholebrain(wsp):
         t2b = wsp.ifnone("t2b", 150)
 
     # Check the data and masks
-    calib_data = np.copy(wsp.calib.data)
-    if wsp.rois is not None and wsp.rois.mask is not None:
-        brain_mask = wsp.rois.mask.data
+    wsp.calibration.calib_img = wsp.corrected.calib
+    if wsp.calib_aslreg:
+        wsp.log.write(" - Calibration image aligned to ASL image already\n")
+        wsp.calibration.calib_img_trans = wsp.calibration.calib_img
     else:
-        brain_mask = np.ones(wsp.calib.shape[:3])
+        wsp.log.write(" - Transforming calibration image to ASL space)\n")
+        wsp.calibration.calib_img_trans = reg.change_space(wsp, wsp.calibration.calib_img, "native")
+    calib_data = wsp.calibration.calib_img_trans.data
 
     ### Sensitivity image calculation (if we have a sensitivity image)
     if wsp.sens:
@@ -278,7 +289,7 @@ def get_m0_wholebrain(wsp):
         tiss_m0 = calib_data * t1_corr * t2_corr / pcr
         wsp.log.write(" - Mean %s M0: %f (weighted by PV)\n" % (tiss_type, np.average(tiss_m0, weights=pve.data)))
         tiss_m0 *= pve.data
-        setattr(wsp.calibration, "m0_img_%s" % tiss_type, Image(tiss_m0, header=wsp.calib.header))
+        setattr(wsp.calibration, "m0_img_%s" % tiss_type, Image(tiss_m0, header=wsp.calibration.calib_img_trans.header))
         m0 += tiss_m0
 
     m0 = m0 * math.exp(- te / t2b)
@@ -287,7 +298,7 @@ def get_m0_wholebrain(wsp):
     if gain != 1:
         m0 = m0 * gain
 
-    wsp.calibration.m0_img = Image(m0, header=wsp.calib.header)
+    wsp.calibration.m0_img = Image(m0, header=wsp.calibration.calib_img_trans.header)
     m0 = np.mean(m0[brain_mask != 0])
     wsp.log.write(" - M0 of brain: %f\n" % m0)
 
@@ -391,13 +402,19 @@ def get_m0_refregion(wsp, mode="longtr"):
     wsp.log.write(" - T1r: %f; T2r: %f; T2b: %f; Part co-eff: %f\n" % (t1r, t2r, t2b, pcr))
 
     # Check the data and masks
-    calib_data = np.copy(wsp.calib.data).astype(np.float)
-    wsp.calibration.calib_img = wsp.calib
+    wsp.calibration.calib_img = wsp.corrected.calib
+    if wsp.calib_aslreg:
+        wsp.log.write(" - Calibration image aligned to ASL image already\n")
+        wsp.calibration.calib_img_trans = wsp.calibration.calib_img
+    else:
+        wsp.log.write(" - Transforming calibration image to ASL space)\n")
+        wsp.calibration.calib_img_trans = reg.change_space(wsp, wsp.calibration.calib_img, "native")
+    calib_data = wsp.calibration.calib_img_trans.data
 
     if wsp.rois is not None and wsp.rois.mask is not None:
         brain_mask = wsp.rois.mask.data
     else:
-        brain_mask = np.ones(wsp.calib.shape[:3])
+        brain_mask = np.ones(wsp.calibration.calib_img_trans.shape[:3])
 
     if wsp.refmask is not None:
         wsp.log.write(" - Using supplied reference tissue mask: %s" % wsp.refmask.name)
@@ -458,7 +475,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         # NB only do the fit in the CSF mask
         # FIXME this is not functional at the moment
         options = {
-            "data" : wsp.calib,
+            "data" : calib_data,
             "mask" : refmask,
             "method" : "vb",
             "noise" : "white",
@@ -552,7 +569,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         ["M0", m0],
     ])
     page.heading("Reference tissue mask", level=1)
-    page.image("refmask", LightboxImage(wsp.calibration.refmask, bgimage=wsp.calib))
+    page.image("refmask", LightboxImage(wsp.calibration.refmask, bgimage=wsp.calibration.calib_img_trans))
 
     return float(m0)
 
@@ -607,14 +624,14 @@ def get_tissrefmask(wsp):
     #wsp.calibration.refpve_calib.data[wsp.calibration.refpve_calib.data < 0.001] = 0 # Better for display
     page.heading("Reference region in ASL space", level=1)
     page.text("Partial volume map")
-    page.image("refpve_calib", LightboxImage(wsp.calibration.refpve_calib, bgimage=wsp.calib))
+    page.image("refpve_calib", LightboxImage(wsp.calibration.refpve_calib, bgimage=wsp.calibration.calib_img_trans))
 
     # Threshold reference mask conservatively to select only reference tissue
     wsp.log.write(" - Thresholding reference mask\n")
     wsp.calibration.refmask = Image((wsp.calibration.refpve_calib.data > 0.9).astype(np.int), header=wsp.calibration.refpve_calib.header)
 
     page.text("Reference Mask (thresholded at 0.9")
-    page.image("refmask", LightboxImage(wsp.calibration.refmask, bgimage=wsp.calib))
+    page.image("refmask", LightboxImage(wsp.calibration.refmask, bgimage=wsp.calibration.calib_img_trans))
 
 TISS_DEFAULTS = {
     "csf" : [4.3, 750, 400, 1.15],
