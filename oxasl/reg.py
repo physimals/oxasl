@@ -129,7 +129,7 @@ def reg_asl2calib(wsp):
 
     Note that this might already have been done as part of motion correction
     """
-    if wsp.moco.asl2calib is not None:
+    if wsp.moco is not None and wsp.moco.asl2calib is not None:
         wsp.log.write(" - Calibration image registered to ASL image as part of motion correction\n")
         wsp.reg.asl2calib = wsp.moco.asl2calib
         wsp.reg.calib2asl = wsp.moco.calib2asl

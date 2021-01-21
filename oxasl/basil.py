@@ -460,11 +460,11 @@ def basil_steps(wsp, asldata, mask=None):
         del options["max-trials"]
 
         if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
+            steps.append(FabberStep(wsp, options, step_desc))
 
     ### --- SINGLE-STEP OPTION ---
     if wsp.onestep:
-        steps.append(FabberStep(options, step_desc))
+        steps.append(FabberStep(wsp, options, step_desc))
 
     if not steps:
         raise ValueError("No steps were generated - no parameters were set to be inferred")
@@ -612,7 +612,7 @@ def basil_steps_multite(wsp, asldata, mask=None, **kwargs):
 
         step_desc = "VB - %s" % components
         if not wsp.onestep:
-            steps.append(FabberStep(options, step_desc))
+            steps.append(FabberStep(wsp, options, step_desc))
 
         # Setup spatial priors ready
         spriors = _add_prior(options_svb, spriors, "ftiss", type=prior_type_spatial)

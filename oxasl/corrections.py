@@ -118,6 +118,7 @@ def run(wsp):
 
     if not warps and moco_mats is None:
         wsp.log.write(" - No corrections to apply to ASL data\n")
+        wsp.corrected.asldata = wsp.preproc.asldata
     else:
         # Apply all corrections to ASL data - note that we make sure the output keeps all the ASL metadata
         wsp.log.write(" - Applying corrections to ASL data\n")
@@ -128,6 +129,11 @@ def run(wsp):
         # Apply corrections to calibration images if we have calib2asl registration or any other correction
         if (not warps and moco_mats is None) or wsp.reg is None:
             wsp.log.write(" - No corrections to apply to calibration data\n")
+            wsp.corrected.calib = wsp.preproc.calib
+            if wsp.cref is not None:
+                wsp.corrected.cref = wsp.preproc.cref
+            if wsp.cblip is not None:
+                wsp.corrected.cblip = wsp.preproc.cblip
         else:
             wsp.log.write(" - Applying corrections to calibration data\n")
             wsp.corrected.calib = correct_img(wsp, wsp.preproc.calib, wsp.reg.calib2asl)
@@ -148,13 +154,16 @@ def run(wsp):
             for row in wsp.distcorr.topup.movpar:
                 movpar_file.write("\t".join([str(val) for val in row]) + "\n")
             movpar_file.close()
-            # TOPUP does not do the jacboian magntiude correction - so only okay if using voxelwise calibration
+            # TOPUP does not do the jacobian magntiude correction - so only okay if using voxelwise calibration
             wsp.corrected.calib = fsl.applytopup(wsp.corrected.calib, datain=wsp.distcorr.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
-            wsp.corrected.cblip = fsl.applytopup(wsp.corrected.cblip, datain=wsp.distcorr.topup.params, index=2, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
-            if wsp.cref:
+            if wsp.cref is not None:
                 wsp.corrected.cref = fsl.applytopup(wsp.corrected.cref, datain=wsp.distcorr.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
+            if wsp.cblip is not None:
+                wsp.corrected.cblip = fsl.applytopup(wsp.corrected.cblip, datain=wsp.distcorr.topup.params, index=2, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
             post_topup = fsl.applytopup(wsp.corrected.asldata, datain=wsp.distcorr.topup.params, index=1, topup="%s/topup" % topup_input, out=fsl.LOAD, method="jac", log=wsp.fsllog)["out"]
             wsp.corrected.asldata = wsp.corrected.asldata.derived(post_topup.data)
+            # FIXME warning below
+            # FIXME do we need to correct anything else in ASL or calibration space, e.g. mask, reference region mask
             #if wsp.calib_method != "voxel":
             #    wsp.log.write("WARNING: Using TOPUP does not correct for magntiude using the jocbian in distortion correction")
             #    wsp.log.write("         This is not optimal when not using voxelwise calibration\n")
