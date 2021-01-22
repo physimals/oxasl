@@ -63,6 +63,7 @@ def run(wsp):
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
                                       "pgm" : wsp.structural.gm_pv_asl})
             basil.run(wsp.sub("basil_pvcorr", prefit=False))
+            wsp.basildirs.append("pvcorr")
 
         if wsp.surf_pvcorr:
             if oxasl_surfpvc is None:
@@ -79,3 +80,4 @@ def run(wsp):
             wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
         
             basil.run(wsp.sub("basil_surf_pvcorr"), prefit=False)
+            wsp.basildirs.append("surf_pvcorr")
