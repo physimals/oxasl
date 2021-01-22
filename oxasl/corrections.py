@@ -458,10 +458,14 @@ def apply_corrections(wsp):
 
     wsp.corrected.asldata = wsp.input.asldata
     wsp.corrected.nativeref = wsp.input.asldata.mean()
-    wsp.corrected.calib = single_volume(wsp, wsp.input.calib)
-    wsp.corrected.cref = single_volume(wsp, wsp.input.cref)
-    wsp.corrected.cact = single_volume(wsp, wsp.input.cact)
-    wsp.corrected.cblip = single_volume(wsp, wsp.input.cblip)
+    wsp.corrected.calib_preproc = single_volume(wsp, wsp.input.calib)
+    wsp.corrected.cref_preproc = single_volume(wsp, wsp.input.cref)
+    wsp.corrected.cact_preproc = single_volume(wsp, wsp.input.cact)
+    wsp.corrected.cblip_preproc = single_volume(wsp, wsp.input.cblip)
+    wsp.corrected.calib = wsp.corrected.calib_preproc
+    wsp.corrected.cref = wsp.corrected.cref_preproc
+    wsp.corrected.cact = wsp.corrected.cact_preproc
+    wsp.corrected.cblip = wsp.corrected.cblip_preproc
 
     wsp.log.write(" - Data transformations\n")
     if wsp.moco is not None:

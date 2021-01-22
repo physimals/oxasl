@@ -125,8 +125,14 @@ def reg_asl2calib(wsp):
     if wsp.calib is not None and wsp.reg.asl2calib is None and not wsp.calib_aslreg:
         get_regfrom(wsp)
         wsp.log.write("Registering calibration image to ASL image\n")
-        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.regfrom, wsp.calib)
+        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.regfrom, wsp.corrected.calib_preproc)
         wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
+
+    if wsp.reg.asl2calib is not None:
+        wsp.log.write(" - ASL->Calibration transform\n")
+        wsp.log.write(str(wsp.reg.asl2calib) + "\n")
+        wsp.log.write(" - Calibration->ASL transform\n")
+        wsp.log.write(str(wsp.reg.calib2asl) + "\n")
 
 def reg_asl2custom(wsp):
     """
