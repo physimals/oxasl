@@ -58,10 +58,14 @@ OUTPUT_ITEMS = {
 def run(wsp):
     for basildir in wsp.basildirs:
         if basildir:
-            basildir = "_" + basildir
-        _output_basil(getattr(wsp, "basil%s" % basildir), wsp.sub("output%s" % basildir))
+            basil_wsp = "basil_%s" % basildir
+            output_wsp = "output_%s" % basildir
+        else:
+            basil_wsp = "basil"
+            output_wsp = "output"
+        _output_basil(getattr(wsp, basil_wsp), wsp.sub(output_wsp), basildir)
 
-def _output_basil(basil_wsp, output_wsp):
+def _output_basil(basil_wsp, output_wsp, basildir):
     """
     Do model fitting on TC/CT or subtracted data
 
@@ -75,12 +79,12 @@ def _output_basil(basil_wsp, output_wsp):
      - ``output.struc``  - Structural space output
     """
     if basil_wsp.image_space is None:
-        _output_native(output_wsp.sub("native"), basil_wsp)
+        _output_native(output_wsp.sub("native"), basil_wsp, basildir)
         _output_trans(output_wsp)
     else:
-        _output_native(output_wsp, basil_wsp)
+        _output_native(output_wsp, basil_wsp, basildir)
 
-def _output_native(wsp, basil_wsp, report=None):
+def _output_native(wsp, basil_wsp, basildir, report=None):
     """
     Create output images from a Basil run
 
@@ -145,9 +149,9 @@ def _output_native(wsp, basil_wsp, report=None):
     if wsp.save_mask:
         wsp.mask = wsp.rois.mask
 
-    output_report(wsp, report=report)
+    output_report(wsp, basildir, report=report)
 
-def output_report(wsp, report=None):
+def output_report(wsp, basildir, report=None):
     """
     Create report pages from output data
 
@@ -165,7 +169,11 @@ def output_report(wsp, report=None):
             img = getattr(wsp, name)
 
         if img is not None and img.ndim == 3:
-            page = report.page(name)
+            if basildir:
+                page_name = "%s_%s" % (name, basildir)
+            else:
+                page_name = name
+            page = report.page(page_name)
             page.heading("Output image: %s" % name)
             if calibrate and name.endswith("_calib"):
                 alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
