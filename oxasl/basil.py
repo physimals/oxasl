@@ -131,12 +131,18 @@ def basil(wsp, output_wsp=None, prefit=True):
         wsp.log.write(" - Restricting noise prior as only one ASL volume\n")
         extra_options["prior-noise-stddev"] = 1.0
     
+    # Mask - for compatibility check in workspace and in rois
+    if wsp.rois is not None and wsp.rois.mask is not None:
+        mask = wsp.rois.mask
+    else:
+        mask = wsp.mask
+
     if prefit and max(wsp.asldata.rpts) > 1:
         # Initial BASIL run on mean data
         wsp.log.write(" - Doing initial fit on mean at each TI\n\n")
         init_wsp = output_wsp.sub("init")
         main_wsp = output_wsp.sub("main")
-        basil_fit(wsp, wsp.asldata.mean_across_repeats(), mask=wsp.rois.mask, output_wsp=init_wsp, **extra_options)
+        basil_fit(wsp, wsp.asldata.mean_across_repeats(), mask=mask, output_wsp=init_wsp, **extra_options)
         extra_options["continue-from-mvn"] = output_wsp.init.finalstep.finalMVN
         main_wsp.initmvn = extra_options["continue-from-mvn"]
     else:
@@ -144,7 +150,7 @@ def basil(wsp, output_wsp=None, prefit=True):
 
     # Main run on full ASL data
     wsp.log.write("\n - Doing fit on full ASL data\n\n")
-    basil_fit(wsp, wsp.asldata, mask=wsp.rois.mask, output_wsp=main_wsp, **extra_options)
+    basil_fit(wsp, wsp.asldata, mask=mask, output_wsp=main_wsp, **extra_options)
     output_wsp.finalstep = main_wsp.finalstep
 
 def basil_fit(wsp, asldata, mask=None, output_wsp=None, **kwargs):
@@ -265,7 +271,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
                 datamax = np.amax(wsp.diffdata_mean.data, 3)
             else:
                 datamax = wsp.diffdata_mean.data
-            brain_mag = np.mean(datamax.data[wsp.rois.mask.data != 0])
+            brain_mag = np.mean(datamax.data[mask.data != 0])
             # this will correspond to whole brain CBF (roughly) - about 0.5 of GM
             noisesd = math.sqrt(brain_mag * 2 / snr)
         else:
@@ -428,7 +434,7 @@ def basil_steps(wsp, asldata, mask=None, **kwargs):
 
         if steps:
             # Add initialisaiton step for PV correction - ONLY if we have something to init from
-            steps.append(PvcInitStep({"data" : asldata, "mask" : wsp.rois.mask, "pgm" : pgm, "pwm" : pwm}, "PVC initialisation"))
+            steps.append(PvcInitStep({"data" : asldata, "mask" : mask, "pgm" : pgm, "pwm" : pwm}, "PVC initialisation"))
 
     ### --- SPATIAL MODULE ---
     if wsp.spatial:
