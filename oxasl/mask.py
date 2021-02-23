@@ -55,7 +55,7 @@ def generate_mask(wsp):
         wsp.rois.mask_src = "user"
         mask_source = "provided by user (assumed to be ASL space): %s" % wsp.mask.name
         wsp.rois.mask = wsp.mask
-    elif wsp.structural.struc is not None:
+    elif wsp.structural is not None and wsp.structural.struc is not None:
         # Preferred option is to use brain extracted structural
         wsp.rois.mask_src = "struc"
         struc.init(wsp)
