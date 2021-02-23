@@ -188,7 +188,7 @@ def oxasl_perfusion_data(wsp):
             "suffix" : "", 
             "f" : wsp.native.perfusion_calib,
             "var" :  wsp.native.perfusion_var_calib,
-            "mask" : None,
+            "mask" : wsp.rois.mask.data,
         },
     ]
     if wsp.native.perfusion_wm_calib is not None:
@@ -198,13 +198,13 @@ def oxasl_perfusion_data(wsp):
                 "suffix" : "_gm", 
                 "f" : wsp.native.perfusion_calib,
                 "var" : wsp.native.perfusion_var_calib,
-                "mask" : wsp.structural.gm_pv_asl.data > PVE_THRESHOLD_BASE,
+                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > PVE_THRESHOLD_BASE),
             },
             {
                 "suffix" : "_wm", 
                 "f" : wsp.native.perfusion_wm_calib,
                 "var" : wsp.native.perfusion_wm_var_calib,
-                "mask" : wsp.structural.wm_pv_asl.data > PVE_THRESHOLD_BASE,
+                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > PVE_THRESHOLD_BASE),
             },
         ])
     else:
@@ -214,13 +214,13 @@ def oxasl_perfusion_data(wsp):
                 "suffix" : "_gm",
                 "f" : wsp.native.perfusion_calib,
                 "var" :  wsp.native.perfusion_var_calib,
-                "mask" : wsp.structural.gm_pv_asl.data > wsp.gm_thresh,
+                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > wsp.gm_thresh),
             },
             {
                 "suffix" : "_wm",
                 "f" : wsp.native.perfusion_calib,
                 "var" :  wsp.native.perfusion_var_calib,
-                "mask" : wsp.structural.wm_pv_asl.data > wsp.wm_thresh,
+                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > wsp.wm_thresh),
             },
         ])
     return perfusion_data
