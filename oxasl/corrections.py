@@ -239,7 +239,11 @@ def get_fieldmap_correction(wsp):
     else:
         result = epi_reg(epi=wsp.asldata.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, log=wsp.fsllog, **epi_reg_opts)
 
-    wsp.fieldmap.warp_struc = result["out_warp"]
+    # Occasionally we end up with NaN in the output of epi_reg and this will ruin the entire distcorr warp.
+    # So remove any NaN values and replace with zero.
+    warp_struc = result["out_warp"]
+    wsp.fieldmap.warp_struc = Image(np.nan_to_num(warp_struc.data, nan=0), header=warp_struc.header)
+
     wsp.fieldmap.asl2struc = result["out"]
     wsp.fieldmap.struc2asl = np.linalg.inv(wsp.fieldmap.asl2struc)
 
