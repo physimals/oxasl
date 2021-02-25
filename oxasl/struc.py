@@ -27,12 +27,12 @@ class StructuralImageOptions(OptionCategory):
     def groups(self, parser):
         group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
         group.add_option("--struc", "-s", help="Structural image", type="image", default=None)
-        group.add_option("--struc-brain", "--sbet", "--struc-bet", type="image", help="Structural image (brain extracted)", default=None)
+        group.add_option("--struc-brain", "--sbet", "--struc-bet", "--sbrain", type="image", help="Structural image (brain extracted)", default=None)
         group.add_option("--struc2asl", help="Structural->ASL transformation matrix", type="matrix", default=None)
         group.add_option("--asl2struc", help="ASL->Structural transformation matrix", type="matrix", default=None)
-        group.add_option("--wm-seg", help="White matter segmentation of structural image", type="image", default=None)
-        group.add_option("--gm-seg", help="Grey matter segmentation of structural image", type="image", default=None)
-        group.add_option("--csf-seg", help="CSF segmentation of structural image", type="image", default=None)
+        group.add_option("--wm-seg", help="White matter segmentation of structural image in structural space", type="image", default=None)
+        group.add_option("--gm-seg", help="Grey matter segmentation of structural image in structural space", type="image", default=None)
+        group.add_option("--csf-seg", help="CSF segmentation of structural image in structural space", type="image", default=None)
         group.add_option("--fslanat", help="FSL_ANAT output directory for structural information", default=None)
         group.add_option("--fastsrc", help="Images from a FAST segmentation - if not set FAST will be run on structural image")
         group.add_option("--struc2std", help="Structural to MNI152 linear registration (.mat)")
@@ -67,9 +67,7 @@ def init(wsp):
     elif wsp.struc:
         wsp.log.write(" - Using structural image provided by user: %s\n" % wsp.struc.name)
         wsp.structural.struc = wsp.struc
-        if wsp.wm_seg is not None:
-            wsp.structural.wm_seg = wsp.wm_seg # FIXME user override segmentation
-
+        wsp.structural.brain = wsp.struc_brain
     #elif wsp.structural.struc_lores
     #    wsp.log.write("Low-resolution tructural image: %s\n" % wsp.structural.struc_lores.name)
     else:
@@ -82,8 +80,8 @@ def init(wsp):
         #wsp.structural.brain_mask = bet_result["output_mask"]
 
     if wsp.structural.brain is not None and wsp.structural.brain_mask is None:
-        # FIXME - for now get the mask by binarising the brain image but gives slightly
-        # different results compared to using the mask returned by BET
+        # FIXME - for now get the mask by binarising the brain image for compatibility with oxford_asl
+        # although this gives slightly different results compared to using the mask returned by BET
         wsp.structural.brain_mask = Image((wsp.structural.brain.data != 0).astype(np.int), header=wsp.structural.struc.header)
 
     if wsp.structural.struc is not None:
@@ -94,6 +92,12 @@ def segment(wsp):
     Segment the structural image
     """
     init(wsp)
+
+    # Can override segmentation from user-specified maps
+    wsp.structural.wm_seg = wsp.wm_seg
+    wsp.structural.gm_seg = wsp.gm_seg
+    wsp.structural.csf_seg = wsp.csf_seg
+
     if None in (wsp.structural.wm_seg, wsp.structural.gm_seg, wsp.structural.csf_seg):
         init(wsp)
         page = wsp.report.page("seg")
@@ -101,7 +105,7 @@ def segment(wsp):
 
         wsp.log.write("\nGetting structural segmentation\n")
         if wsp.fslanat:
-            wsp.log.write(" - Using FSL_ANAT output\n")
+            wsp.log.write(" - Using FSL_ANAT output from %s\n" % wsp.fslanat)
             page.text("Segmentation taken from FSL_ANAT output at ``%s``" % wsp.fslanat)
             wsp.structural.csf_pv = Image(os.path.join(wsp.fslanat, "T1_fast_pve_0"))
             wsp.structural.gm_pv = Image(os.path.join(wsp.fslanat, "T1_fast_pve_1"))
@@ -113,12 +117,11 @@ def segment(wsp):
             except PathError:
                 wsp.log.write(" - No bias field found")
         elif wsp.fastsrc:
-            # FIXME should be possible to implement this
-            raise NotImplementedError("Specifying FAST output directory")
-            #img = os.path.split(wsp.fastsrc)[1]
-            #wsp.structural.csf_pv = os.path.join(wsp.fastsrc, "%s_pve_0" % img)
-            #wsp.structural.gm_pv = os.path.join(wsp.fastsrc, "%s_pve_1" % img)
-            #wsp.structural.wm_pv = os.path.join(wsp.fastsrc, "%s_pve_2" % img)
+            wsp.log.write(" - Using FAST output from %s\n" % wsp.fastsrc)
+            page.text("Segmentation taken from FAST output at ``%s``" % wsp.fastsrc)
+            wsp.structural.csf_pv = Image("%s_pve_0" % wsp.fastsrc)
+            wsp.structural.gm_pv = Image("%s_pve_1" % wsp.fastsrc)
+            wsp.structural.wm_pv = Image("%s_pve_2" % wsp.fastsrc)
         elif wsp.structural.struc:
             wsp.log.write(" - Running FAST\n")
             page.text("FAST run to segment structural image")
@@ -130,9 +133,12 @@ def segment(wsp):
         else:
             raise ValueError("No structural data provided - cannot segment")
 
-        wsp.structural.csf_seg = Image((wsp.structural.csf_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
-        wsp.structural.gm_seg = Image((wsp.structural.gm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
-        wsp.structural.wm_seg = Image((wsp.structural.wm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
+        if wsp.structural.csf_seg is not None:
+            wsp.structural.csf_seg = Image((wsp.structural.csf_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
+        if wsp.structural.gm_seg is not None:
+            wsp.structural.gm_seg = Image((wsp.structural.gm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
+        if wsp.structural.wm_seg is not None:
+            wsp.structural.wm_seg = Image((wsp.structural.wm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
 
         page.heading("Segmentation image", level=1)
         page.text("CSF partial volume")
