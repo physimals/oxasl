@@ -177,7 +177,7 @@ def oxasl_add_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.5):
     registry.rescanAtlases()
     desc = registry.getAtlasDescription(atlas_name)
     atlas = registry.loadAtlas(desc.atlasID, resolution=2)
-    for label in desc.labels[:3]:
+    for label in desc.labels:
         roi_mni = atlas.get(label=label)
         roi_native = reg.change_space(wsp, roi_mni, "native")
         oxasl_add_roi(wsp, rois, label.name, roi_native, threshold=50, roi_mni=roi_mni)
