@@ -150,9 +150,11 @@ def get_m0_voxelwise(wsp):
             m0 = _edge_correct(m0, wsp.rois.mask)
         wsp.log.write(" - Masking M0 image")
         m0[wsp.rois.mask.data == 0] = 0
+        wsp.log.write(" - mean in mask: %f\n" % np.mean(m0[wsp.rois.mask.data > 0]))
+    else:
+        wsp.log.write(" - Mean M0 (no mask): %f\n" % np.mean(m0))
 
     m0img = Image(m0, header=wsp.calibration.calib_img.header)
-    wsp.log.write(" - Mean M0: %f\n" % np.mean(m0))
 
     # Reporting
     page = wsp.report.page("m0")
