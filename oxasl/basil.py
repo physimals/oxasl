@@ -42,6 +42,12 @@ from fsl.data.image import Image
 from oxasl import __version__, __timestamp__, AslImage, Workspace, image, reg
 from oxasl.options import AslOptionParser, OptionCategory, OptionGroup, GenericOptions
 
+def basil(wsp, prefit=True, **kwargs):
+    """
+    For oxasl_deblur compatibility
+    """
+    run(wsp, prefit, **kwargs)
+
 def run(wsp, prefit=True, **kwargs):
     """
     Run BASIL modelling on ASL data in a workspace

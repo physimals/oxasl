@@ -99,6 +99,8 @@ def add_options(parser):
     g.add_option("--mc", help="Motion correct data", action="store_true", default=False)
     if oxasl_enable:
         g.add_option("--use-enable", help="Use ENABLE preprocessing step", action="store_true", default=False)
+    if oxasl_deblur:
+        g.add_option("--deblur", help="Perform deblurring of ASL and calibration data", action="store_true", default=False)
     parser.add_option_group(g)
 
     g = OptionGroup(parser, "Model fitting options")
@@ -150,6 +152,8 @@ def main():
             parser.add_category(oxasl_enable.EnableOptions())
         if oxasl_multite:
             parser.add_category(oxasl_multite.MultiTEOptions())
+        if oxasl_deblur:
+            parser.add_category(oxasl_deblur.Options())
         parser.add_category(region_analysis.Options())
         parser.add_category(GenericOptions())
         parser.add_category(output.Options())

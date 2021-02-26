@@ -12,6 +12,12 @@ from fsl.data.image import Image
 from oxasl import reg
 from oxasl.reporting import LightboxImage
 
+def generate_mask(wsp):
+    """
+    For compatibility
+    """
+    run(wsp)
+
 def run(wsp):
     """
     Generate mask for ASL data
