@@ -95,7 +95,7 @@ def run(wsp):
     if wsp.distcorr is not None:
         if wsp.distcorr.fieldmap is not None:
             wsp.log.write(" - Using fieldmap distortion correction\n")
-            warps.append(wsp.distcorrfieldmap.warp)
+            warps.append(wsp.distcorr.fieldmap.warp)
 
         if wsp.distcorr.gdc_warp:
             wsp.log.write(" - Using user-supplied GDC warp\n")
@@ -126,8 +126,8 @@ def run(wsp):
         wsp.corrected.asldata = wsp.preproc.asldata.derived(asldata_corr.data)
 
     if wsp.preproc.calib is not None:
-        # Apply corrections to calibration images if we have calib2asl registration or any other correction
-        if not warps and moco_mats is None and wsp.reg is None:
+        # Apply corrections to calibration images if we have calib2asl registration and any other correction
+        if not warps or wsp.reg is None:
             wsp.log.write(" - No corrections to apply to calibration data\n")
             wsp.corrected.calib = wsp.preproc.calib
             if wsp.cref is not None:
