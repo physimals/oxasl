@@ -104,7 +104,7 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
     prefixes = ["", "mean"]
     if wsp.output_stddev:
         prefixes.append("std")
-    if wsp.output_var:
+    if wsp.output_var or wsp.region_analysis:
         prefixes.append("var")
     for fabber_name, oxasl_output in OUTPUT_ITEMS.items():
         for prefix in prefixes:
