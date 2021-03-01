@@ -218,7 +218,7 @@ def oxasl(wsp):
     m0.run(wsp)
 
     # Quantification
-    prefilter.run(wsp)
+    filter.run(wsp)
     prequantify.run(wsp)
     quantify.run(wsp)
     pvc.run(wsp)

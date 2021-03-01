@@ -12,14 +12,14 @@ try:
     import oxasl_enable
 except ImportError:
     oxasl_enable = None
-    
+
 try:
     import oxasl_deblur
 except ImportError:
     oxasl_deblur = None
 
 def run(wsp):
-    wsp.sub("prefilter")
+    wsp.sub("filter")
 
     if oxasl_enable and wsp.use_enable:
         oxasl_enable.init()
@@ -28,4 +28,4 @@ def run(wsp):
         #wsp.corrected.asldata = wsp.enable.asldata_enable
 
     if oxasl_deblur and wsp.deblur:
-        oxasl_deblur.run(wsp, output_wsp=wsp.prefilter)
+        oxasl_deblur.run(wsp, output_wsp=wsp.filter)

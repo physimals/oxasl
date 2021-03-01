@@ -12,7 +12,7 @@ OxaslPlugin and provide the following information:
  - Brief description
  - Version
  - Optional OptionCategory defining command line options supported
- - Dictionary of implementations of pipeline phases (e.g. prefilter, quantify...)
+ - Dictionary of implementations of pipeline phases (e.g. filter, quantify...)
 """
 
 from oxasl.options import OptionCategory
