@@ -15,7 +15,7 @@ import wx
 from wx.lib.pubsub import pub
 
 from oxasl import Workspace
-from oxasl.oxford_asl import oxasl
+from oxasl.pipeline import oxasl
 from oxasl.gui.widgets import OptionError
 
 class LogWriter():

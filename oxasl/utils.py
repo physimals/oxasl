@@ -1,5 +1,7 @@
 """
-Misc utility functions
+OXASL - Misc utility functions
+
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 
 import six

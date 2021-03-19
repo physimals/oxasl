@@ -12,8 +12,7 @@ OxaslPlugin and provide the following information:
  - Brief description
  - Version
  - Optional OptionCategory defining command line options supported
- - Optional list of IAF values which the plugin supports modelling for
- - Optional PVC estimation method?
+ - Dictionary of implementations of pipeline phases (e.g. filter, quantify...)
 """
 
 from oxasl.options import OptionCategory
@@ -23,4 +22,5 @@ class OxaslPlugin:
         self.name = name
         self.description = description
         self.version = version
-        self.options = kwargs.get("options", OptionCategory())
+        self.options = kwargs.pop("options", OptionCategory(self.name))
+        self.run = kwargs

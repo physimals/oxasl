@@ -1,19 +1,24 @@
 """
-Functions for generating a suitable mask for ASL data
-"""
-import sys
+OXASL - Module to generate a suitable mask for ASL data
 
+Copyright (c) 2008-2020 Univerisity of Oxford
+"""
 import numpy as np
 import scipy as sp
 
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from oxasl import __version__, AslImage, Workspace, image, reg, struc
-from oxasl.options import AslOptionParser, GenericOptions
+from oxasl import reg
 from oxasl.reporting import LightboxImage
 
 def generate_mask(wsp):
+    """
+    For compatibility
+    """
+    run(wsp)
+
+def run(wsp):
     """
     Generate mask for ASL data
 
@@ -40,12 +45,13 @@ def generate_mask(wsp):
      - ``struc_brain``: Already brain-extracted structural image
      - ``asl2struc`` : Existring ASL->Structural space transformation matrix
      - ``calib``   : Calibration image
-     - ``regfrom`` : ASL registration source image
+     - ``nativeref`` : ASL registration source image
     """
     if wsp.rois is not None and wsp.rois.mask is not None:
         return
 
     wsp.sub("rois")
+    wsp.log.write("\nGenerating ASL data mask\n")
 
     # Reporting
     page = wsp.report.page("mask")
@@ -58,20 +64,18 @@ def generate_mask(wsp):
     elif wsp.structural is not None and wsp.structural.struc is not None:
         # Preferred option is to use brain extracted structural
         wsp.rois.mask_src = "struc"
-        struc.init(wsp)
         page.heading("Brain extracted structural image", level=1)
         page.image("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
-        brain_mask_asl = reg.struc2asl(wsp, wsp.structural.brain_mask)
-        wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((brain_mask_asl.data > 0.25)).astype(np.int), header=brain_mask_asl.header)
+        wsp.rois.mask_struc = wsp.structural.brain_mask
+        wsp.rois.mask_asl = reg.change_space(wsp, wsp.structural.brain_mask, "native")
+        wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((wsp.rois.mask_asl.data > 0.25)).astype(np.int), header=wsp.rois.mask_asl.header)
         mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
-        reg.get_regfrom(wsp)
-        wsp.rois.mask_src = "regfrom"
-        wsp.rois.mask = Image((wsp.reg.regfrom.data != 0).astype(np.int), header=wsp.reg.regfrom.header)
+        wsp.rois.mask_src = "nativeref"
+        wsp.rois.mask = Image((wsp.reg.nativeref.data != 0).astype(np.int), header=wsp.reg.nativeref.header)
         mask_source = "generated from brain extracted registration ASL image"
 
-    wsp.log.write("\nGenerated ASL data mask\n")
     wsp.log.write(" - Mask %s\n" % mask_source)
 
     page.heading("Masked ASL brain image", level=1)
@@ -82,40 +86,3 @@ def generate_mask(wsp):
         page.image("mask_outline", LightboxImage(wsp.rois.mask, bgimage=wsp.asldata.perf_weighted(), outline=True))
     else:
         page.image("mask_outline", LightboxImage(wsp.rois.mask, bgimage=wsp.asldata.mean(), outline=True))
-
-def main():
-    """
-    Entry point for command line tool
-    """
-    try:
-        parser = AslOptionParser(usage="asl_mask -i <asl_image> [options...]", version=__version__)
-        parser.add_option("--calib", "-c", help="Calibration image", default=None)
-        parser.add_option("--use-pwi", help="Use the perfusion weighted average rather than the timeseries mean", action="store_true", default=False)
-        parser.add_category(image.AslImageOptions())
-        parser.add_category(struc.StructuralImageOptions())
-        parser.add_category(GenericOptions())
-
-        options, _ = parser.parse_args(sys.argv)
-        options.mask = None # No point in using command line tool if you already have a mask!
-        wsp = Workspace(**vars(options))
-
-        if not options.asldata:
-            sys.stderr.write("Input file not specified\n")
-            parser.print_help()
-            sys.exit(1)
-
-        wsp.asldata = AslImage(wsp.asldata, **parser.filter(vars(options), "image"))
-        wsp.asldata.summary()
-
-        wsp.generate_mask()
-
-        if wsp.output is None:
-            wsp.output = wsp.asldata.name + "_mask"
-        wsp.rois.mask.save(wsp.output)
-
-    except ValueError as exc:
-        sys.stderr.write("ERROR: " + str(exc) + "\n")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()

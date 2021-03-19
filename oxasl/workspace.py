@@ -1,5 +1,5 @@
 """
-Workspace to store images and data associated with a processing pipeline
+OXASL - Workspace to store images and data associated with a processing pipeline
 
 This class is conceptually simple - you can store pretty much any data by setting
 an attribute on the workspace and retrieve the resulting data as the same attribute.
@@ -16,6 +16,7 @@ This hides considerable complexity. Here are a few of the issues:
  - There is a special ImageProxy for an AslImage. This might go away if we can
    represent the full state of an AslImage using metadata alone.
 
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 
 import os
@@ -93,7 +94,7 @@ class Workspace(object):
     directly setting an attribute, as it supports a ``save`` option.
     """
 
-    def __init__(self, savedir=None, input_wsp="input", parent=None, defaults=("corrected", "input"), auto_asldata=False, **kwargs):
+    def __init__(self, savedir=None, input_wsp="input", parent=None, search_childs=("filter", "corrected", "preproc", "input"), auto_asldata=False, **kwargs):
         """
         Create workspace
 
@@ -101,13 +102,14 @@ class Workspace(object):
                         if it does not not already exist. If not specified a temporary
                         directory will be created so data can be flushed to disk rather
                         than held in memory.
-        :param separate_input: If True a sub workspace named 'input' will be created
-                               and initial data will be stored there. This sub workspace
-                               will also be checked by default when attributes are
-                               requested from the main workspace.
+        :param input_wsp: Name of child workspace to be created and initial data stored within
+        :param parent: Parent Workspace which will be searched if attribute not found within
+                       this workspace
+        :param search_childs: Sequence of names of child workspaces to be searched for attributes
+                              (in order - first to appear is first to be checked)
         :param auto_asldata: If True, automatically create an AslImage attribute
                              from the input keyword arguments
-        :param log:     File stream to write log output to (default: sys.stdout)
+        :param log: Optional file stream to write log output to (default: parent workspace log or sys.stdout)
         """
         # Have to set this first otherwise setattr fails!
         if savedir is not None:
@@ -119,7 +121,7 @@ class Workspace(object):
         self.set_item("savedir", savedir, save=False)
 
         self._parent = parent
-        self._defaults = list(defaults)
+        self._search_childs = list(search_childs)
         self._stuff = {}
         if create_savedir:
             if parent is not None:
@@ -179,11 +181,11 @@ class Workspace(object):
             return ret
 
     def __getattr__(self, name):
-        if name in self._defaults:
+        if name in self._search_childs:
             return None
 
         ret = None
-        for wsp in self._defaults:
+        for wsp in self._search_childs:
             default_wsp = getattr(self, wsp)
             if isinstance(default_wsp, Workspace):
                 val = getattr(default_wsp, name)
@@ -264,7 +266,8 @@ class Workspace(object):
                         tfile.write(matrix_to_text(value))
                 elif not name.startswith("_") and isinstance(value, pd.DataFrame):
                     # Save data frame in CSV file
-                    value.to_csv(os.path.join(self.savedir, save_name + ".csv"), index=False, header=True)
+                    value.to_csv(os.path.join(self.savedir, save_name + ".csv"), 
+                                 index=False, header=True, float_format='%.4g')
                 elif not name.startswith("_") and isinstance(value, (int, float, six.string_types)):
                     # Save other attributes in JSON file
                     self._stuff[name] = value
@@ -286,7 +289,7 @@ class Workspace(object):
                                if not set on the sub-workspace
         """
         savedir = os.path.join(self.savedir, name)
-        if parent_default and name not in self._defaults:
+        if parent_default and name not in self._search_childs:
             parent = self
         else:
             parent = None

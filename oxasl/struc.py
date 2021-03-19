@@ -1,7 +1,7 @@
 """
-Structural data module for ASL
+OXASL - Structural data module
 
-Copyright (c) 2008-2018 University of Oxford
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 import os
 import glob
@@ -12,20 +12,19 @@ import fsl.wrappers as fsl
 from fsl.data.image import Image
 from fsl.utils.path import PathError
 
-from oxasl.options import OptionCategory, IgnorableOptionGroup
+from oxasl.options import OptionCategory, OptionGroup
 from oxasl.reporting import LightboxImage
 
-class StructuralImageOptions(OptionCategory):
+class Options(OptionCategory):
     """
     OptionGroup which contains options for describing a structural image
     """
 
-    def __init__(self, title="Structural image", **kwargs):
-        OptionCategory.__init__(self, "struc", **kwargs)
-        self.title = title
+    def __init__(self):
+        OptionCategory.__init__(self, "struc")
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
+        group = OptionGroup(parser, "Structural data")
         group.add_option("--struc", "-s", help="Structural image", type="image", default=None)
         group.add_option("--struc-brain", "--sbet", "--struc-bet", "--sbrain", type="image", help="Structural image (brain extracted)", default=None)
         group.add_option("--struc2asl", help="Structural->ASL transformation matrix", type="matrix", default=None)
@@ -40,15 +39,12 @@ class StructuralImageOptions(OptionCategory):
 
         return [group, ]
 
-def init(wsp):
+def run(wsp):
     """
     Do initialization on supplied structural data - copy relevant image and do brain extraction
 
     FIXME copy across all supplied structural data
     """
-    if wsp.structural is not None:
-        return
-
     wsp.log.write("\nInitialising structural data\n")
     wsp.sub("structural")
 
@@ -91,15 +87,12 @@ def segment(wsp):
     """
     Segment the structural image
     """
-    init(wsp)
-
     # Can override segmentation from user-specified maps
     wsp.structural.wm_seg = wsp.wm_seg
     wsp.structural.gm_seg = wsp.gm_seg
     wsp.structural.csf_seg = wsp.csf_seg
 
     if None in (wsp.structural.wm_seg, wsp.structural.gm_seg, wsp.structural.csf_seg):
-        init(wsp)
         page = wsp.report.page("seg")
         page.heading("Segmentation of structural image")
 

@@ -1,6 +1,8 @@
 #!/bin/env python
 """
 OXASL - Module which generates perfusion stats within various ROIs
+
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 import os
 import sys
@@ -17,23 +19,22 @@ from fsl.data.image import Image
 import fsl.wrappers as fsl
 
 from oxasl import reg
-from oxasl.options import OptionCategory, IgnorableOptionGroup
+from oxasl.options import OptionCategory, OptionGroup
 
 # This is the probability threshold below which we do not 
 # consider a voxel relevant to GM/WM averages
 PVE_THRESHOLD_BASE = 0.1
 
-class RegionAnalysisOptions(OptionCategory):
+class Options(OptionCategory):
     """
-    OptionGroup which contains options for region analysis
+    Options for region analysis
     """
 
-    def __init__(self, title="Region analysis", **kwargs):
-        OptionCategory.__init__(self, "struc", **kwargs)
-        self.title = title
+    def __init__(self):
+        OptionCategory.__init__(self, "region_analysis")
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
+        group = OptionGroup(parser, "Region analysis")
         group.add_option("--region-analysis", help="Perform region analysis", action="store_true", default=False)
         group.add_option("--roi-min-nvoxels", default=10, type=int,
                           help="Minimum number of relevant voxels required to report statistics")
@@ -79,8 +80,11 @@ def i2(val, var):
 
     #out = []
     Q = np.sum(prec * (val - mu_bar)**2)
+    if Q == 0:
+        i2 = 0
+    else:
+        i2 = (Q-(n-1))/Q
     #H = np.sqrt(Q/(n - 1))
-    i2 = (Q-(n-1))/Q
 
     # Negative values map to 0 (see https://www.ncbi.nlm.nih.gov/pmc/articles/PMC192859/)
     i2 = max(i2, 0)
@@ -136,6 +140,8 @@ def get_stats(stats, img, var_img, roi, suffix="", ignore_nan=True, ignore_inf=T
 
     sample_data = img[effective_roi]
     sample_var = var_img[effective_roi]
+    # Variance should not be zero but sometimes is - maybe masking?
+    sample_var[sample_var == 0] = 1e-6
     nvoxels = len(sample_data)
     stats["Nvoxels" + suffix] = nvoxels
     for stat, fn in STATS_FNS.items():
@@ -167,38 +173,37 @@ def oxasl_add_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.5):
     :param threshold: Threshold for probabilistic atlases
     """
     wsp.log.write("\nAdding ROIs from standard atlas: %s (resolution=%imm, thresholding at %.2f)\n" % (atlas_name, resolution, threshold))
-    reg.reg_struc2std(wsp, fnirt=True)
     registry = atlases.registry
     registry.rescanAtlases()
     desc = registry.getAtlasDescription(atlas_name)
     atlas = registry.loadAtlas(desc.atlasID, resolution=2)
-    for label in desc.labels[:3]:
+    for label in desc.labels:
         roi_mni = atlas.get(label=label)
-        roi_native = reg.std2asl(wsp, roi_mni)
+        roi_native = reg.change_space(wsp, roi_mni, "native")
         oxasl_add_roi(wsp, rois, label.name, roi_native, threshold=50, roi_mni=roi_mni)
 
 def oxasl_perfusion_data(wsp):
     perfusion_data = [
         {
             "suffix" : "", 
-            "f" : wsp.output.native.perfusion_calib,
-            "var" :  wsp.output.native.perfusion_var_calib,
+            "f" : wsp.native.perfusion_calib,
+            "var" :  wsp.native.perfusion_var_calib,
             "mask" : wsp.rois.mask.data,
         },
     ]
-    if wsp.pvcorr:
+    if wsp.native.perfusion_wm_calib is not None:
         wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (threshold: %.2f)\n" % PVE_THRESHOLD_BASE)
         perfusion_data.extend([
             {
                 "suffix" : "_gm", 
-                "f" : wsp.output_pvcorr.native.perfusion_calib,
-                "var" : wsp.output_pvcorr.native.perfusion_var_calib,
+                "f" : wsp.native.perfusion_calib,
+                "var" : wsp.native.perfusion_var_calib,
                 "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > PVE_THRESHOLD_BASE),
             },
             {
                 "suffix" : "_wm", 
-                "f" : wsp.output_pvcorr.native.pvcorr.perfusion_wm_calib,
-                "var" : wsp.output_pvcorr.native.perfusion_wm_var_calib,
+                "f" : wsp.native.perfusion_wm_calib,
+                "var" : wsp.native.perfusion_wm_var_calib,
                 "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > PVE_THRESHOLD_BASE),
             },
         ])
@@ -207,14 +212,14 @@ def oxasl_perfusion_data(wsp):
         perfusion_data.extend([
             {
                 "suffix" : "_gm",
-                "f" : wsp.output.native.perfusion_calib,
-                "var" :  wsp.output.native.perfusion_var_calib,
+                "f" : wsp.native.perfusion_calib,
+                "var" :  wsp.native.perfusion_var_calib,
                 "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > wsp.gm_thresh),
             },
             {
                 "suffix" : "_wm",
-                "f" : wsp.output.native.perfusion_calib,
-                "var" :  wsp.output.native.perfusion_var_calib,
+                "f" : wsp.native.perfusion_calib,
+                "var" :  wsp.native.perfusion_var_calib,
                 "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > wsp.wm_thresh),
             },
         ])
@@ -222,15 +227,18 @@ def oxasl_perfusion_data(wsp):
 
 def run(wsp):
     """ Entry point for OXASL """
+    if not wsp.region_analysis:
+        return
+
     if wsp.pvwm is not None:
         wsp.structural.wm_pv_asl = wsp.pvwm
     else:
-        wsp.structural.wm_pv_asl = reg.struc2asl(wsp, wsp.structural.wm_pv)
+        wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "native")
 
     if wsp.pvwm is not None:
         wsp.structural.gm_pv_asl = wsp.pvgm
     else:
-        wsp.structural.gm_pv_asl = reg.struc2asl(wsp, wsp.structural.gm_pv)
+        wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "native")
     
     wsp.gm_thresh, wsp.wm_thresh = wsp.ifnone("gm_thresh", 0.8), wsp.ifnone("wm_thresh", 0.9)
 

@@ -103,11 +103,11 @@ def main():
     from oxasl import Workspace
     wsp = Workspace(savedir="epi_py_out", debug=True)
     wsp.sub("reg")
-    wsp.regfrom = Image(sys.argv[1])
+    wsp.nativeref = Image(sys.argv[1])
     wsp.fslanat = sys.argv[2]
     struc.init(wsp)
 
-    result = epi_reg(wsp, wsp.regfrom)
+    result = epi_reg(wsp, wsp.nativeref)
     wsp.imgreg, wsp.img2struc = result["out.nii.gz"], result["out"]
 
 if __name__ == "__main__":

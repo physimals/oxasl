@@ -1,5 +1,7 @@
 """
-Classes for representing ASL data and constructing instances from command line parameters
+OXASL -  Classes for representing ASL data and constructing instances from command line parameters
+
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 import sys
 import warnings
@@ -10,20 +12,19 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from .options import OptionCategory, IgnorableOptionGroup
+from .options import OptionCategory, OptionGroup
 
-class AslImageOptions(OptionCategory):
+class Options(OptionCategory):
     """
     OptionGroup which contains options for describing an ASL image
     """
 
-    def __init__(self, title="Input ASL image", fname_opt="-i", **kwargs):
-        OptionCategory.__init__(self, "image", **kwargs)
-        self.title = title
+    def __init__(self, fname_opt="-i"):
+        OptionCategory.__init__(self, "image")
         self.fname_opt = fname_opt
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, self.title, ignore=self.ignore)
+        group = OptionGroup(parser, "ASL data")
         group.add_option("--asldata", self.fname_opt, help="ASL data file")
         group.add_option("--iaf", help="input ASl format: diff=differenced,tc=tag-control,ct=control-tag,mp=multiphase,ve=vessel-encoded,vediff=pairwise subtracted VE data")
         group.add_option("--order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, l=labelling (tag/control/phases etc). First character is fastest varying")
@@ -795,6 +796,9 @@ class AslImage(Image):
         attributes, so this can be used to create a derived image with different numbers of
         repeats, etc, provided the data is consistent with this.
 
+        Note that the image space does not have to match, however in this case the 'header'
+        kwarg should be passed to create the new image header
+
         :param data: Numpy data for derived image
         :param name: Name for new image (can be simple name or full filename)
         :param suffix: If name not specified, construct by adding suffix to original image name
@@ -821,7 +825,7 @@ class AslImage(Image):
             derived_kwargs["nenc"] = self.nenc
 
         try:
-            return AslImage(image=image, name=name, header=self.header, **derived_kwargs)
+            return AslImage(image=image, name=name, header=kwargs.get("header", self.header), **derived_kwargs)
         except ValueError as exc:
             warnings.warn("AslImage.derived failed (%s) - returning fsl.data.image.Image" % str(exc))
-            return Image(image=image, name=name, header=self.header, **kwargs)
+            return Image(image=image, name=name, header=kwargs.get("header", self.header), **kwargs)

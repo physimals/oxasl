@@ -1,5 +1,7 @@
 """
-ASL data preprocessing command line tool
+OXASL - ASL data preprocessing
+
+Copyright (c) 2008-2020 Univerisity of Oxford
 """
 from __future__ import print_function
 
@@ -10,7 +12,47 @@ import scipy
 import fsl.wrappers as fsl
 
 from oxasl import Workspace, image
-from oxasl.options import AslOptionParser, OptionCategory, IgnorableOptionGroup, GenericOptions
+from oxasl.options import AslOptionParser, OptionCategory, OptionGroup, GenericOptions
+
+def run(wsp):
+    wsp.sub("preproc")
+    wsp.preproc.asldata = wsp.input.asldata
+    wsp.preproc.aslspace = wsp.preproc.asldata.mean()
+
+    if wsp.calib_first_vol and wsp.input.calib is None:
+        wsp.input.calib = wsp.asldata.calib
+
+    wsp.preproc.calib = _single_volume(wsp, wsp.input.calib)
+    wsp.preproc.cref = _single_volume(wsp, wsp.input.cref)
+    wsp.preproc.cact = _single_volume(wsp, wsp.input.cact)
+    wsp.preproc.cblip = _single_volume(wsp, wsp.input.cblip)
+
+def _single_volume(wsp, img, moco=True, discard_first=True):
+    """
+    Convert a potentially 4D image into a single 3D volume
+
+    :param moco: If True, perform basic motion correction
+    :param discard_first: If True, discard first volume if nvols > 1
+
+    """
+    if img is not None:
+        wsp.log.write(" - Pre-processing image: %s\n" % img.name)
+        if img.ndim == 4:
+            if discard_first and img.shape[3] > 1:
+                wsp.log.write("   - Removing first volume to ensure data is in steady state\n")
+                img = Image(img.data[..., :-1], header=img.header)
+
+            if moco and img.shape[3] > 1:
+                if moco:
+                    wsp.log.write("   - Motion correcting\n")
+                    img = fsl.mcflirt(img, out=fsl.LOAD, log=wsp.fsllog)["out"]
+
+            wsp.log.write("   - Taking mean across volumes\n")
+            img = Image(np.mean(img.data, axis=-1), header=img.header)
+
+        return img
+    else:
+        return None
 
 def preprocess(wsp):
     """
@@ -72,10 +114,10 @@ class AslPreprocOptions(OptionCategory):
     """
 
     def __init__(self, **kwargs):
-        OptionCategory.__init__(self, "preproc", **kwargs)
+        OptionCategory.__init__(self, "preproc")
 
     def groups(self, parser):
-        group = IgnorableOptionGroup(parser, "Preprocessing", ignore=self.ignore)
+        group = OptionGroup(parser, "Preprocessing")
         group.add_option("--diff", help="Perform tag-control subtraction", action="store_true", default=False)
         group.add_option("--smooth", help="Spatially smooth data", action="store_true", default=False)
         group.add_option("--fwhm", help="FWHM for spatial filter kernel", type="float", default=6)
@@ -90,7 +132,7 @@ def main():
     """
     try:
         parser = AslOptionParser(usage="asl_preproc -i <filename> [options]")
-        parser.add_category(GenericOptions(output_type="file", ignore=["mask"]))
+        parser.add_category(GenericOptions(output_type="file"))
         parser.add_category(image.AslImageOptions())
         parser.add_category(AslPreprocOptions())
 
