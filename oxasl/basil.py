@@ -696,7 +696,6 @@ class PvcInitStep(Step):
         for PVC parameters
         """
         log.write("Initialising partial volume correction...\n")
-        mask = self.options["mask"]
         # set the inital GM amd WM values using a simple PV correction
         wm_cbf_ratio = 0.4
 
@@ -714,6 +713,10 @@ class PvcInitStep(Step):
         mvn = prev_output["finalMVN"]
         gmcbf_init = Image(gmcbf_init, header=mvn.header)
         wmcbf_init = Image(wmcbf_init, header=mvn.header)
+
+        # HACK: This seems to be required to get the fslpy decorators to write
+        # the temporary file correctly
+        mask = Image(self.options["mask"].data, header=mask.header)
 
         # load these into the MVN
         mvn = prev_output["finalMVN"]
