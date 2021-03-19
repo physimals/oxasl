@@ -681,7 +681,7 @@ class PvcInitStep(Step):
 
         # HACK: This seems to be required to get the fslpy decorators to write
         # the temporary file correctly
-        mask = Image(self.options["mask"].data, header=mask.header)
+        mask = Image(self.options["mask"].data, header=self.options["mask"].header)
 
         # load these into the MVN
         mvn = prev_output["finalMVN"]
