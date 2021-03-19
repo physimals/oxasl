@@ -124,6 +124,8 @@ def get_ref_imgs(wsp):
         wsp.reg.nativeref = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
     elif wsp.nativeref_method == "calib":
         wsp.log.write(" - ASL Registration reference is calibration image (brain extracted)\n")
+        if not wsp.preproc.calib.sameSpace(wsp.asldata):
+            raise ValueError("Calibration image is not in same space as ASL data - cannot use as registration reference")
         wsp.reg.nativeref = brain.brain(wsp, wsp.preproc.calib, thresh=0.2)
     elif wsp.nativeref_method == "pwi":
         wsp.log.write(" - ASL Registration reference is PWI (brain extracted)\n")
