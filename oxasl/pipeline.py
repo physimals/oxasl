@@ -114,6 +114,8 @@ def add_options(parser):
     g.add_option("--infert2", help="Infer T2 value (multi-TE data only)", action="store_true", default=False)
     g.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
     g.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
+    g.add_option("--basil-mask", help="Masking policy to use for Basil model fitting. Does not affect analysis mask used in rest of pipeline. 'dilate' means dilate the default analysis mask. 'none' means use no masking",
+                 type="choice", choices=["default", "dilated", "none"])
     g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
     parser.add_option_group(g)
     

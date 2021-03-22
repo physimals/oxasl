@@ -35,6 +35,7 @@ import sys
 import math
 
 import numpy as np
+import scipy.ndimage
 
 from fsl.wrappers import LOAD
 from fsl.data.image import Image
@@ -127,23 +128,30 @@ def run(wsp, prefit=True, **kwargs):
     # Pick up extra BASIL options
     wsp.basil_options = dict(wsp.ifnone("basil_options", {}))
 
-    # Mask - two possible locations for compatibility
-    if wsp.rois is not None and wsp.rois.mask is not None:
-        mask = wsp.rois.mask
+    mask_policy = wsp.ifnone("basil_mask", "default")
+    if mask_policy in ("default", "dilated"):
+        wsp.log.write(" - Using pipeline analysis mask\n")
+        # Two possible locations for compatibility
+        if wsp.rois is not None and wsp.rois.mask is not None:
+            mask = wsp.rois.mask
+        else:
+            mask = wsp.mask
+        if mask_policy == "dilated":
+            # Use 3x3x3 kernel for compatibility with fslmaths default
+            wsp.log.write(" - Dilating mask for Basil analysis\n")
+            struct = scipy.ndimage.generate_binary_structure(3, 3)
+            mask = Image(scipy.ndimage.binary_dilation(mask.data, structure=struct).astype(np.int), header=mask.header)
+    elif mask_policy == "none":
+            wsp.log.write(" - Not using mask for Basil - will fit every voxel\n")
+            mask = Image(np.ones(wsp.asldata.data.shape[:3]), header=wsp.asldata.header)
     else:
-        mask = wsp.mask
+        raise ValueError("Unrecognized mask policy: %s" % mask_policy)
 
     # If we only have one volume, set a nominal noise prior as it is not possible to
     # estimate from the data
     if wsp.asldata.nvols / wsp.asldata.ntc == 1:
         wsp.log.write(" - Restricting noise prior as only one ASL volume\n")
         wsp.basil_options["prior-noise-stddev"] = 1.0
-    
-    # Mask - for compatibility check in workspace and in rois
-    if wsp.rois is not None and wsp.rois.mask is not None:
-        mask = wsp.rois.mask
-    else:
-        mask = wsp.mask
 
     if prefit and max(wsp.asldata.rpts) > 1:
         # Initial BASIL run on mean data
@@ -177,6 +185,7 @@ def basil_fit(wsp, asldata, mask=None):
 
     prev_result = None
     wsp.asldata_diff = asldata.diff().reorder("rt")
+    wsp.basil_mask = mask
 
     for idx, step in enumerate(steps):
         step_wsp = wsp.sub("step%i" % (idx+1))
@@ -757,6 +766,8 @@ class BasilOptions(OptionCategory):
         group.add_option("--fast", help="Faster analysis (1=faster, 2=single step", type=int, default=0)
         group.add_option("--noiseprior", help="Use an informative prior for the noise estimation", action="store_true", default=False)
         group.add_option("--noisesd", help="Set a custom noise std. dev. for the nosie prior", type=float)
+        group.add_option("--basil-mask", help="Masking policy to use for Basil model fitting. Does not affect analysis mask used in rest of pipeline. 'dilate' means dilate the default analysis mask. 'none' means use no masking",
+                         type="choice", choices=["default", "dilated", "none"])
         group.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile")
         groups.append(group)
 

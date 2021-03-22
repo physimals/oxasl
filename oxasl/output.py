@@ -123,6 +123,7 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
             img = basil_wsp.finalstep.ifnone(fabber_output, None)
             if img is not None:
                 # Make negative/nan values = 0 and ensure masked value zeroed
+                # since Basil may use a different fitting mask to the pipeline mask
                 data = np.copy(img.data)
                 data[~np.isfinite(data)] = 0
                 data[img.data < 0] = 0
