@@ -10,3 +10,4 @@ doc/doctrees
 rebuild.sh
 scratch.py
 .DS_Store
+examples/*_out
