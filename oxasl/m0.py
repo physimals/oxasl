@@ -30,6 +30,7 @@ def add_options(parser):
 
     group = OptionGroup(parser, "Voxelwise calibration")
     group.add_option("--pct", help="Tissue/arterial partition coefficiant", type=float, default=0.9)
+    group.add_option("--calib-no-edgecorr", dest="calib_edgecorr", help="Disable edge correction on M0 image", action="store_false", default=True)
     parser.add_option_group(group)
 
     group = OptionGroup(parser, "Reference region calibration")
