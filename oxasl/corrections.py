@@ -116,7 +116,7 @@ def run(wsp):
         jacobian = fnirtfileutils(wsp.corrected.warp_coef, jac=fsl.LOAD, log=wsp.fsllog)["jac"]
         wsp.corrected.jacobian = Image(jacobian.data, header=wsp.corrected.total_warp.header)
 
-    if not warps and moco_mats is None:
+    if not warps and moco_mats is None and wsp.senscorr is None:
         wsp.log.write(" - No corrections to apply to ASL data\n")
         wsp.corrected.asldata = wsp.preproc.asldata
     else:
@@ -126,8 +126,8 @@ def run(wsp):
         wsp.corrected.asldata = wsp.preproc.asldata.derived(asldata_corr.data)
 
     if wsp.preproc.calib is not None:
-        # Apply corrections to calibration images if we have calib2asl registration and any other correction
-        if not warps and wsp.reg is None:
+        # Apply corrections to calibration images if we have calib2asl registration or any other correction
+        if not warps and (wsp.reg is None or wsp.reg.calib2asl is None) and wsp.senscorr is None:
             wsp.log.write(" - No corrections to apply to calibration data\n")
             wsp.corrected.calib = wsp.preproc.calib
             if wsp.cref is not None:
@@ -198,7 +198,7 @@ def correct_img(wsp, img, linear_mat):
     """
     if wsp.corrected.total_warp is not None:
         img = reg.transform(wsp, img, trans=wsp.corrected.total_warp, ref=wsp.preproc.aslspace, premat=linear_mat)
-    else:
+    elif linear_mat is not None:
         img = reg.transform(wsp, img, trans=linear_mat, ref=wsp.preproc.aslspace)
 
     if wsp.corrected.jacobian is not None:
