@@ -148,7 +148,7 @@ def get_m0_voxelwise(wsp):
     if wsp.rois is not None and wsp.rois.mask is not None:
         if edgecorr:
             wsp.log.write(" - Doing edge correction\n")
-            m0 = _edge_correct(m0, wsp.rois.mask)
+            m0 = _edge_correct(wsp, m0, wsp.rois.mask)
         wsp.log.write(" - Masking M0 image")
         m0[wsp.rois.mask.data == 0] = 0
         wsp.log.write(" - mean in mask: %f\n" % np.mean(m0[wsp.rois.mask.data > 0]))
@@ -184,14 +184,15 @@ def get_m0_voxelwise(wsp):
 
     return m0img
 
-def _edge_correct(m0, brain_mask):
+def _edge_correct(wsp, m0, brain_mask):
     """
     Correct for (partial volume) edge effects
     """
     brain_mask = brain_mask.data
 
-    # Median smoothing
-    m0 = scipy.ndimage.median_filter(m0, size=3)
+    # Median smoothing. Note that we do this with a generic filter to ignore values
+    # beyond the boundary (by setting them to nan)
+    m0 = scipy.ndimage.generic_filter(m0, np.nanmedian, size=3, mode='constant', cval=np.nan)
 
     # Erode mask using 3x3x3 structuring element
     mask_ero = scipy.ndimage.morphology.binary_erosion(brain_mask, structure=np.ones([3, 3, 3]), border_value=1)
@@ -199,9 +200,12 @@ def _edge_correct(m0, brain_mask):
 
     # Extrapolate remaining data to fit original mask
     # ASL_FILE works slicewise using a mean 5x5 filter on nonzero values, so we will do the same
+    # Note that we run the filter twice to allow zero-voxels that initially have no non-zero neighbours
+    # to be extrapolated the second time. This does not affect any previously extrapolated voxels.
     for z in range(m0.shape[2]):
         zslice = m0[..., z]
         zslice_extrap = scipy.ndimage.filters.generic_filter(zslice, _masked_mean, footprint=np.ones([5, 5]))
+        zslice_extrap = scipy.ndimage.filters.generic_filter(zslice_extrap, _masked_mean, footprint=np.ones([5, 5]))
         m0[..., z] = zslice_extrap
     m0[brain_mask == 0] = 0
 
@@ -217,8 +221,8 @@ def _masked_mean(vals):
     For zero voxels, returns the mean of non zero voxels in the kernel
     """
     voxel_val = vals[int((len(vals)-1) / 2)]
-    if voxel_val == 0:
-        nonzero = vals[vals != 0]
+    if np.isclose(voxel_val, 0):
+        nonzero = vals[~np.isclose(vals, 0)]
         if np.any(nonzero):
             return np.mean(nonzero)
         else:
