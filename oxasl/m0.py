@@ -22,6 +22,8 @@ def add_options(parser):
     group = OptionGroup(parser, "Calibration")
     group.add_option("--calib", "-c", help="Calibration image", type="image")
     group.add_option("--calib-method", "--cmethod", help="Calibration method: voxelwise or refregion")
+    group.add_option("--calib-m0", help="Specify a precalculated M0 value for calibration", type=float)
+    group.add_option("--calib-m0img", help="Specify a precalculated voxelwise M0 image for calibration", type="image")
     group.add_option("--calib-alpha", "--alpha", help="Inversion efficiency", type=float, default=None)
     group.add_option("--calib-gain", "--cgain", help="Relative gain between calibration and ASL data", type=float, default=1.0)
     group.add_option("--calib-aslreg", help="Calibration image is already aligned with ASL image", action="store_true", default=False)
@@ -91,7 +93,15 @@ def run(wsp):
     wsp.sub("calibration")
 
     wsp.log.write("\nCalibration - calculating M0\n")
-    if wsp.calib_method in ("voxel", "voxelwise"):
+    if wsp.calib_m0 is not None:
+        wsp.log.write(" - Using precalculated M0 value: %f\n" % wsp.calib_m0)
+        wsp.calibration.m0 = wsp.calib_m0
+    elif wsp.calib_m0img is not None:
+        wsp.log.write(" - Using precalculated voxelwise M0 image: %s\n" % wsp.calib_m0img.name)
+        wsp.calibration.m0 = wsp.calib_m0img
+    elif wsp.calib is None:
+        wsp.log.write(" - No calibration image and no M0 specified - calibration will not be performed")
+    elif wsp.calib_method in ("voxel", "voxelwise"):
         wsp.calibration.m0 = get_m0_voxelwise(wsp)
     elif wsp.calib_method in ("refregion", "single"):
         wsp.calibration.m0 = get_m0_refregion(wsp)

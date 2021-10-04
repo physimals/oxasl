@@ -15,7 +15,7 @@ from oxasl.reporting import LightboxImage
 
 class Options(OptionCategory):
     """
-    OptionCategory which contains options for registration of ASL data to structural image
+    OptionCategory which contains options for output files to keep
     """
 
     def __init__(self, **kwargs):
@@ -142,7 +142,7 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
                     img = Image(np.square(img.data), header=img.header)
                 setattr(wsp, name, img)
 
-                if calibrate and wsp.calib is not None:
+                if calibrate and wsp.calibration.m0 is not None:
                     img = calibration.run(wsp, img, multiplier=multiplier, var=is_variance)
                     name = "%s_calib" % name
                     setattr(wsp, name, img)

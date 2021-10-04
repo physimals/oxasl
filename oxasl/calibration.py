@@ -52,7 +52,7 @@ def run(wsp, perf_img, multiplier=1.0, var=False):
     """
     if not perf_img:
         raise ValueError("Perfusion data cannot be None")
-    if not wsp.calib:
+    if not wsp.calibration.m0:
         raise ValueError("No calibration data supplied")
 
     wsp.log.write("\nCalibrating perfusion data: %s\n" % perf_img.name)
