@@ -9,6 +9,7 @@ import collections
 
 import six
 import numpy as np
+import scipy.linalg
 
 from fsl.data.image import Image
 
@@ -26,7 +27,7 @@ class Options(OptionCategory):
     def groups(self, parser):
         group = OptionGroup(parser, "ASL data")
         group.add_option("--asldata", self.fname_opt, help="ASL data file")
-        group.add_option("--iaf", help="input ASl format: diff=differenced,tc=tag-control,ct=control-tag,mp=multiphase,ve=vessel-encoded,vediff=pairwise subtracted VE data")
+        group.add_option("--iaf", help="input ASl format: diff=differenced,tc=tag-control,ct=control-tag,mp=multiphase,ve=vessel-encoded,vediff=pairwise subtracted VE data, hadamard=Hadamard time encoded data")
         group.add_option("--order", help="Data order as sequence of 2 or 3 characters: t=TIs/PLDs, r=repeats, l=labelling (tag/control/phases etc). First character is fastest varying")
         group.add_option("--tis", help="TIs (s) as comma-separated list")
         group.add_option("--tes", help="TSs (s) as comma-separated list for multi-TE ASL data")
@@ -36,6 +37,7 @@ class Options(OptionCategory):
         group.add_option("--rpts", help="Variable repeats as comma-separated list, one per TI/PLD", default=None)
         group.add_option("--nphases", help="For --iaf=mp, number of phases (assumed to be evenly spaced)", default=None, type="int")
         group.add_option("--nenc", help="For --iaf=ve/vediff, number of encoding cycles in original acquisition", type="int", default=8)
+        group.add_option("--hadamard-size", help="Size of Hadamard encoding matrix, must be power of 2 or 12", type="int", default=8)
         group.add_option("--casl", help="Acquisition was pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
         group.add_option("--tau", "--taus", "--bolus", help="Bolus duration (s). Can be single value or comma separated list, one per TI/PLD")
         group.add_option("--slicedt", help="Timing difference between slices (s) for 2D readout", type=float, default=0.0)
@@ -75,7 +77,7 @@ def data_order(iaf, ibf, order, multite=False):
     If any parameters had to be guessed (rather than inferred from other information) a
     warning is output.
 
-    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've', 'vediff' or 'mp'), ordering (sequence of
+    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've', 'vediff', 'hadamard' or 'mp'), ordering (sequence of
              2 or three chars, 'l'=labelling images, 'r'=repeats, 't'=TIs/PLDs, 'e'=TEs. The characters
              are in order from fastest to slowest varying), Boolean indicating whether the block
              format needed to be guessed
@@ -96,7 +98,7 @@ def data_order(iaf, ibf, order, multite=False):
             # Order specified and did not include labelling images so we are entitled
             # to assume differenced data without a warning
             iaf = "diff"
-    elif iaf not in ("diff", "tc", "ct", "mp", "ve", "vediff"):
+    elif iaf not in ("diff", "tc", "ct", "mp", "ve", "vediff", "hadamard"):
         raise ValueError("Unrecognized data format: iaf=%s" % iaf)
 
     ibf_guessed = False
@@ -159,13 +161,15 @@ class AslImage(Image):
     The data format is defined using the ``iaf`` parameter:
 
       - ``iaf`` - ``tc`` = tag then control, ``ct`` = control then tag, ``mp`` = multiphase,
-        ``ve`` = vessel encoded, ``vediff`` = Pairwise subtracted vessel encoded, ``diff`` = already differenced
+        ``ve`` = vessel encoded, ``vediff`` = Pairwise subtracted vessel encoded, ``diff`` = already differenced,
+        ``hadamard` = Hadamard encoded
 
     :ivar nvols:  Number of volumes in data
     :ivar iaf:    Data format - see above
     :ivar order:  Data ordering string - see above
     :ivar ntc:    Number of labelling images in data (e.g. 2 for TC pairs, 1 for differenced data,
-                  for vessel encoded or multiphase data the number of encoding cycles/phases)
+                  for vessel encoded or multiphase data the number of encoding cycles/phases, for Hadamard data the
+                  size of the Hadamard matrix, e.g. 8)
     :ivar casl:   If True, acquisition was CASL/pCASL rather than PASL
     :ivar phases: List of phases for multiphase data (``iaf='mp'``)
     :ivar ntis:   Number of TIs/PLDs
@@ -216,6 +220,7 @@ class AslImage(Image):
         phases = kwargs.pop("phases", None)
         nphases = kwargs.pop("nphases", None)
         nenc = kwargs.pop("nenc", kwargs.pop("ntc", None))
+        had_size = kwargs.pop("hadamard_size", kwargs.pop("nenc", kwargs.pop("ntc", None)))
 
         if self.ndim not in (3, 4):
             raise ValueError("3D or 4D data expected")
@@ -229,7 +234,6 @@ class AslImage(Image):
         if tes is not None:
             if isinstance(tes, six.string_types):
                 tes = [float(te) for te in tes.split(",")]
-            ntes = len(tes)
             self.setMeta("tes", tes)
             self.setMeta("ntes", len(tes))
         else:
@@ -260,10 +264,8 @@ class AslImage(Image):
 
             if isinstance(phases, six.string_types):
                 phases = [float(ph) for ph in phases.split(",")]
-            phases = phases
             ntc = len(phases)
         elif self.iaf in ("ve", "vediff"):
-            self.setMeta("nenc", nenc)
             if nenc is None:
                 raise ValueError("Vessel encoded data specified but number of encoding cycles not given")
             elif self.iaf == "ve":
@@ -272,6 +274,12 @@ class AslImage(Image):
                 ntc = int(nenc / 2)
             else:
                 raise ValueError("Subtracted vessel encoded data must have had an even number of encoding cycles")
+        elif self.iaf == "hadamard":
+            if had_size is None:
+                raise ValueError("Hadamard encoded data specified but hadamard size not given")
+            elif had_size not in (2, 4, 8, 12, 16, 32, 64):
+                raise ValueError("Hadamard encoded data specified but hadamard size (%s) not a supported value" % had_size)
+            ntc = had_size
         else:
             ntc = 1
         self.setMeta("ntc", ntc)
@@ -400,7 +408,19 @@ class AslImage(Image):
             return self.getMeta("tis", self.getMeta("plds"))
 
     @property
+    def nplds(self):
+        return self.ntis
+
+    @property
     def nphases(self):
+        return self.getMeta("ntc", None)
+
+    @property
+    def nenc(self):
+        return self.getMeta("ntc", None)
+
+    @property
+    def hadamard_size(self):
         return self.getMeta("ntc", None)
 
     def is_var_repeats(self):
@@ -578,32 +598,70 @@ class AslImage(Image):
         Data will be reordered so the tag/control pairs are together
 
         Note that currently differencing is not supported for multiphase or vessel encoded data.
+        For Hadamard data, the output will be the decoded sub-boli images.
 
         :param name: Optional name for returned image. Defaults to original name with suffix ``_diff``
         :return: AslImage instance containing differenced data
         """
+        extra_kwargs = {}
         if self.iaf == "diff":
             # Already differenced
             return self
-        elif self.iaf not in ("tc", "ct"):
-            raise ValueError("Data is not tag-control pairs - cannot difference")
-        else:
-            output_data = np.zeros(list(self.shape[:3]) + [int(self.nvols/2)])
+        elif self.iaf in ("tc", "ct"):
+            output_data = np.zeros(list(self.shape[:3]) + [int(self.nvols/self.ntc)])
 
             # Re-order so that TC pairs are together with the tag first
             out_order = self.order.replace("l", "")
+            differenced_order = out_order
             reordered = self.reorder("l" + out_order, iaf="tc").data
 
             for vol in range(int(self.nvols / 2)):
                 tag = 2*vol
                 ctrl = tag+1
                 output_data[..., vol] = reordered[..., ctrl] - reordered[..., tag]
+        elif self.iaf == "hadamard":
+            # Hadamard decoding
+            output_data = np.zeros(list(self.shape[:3]) + [(self.ntc-1)*int(self.nvols/self.ntc)])
 
-        out_order = self.order.replace("l", "")
+            # Re-order so that Hadamard encoding images are together and PLDs are next varying.
+            # We will re-order again at the end to make sure final order is consistent with
+            # the input order
+            out_order = self.order.replace("l", "")
+            differenced_order = "rt"
+            reordered = self.reorder("lrt").data
+
+            had_matrix = scipy.linalg.hadamard(self.ntc)
+            decoded_plds, decoded_taus, decoded_rpts = [], [], []
+            # Each column of the Hadamard matrix (excluding the first) contains +1/-1 values
+            # which form a linear combination of the images in the sequence to extract the
+            # decoded sub-bolus for that column number. The decoded PLDs vary by sub-bolus,
+            # e.g. for the nth sub-bolus there is an additional PLD corresponding to
+            # had_size-1-n * sub_bolus labelling duration
+            vol_idx=0
+            for pld_idx in range(0, self.nplds):
+                for col in range(self.ntc-1):
+                    decoded_plds.append(self.plds[pld_idx] + self.taus[pld_idx]*(self.ntc-2-col))
+                    decoded_taus.append(self.taus[pld_idx])
+                    decoded_rpts.append(self.rpts[pld_idx])
+                    for rpt_idx in range(0, self.rpts[pld_idx]):
+                        vol_idx1 = (pld_idx * self.rpts[pld_idx] + rpt_idx) * self.ntc
+                        vol_idx2 = (pld_idx * self.rpts[pld_idx] + rpt_idx) * (self.ntc-1)
+                        for img in range(self.ntc):
+                            output_data[..., vol_idx2+col] += had_matrix[img, col+1]*reordered[..., vol_idx1+img]
+                        vol_idx += 1
+
+            extra_kwargs["plds"] = decoded_plds
+            extra_kwargs["rpts"] = decoded_rpts
+            extra_kwargs["taus"] = decoded_taus
+        else:
+            raise ValueError("Data is not tag-control pairs - cannot difference")
 
         if not name:
             name = self.name + "_diff"
-        return self.derived(image=output_data, name=name, iaf="diff", order=out_order)
+        ret = self.derived(image=output_data, name=name, iaf="diff", order=differenced_order, **extra_kwargs)
+        # It is possible that to do decoding we might have changed the data order - so put this right
+        # if necessary (will do nothing if the ordering is already correct)
+        return ret.reorder(out_order)
 
     def mean_across_repeats(self, name=None, diff=True):
         """
@@ -754,6 +812,8 @@ class AslImage(Image):
             label_type = "Vessel encoded"
         elif self.iaf == "vediff":
             label_type = "Vessel encoded (pairwise subtracted)"
+        elif self.iaf == "hadamard":
+            label_type = "Hadamard time-encoded"
         else:
             label_type = "Already differenced"
         md["Label type"] = label_type
@@ -823,6 +883,8 @@ class AslImage(Image):
             derived_kwargs[attr] = kwargs.get(attr, getattr(self, attr, None))
         if self.iaf in ("ve", "vediff"):
             derived_kwargs["nenc"] = self.nenc
+        if self.iaf == "hadamard":
+            derived_kwargs["hadamard_size"] = self.hadamard_size
 
         try:
             return AslImage(image=image, name=name, header=kwargs.get("header", self.header), **derived_kwargs)
