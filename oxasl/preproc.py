@@ -86,7 +86,10 @@ def preprocess(wsp):
     wsp.asldata_preproc = wsp.asldata
 
     if wsp.diff:
-        wsp.log.write("  - Tag-control subtraction\n")
+        if wsp.asldata.iaf == "hadamard":
+            wsp.log.write("  - Hadamard decoding\n")
+        else:
+            wsp.log.write("  - Tag-control subtraction\n")
         wsp.asldata_preproc = wsp.asldata_preproc.diff()
 
     if wsp.reorder:
@@ -118,7 +121,7 @@ class AslPreprocOptions(OptionCategory):
 
     def groups(self, parser):
         group = OptionGroup(parser, "Preprocessing")
-        group.add_option("--diff", help="Perform tag-control subtraction", action="store_true", default=False)
+        group.add_option("--diff", help="Perform tag-control subtraction / Hadamard decoding", action="store_true", default=False)
         group.add_option("--smooth", help="Spatially smooth data", action="store_true", default=False)
         group.add_option("--fwhm", help="FWHM for spatial filter kernel", type="float", default=6)
         group.add_option("--mc", help="Motion correct data", action="store_true", default=False)
@@ -133,7 +136,7 @@ def main():
     try:
         parser = AslOptionParser(usage="asl_preproc -i <filename> [options]")
         parser.add_category(GenericOptions(output_type="file"))
-        parser.add_category(image.AslImageOptions())
+        parser.add_category(image.Options())
         parser.add_category(AslPreprocOptions())
 
         options, _ = parser.parse_args()
