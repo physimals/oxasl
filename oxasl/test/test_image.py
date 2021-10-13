@@ -202,7 +202,13 @@ def test_diff_ct():
     assert np.all(data == -1)
 
 def test_diff_hadamard():
-    d = np.random.rand(5, 5, 5, 32)
+    had_mat = scipy.linalg.hadamard(8)
+    # For nth sub-bolus make control=0, tag=n 
+    d = np.zeros([5, 5, 5, 32], dtype=np.float)
+    for img in range(32):
+        for sub_bolus in range(7):
+            if had_mat[img % 8, sub_bolus+1] == 1:
+                d[..., img] += sub_bolus+1
     img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5], iaf="hadamard", hadamard_size=8, order='lrt')
     img = img.diff()
     assert img.iaf == "diff"
@@ -214,14 +220,10 @@ def test_diff_hadamard():
     assert img.order == "rt"
     data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 28]
-    # Check the decoding is right
-    decoded_vol = np.zeros([5, 5, 5, 28], dtype=np.float)
-    had_mat = scipy.linalg.hadamard(8)
-    for had_block in range(4):
-        for col in range(7):
-            for row in range(8):
-                decoded_vol[..., had_block*7+col] += d[..., had_block * 8 + row] * had_mat[row, col+1]
-    assert np.allclose(data, decoded_vol)
+    # Check decoding - expect nth sub-bolus to decode
+    # to 4*n (4 tag images in each Hadamard cycle)
+    for img in range(28):
+        assert np.all(data[..., img] == 4 * (img % 7 + 1))
 
 def test_reorder_tc_ct():
     d = np.zeros([5, 5, 5, 8])
