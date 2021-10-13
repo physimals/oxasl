@@ -219,7 +219,7 @@ class AslImage(Image):
         rpts = kwargs.pop("rpts", kwargs.pop("nrpts", None))
         phases = kwargs.pop("phases", None)
         nphases = kwargs.pop("nphases", None)
-        nenc = kwargs.pop("nenc", kwargs.pop("ntc", None))
+        nenc = kwargs.pop("nenc", kwargs.get("ntc", None))
         had_size = kwargs.pop("hadamard_size", kwargs.pop("nenc", kwargs.pop("ntc", None)))
 
         if self.ndim not in (3, 4):
@@ -380,7 +380,7 @@ class AslImage(Image):
         # Other acquisition parameters
         self.setMeta("slicedt", kwargs.pop("slicedt", 0))
         self.setMeta("sliceband", kwargs.pop("sliceband", None))
-        self.setMeta("artsuff", kwargs.pop("artsupp", False))
+        self.setMeta("artsupp", kwargs.pop("artsupp", False))
 
     def __getattr__(self, name):
         return self.getMeta(name, None)
