@@ -621,34 +621,39 @@ class AslImage(Image):
                 output_data[..., vol] = reordered[..., ctrl] - reordered[..., tag]
         elif self.iaf == "hadamard":
             # Hadamard decoding
+            had_matrix = scipy.linalg.hadamard(self.ntc)
             output_data = np.zeros(list(self.shape[:3]) + [(self.ntc-1)*int(self.nvols/self.ntc)])
 
             # Re-order so that Hadamard encoding images are together and PLDs are next varying.
             # We will re-order again at the end to make sure final order is consistent with
-            # the input order
+            # the input order.
             out_order = self.order.replace("l", "")
-            differenced_order = "rt"
-            reordered = self.reorder("lrt").data
+            differenced_order = "tr"
+            reordered = self.reorder("ltr").data
 
-            had_matrix = scipy.linalg.hadamard(self.ntc)
-            decoded_plds, decoded_taus, decoded_rpts = [], [], []
+            # Decode each block of N Hadamard images into N-1 perfusion weighted images
+            # Assumes that the Hadamard images are in adjacent volumes but we don't need to
+            # worry at this point about what PLD/repeat they correspond to (see below)
             # Each column of the Hadamard matrix (excluding the first) contains +1/-1 values
             # which form a linear combination of the images in the sequence to extract the
-            # decoded sub-bolus for that column number. The decoded PLDs vary by sub-bolus,
+            # decoded sub-bolus for that column number.
+            for vol_idx in range(0, self.nvols):
+                rpt_idx = int(vol_idx / self.ntc)
+                had_idx = vol_idx % self.ntc
+                for sub_bolus in range(self.ntc-1):
+                    output_data[..., rpt_idx*(self.ntc-1)+sub_bolus] += had_matrix[had_idx, sub_bolus+1]*reordered[..., vol_idx]
+
+            # Now calculate the PLDs for the data decoded about which vary by sub-bolus,
             # e.g. for the nth sub-bolus there is an additional PLD corresponding to
-            # had_size-1-n * sub_bolus labelling duration
-            vol_idx=0
+            # had_size-1-n * sub_bolus labelling duration. For this to work with the
+            # decoded data we must have had all the original PLDs together, hence
+            # why we reordered to 'ltr' ordering
+            decoded_plds, decoded_taus, decoded_rpts = [], [], []
             for pld_idx in range(0, self.nplds):
                 for col in range(self.ntc-1):
                     decoded_plds.append(self.plds[pld_idx] + self.taus[pld_idx]*(self.ntc-2-col))
                     decoded_taus.append(self.taus[pld_idx])
                     decoded_rpts.append(self.rpts[pld_idx])
-                    for rpt_idx in range(0, self.rpts[pld_idx]):
-                        vol_idx1 = (pld_idx * self.rpts[pld_idx] + rpt_idx) * self.ntc
-                        vol_idx2 = (pld_idx * self.rpts[pld_idx] + rpt_idx) * (self.ntc-1)
-                        for img in range(self.ntc):
-                            output_data[..., vol_idx2+col] += had_matrix[img, col+1]*reordered[..., vol_idx1+img]
-                        vol_idx += 1
 
             extra_kwargs["plds"] = decoded_plds
             extra_kwargs["rpts"] = decoded_rpts

@@ -201,29 +201,55 @@ def test_diff_ct():
     assert list(data.shape) == [5, 5, 5, 4] 
     assert np.all(data == -1)
 
-def test_diff_hadamard():
+def test_diff_hadamard_ltr():
     had_mat = scipy.linalg.hadamard(8)
-    # For nth sub-bolus make control=0, tag=n 
-    d = np.zeros([5, 5, 5, 32], dtype=np.float)
-    for img in range(32):
+    # For nth sub-bolus make control=0, tag=n
+    d = np.zeros([5, 5, 5, 48], dtype=np.float)
+    for img in range(48):
         for sub_bolus in range(7):
             if had_mat[img % 8, sub_bolus+1] == 1:
                 d[..., img] += sub_bolus+1
-    img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5], iaf="hadamard", hadamard_size=8, order='lrt')
+    img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5, 0.75], iaf="hadamard", hadamard_size=8, order='ltr')
     img = img.diff()
     assert img.iaf == "diff"
     assert img.have_plds
-    decoded_plds = np.array([0.2 + t*img.taus[0] for t in range(6, -1, -1)] + [0.5 + t*img.taus[1] for t in range(6, -1, -1)])
+    decoded_plds = np.array([0.2 + t*img.taus[0] for t in range(6, -1, -1)] + [0.5 + t*img.taus[1] for t in range(6, -1, -1)]+ [0.75 + t*img.taus[1] for t in range(6, -1, -1)])
+    assert np.allclose(img.plds, decoded_plds)
+    assert img.nplds == len(img.plds)
+    assert img.rpts == [2] * img.nplds
+    assert img.order == "tr"
+    data = img.nibImage.get_fdata()
+    assert list(data.shape) == [5, 5, 5, 42]
+    # Check decoding - expect nth sub-bolus to decode
+    # to 4*n (4 tag images in each Hadamard cycle)
+    for img in range(42):
+        assert np.all(data[..., img] == 4 * (img % 7 + 1))
+
+def test_diff_hadamard_lrt():
+    had_mat = scipy.linalg.hadamard(8)
+    # For nth sub-bolus make control=0, tag=n
+    d = np.zeros([1, 1, 1, 48], dtype=np.float)
+    for img in range(48):
+        for sub_bolus in range(7):
+            if had_mat[img % 8, sub_bolus+1] == 1:
+                d[..., img] += sub_bolus+1
+    img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5, 0.75], iaf="hadamard", hadamard_size=8, order='lrt')
+    img = img.diff()
+    assert img.iaf == "diff"
+    assert img.have_plds
+    decoded_plds = np.array([0.2 + t*img.taus[0] for t in range(6, -1, -1)] + [0.5 + t*img.taus[1] for t in range(6, -1, -1)]+ [0.75 + t*img.taus[1] for t in range(6, -1, -1)])
     assert np.allclose(img.plds, decoded_plds)
     assert img.nplds == len(img.plds)
     assert img.rpts == [2] * img.nplds
     assert img.order == "rt"
     data = img.nibImage.get_fdata()
-    assert list(data.shape) == [5, 5, 5, 28]
-    # Check decoding - expect nth sub-bolus to decode
-    # to 4*n (4 tag images in each Hadamard cycle)
-    for img in range(28):
-        assert np.all(data[..., img] == 4 * (img % 7 + 1))
+    assert list(data.shape) == [1, 1, 1, 42]
+    # Check decoding - expect nth sub-bolus to decode to 4*n (4 tag images in each
+    # Hadamard cycle).
+    for img in range(42):
+        # PLDs are repeated twice in adjacent volumes with rt ordering
+        had_idx = img // 2
+        assert np.all(data[..., img] == 4 * (had_idx % 7 + 1))
 
 def test_reorder_tc_ct():
     d = np.zeros([5, 5, 5, 8])
