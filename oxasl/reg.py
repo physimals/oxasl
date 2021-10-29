@@ -36,7 +36,7 @@ class Options(OptionCategory):
         group = OptionGroup(parser, "Registration")
         group.add_option("--nativeref", "--regfrom", help="Registration image (e.g. perfusion weighted image)", type="image")
         group.add_option("--nativeref-method", "--regfrom-method", help="How to choose the registration reference image - calib=use calibration image, mean=use mean ASL data, pwi=use PWI (mean differenced ASL data)")
-        #group.add_option("--omat", help="Output file for transform matrix", default=None)
+        group.add_option("--reg-init-bbr", help="Use BBR for initial as well as final registration - generally used in conjunction with --nativeref-method=pwi", action="store_true", default=False)
         #group.add_option("--bbr", dest="do_bbr", help="Include BBR registration step using EPI_REG", action="store_true", default=False)
         #group.add_option("--flirt", dest="do_flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
         #group.add_option("--flirtsch", help="user-specified FLIRT schedule for registration")
@@ -65,6 +65,11 @@ def run(wsp, redo=False, struc_flirt=True, struc_bbr=False):
 
     if redo:
         wsp.log.write("\nPerforming registration\n")
+
+        if not struc_bbr and wsp.reg_init_bbr:
+            wsp.log.write(" - Using BBR for initial structural registration\n")
+            struc_bbr = True
+
         # Save any previous registration data
         if wsp.reg.nativeref is not None:
             idx = 1
@@ -103,10 +108,10 @@ def get_ref_imgs(wsp):
      - ``strucref``     : Registration reference image in structural space
      - ``stdref``       : Registration reference image in standard space
     """
-    if wsp.input.nativeref_method is None:
-        if wsp.asldata.iaf in ("tc", "ct"):
-            wsp.nativeref_method = "mean"
-        elif wsp.preproc.calib is not None and wsp.preproc.calib.sameSpace(wsp.asldata):
+    if wsp.input is not None and wsp.input.nativeref_method is None:
+        if wsp.asldata is not None and wsp.asldata.iaf in ("tc", "ct"):
+            wsp.reg.nativeref_method = "mean"
+        elif wsp.calib is not None and wsp.asldata is not None and wsp.calib.sameSpace(wsp.asldata):
             wsp.reg.nativeref_method = "calib"
         else:
             wsp.reg.nativeref_method = "mean"
@@ -119,22 +124,22 @@ def get_ref_imgs(wsp):
     elif wsp.input.nativeref is not None:
         wsp.log.write(" - ASL Registration reference image supplied by user\n")
         wsp.reg.nativeref = wsp.input.nativeref
-    elif wsp.nativeref_method == "mean":
+    elif wsp.reg.nativeref_method == "mean":
         wsp.log.write(" - ASL Registration reference is mean ASL signal (brain extracted)\n")
         wsp.reg.nativeref = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
-    elif wsp.nativeref_method == "calib":
+    elif wsp.reg.nativeref_method == "calib":
         wsp.log.write(" - ASL Registration reference is calibration image (brain extracted)\n")
-        if not wsp.preproc.calib.sameSpace(wsp.asldata):
+        if not wsp.calib.sameSpace(wsp.asldata):
             raise ValueError("Calibration image is not in same space as ASL data - cannot use as registration reference")
-        wsp.reg.nativeref = brain.brain(wsp, wsp.preproc.calib, thresh=0.2)
-    elif wsp.nativeref_method == "pwi":
+        wsp.reg.nativeref = brain.brain(wsp, wsp.calib, thresh=0.2)
+    elif wsp.reg.nativeref_method == "pwi":
         wsp.log.write(" - ASL Registration reference is PWI (brain extracted)\n")
         wsp.reg.nativeref = brain.brain(wsp, wsp.asldata.perf_weighted(), thresh=0.2)
     else:
         raise ValueError("Unrecognized nativeref_method: %s" % wsp.nativeref_method)
 
-    wsp.reg.calibref = wsp.input.calib
-    wsp.reg.strucref = wsp.structural.struc
+    if wsp.input is not None: wsp.reg.calibref = wsp.input.calib
+    if wsp.structural is not None: wsp.reg.strucref = wsp.structural.struc
     wsp.reg.stdref = Image(os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"))
 
 def reg_asl2calib(wsp):
@@ -151,7 +156,9 @@ def reg_asl2calib(wsp):
         wsp.reg.calib2asl = wsp.moco.calib2asl
     elif wsp.calib is not None:
         wsp.log.write(" - Registering calibration image to ASL image\n")
-        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.nativeref, wsp.preproc.calib)
+        print(wsp.reg.nativeref)
+        print(wsp.calib)
+        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.nativeref, wsp.calib)
         wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
 
     if wsp.reg.asl2calib is not None:
@@ -203,7 +210,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
      - ``struc2asl``    : Structural->ASL transformation matrix
      - ``regto``        : ``nativeref`` image transformed to structural space
     """
-    if wsp.structural.struc is not None:
+    if wsp.structural is not None and wsp.structural.struc is not None:
         if wsp.struc2asl is not None or wsp.asl2struc is not None:
             wsp.log.write("\nASL->Structural registration provided by user\n")
 
@@ -479,9 +486,7 @@ def reg_bbr(wsp):
 
     :return Tuple of registered image, transform matrix
     """
-    struc.segment(wsp)
-
-    wsp.log.write("  - BBR registration using epi_reg...")
+    wsp.log.write(" - BBR registration using epi_reg...")
     # Windows can't run epi_reg as it's a batch script. Use our experimental python
     # implementation but use the standard epi_reg on other platforms until the python
     # version is better tested
@@ -490,7 +495,6 @@ def reg_bbr(wsp):
         result = pyepi.epi_reg(wsp, wsp.reg.nativeref)
     else:
         result = epi_reg(epi=wsp.reg.nativeref, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight, log=wsp.fsllog)
-    wsp.log.write(" DONE\n")
     return result["out%s" % defaultExt()], result["out"]
 
     #OUTPUT
