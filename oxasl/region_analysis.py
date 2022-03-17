@@ -21,10 +21,6 @@ import fsl.wrappers as fsl
 from oxasl import reg
 from oxasl.options import OptionCategory, OptionGroup
 
-# This is the probability threshold below which we do not 
-# consider a voxel relevant to GM/WM averages
-PVE_THRESHOLD_BASE = 0.1
-
 class Options(OptionCategory):
     """
     Options for region analysis
@@ -42,16 +38,22 @@ class Options(OptionCategory):
                           help="Probability threshold for 'pure' grey matter")
         group.add_option("--wm-thresh", default=0.9, type=float,
                           help="Probability threshold for 'pure' white matter")
-        #group.add_option("--roi-native", nargs="*", default=[],
-        #                  help="Additional ROI as binarised mask in ASL space. The name of the ROI will be the stripped filename. May be specified multiple times")
-        #group.add_option("--roi-struct", nargs="*", default=[],
-        #                  help="Additional ROI as binarised mask in structural space. The name of the ROI will be the stripped filename. May be specified multiple times")
-        #group.add_option("--roi-mni", nargs="*", default=[],
-        #                  help="Additional ROI as binarised mask in MNI space. The name of the ROI will be the stripped filename. May be specified multiple times")
-        group.add_option("--add-atlas-rois", action="store_true", default=False,
-                          help="Add ROIs from Harvard-Oxford cortical/subcortical atlases")
+        group.add_option("--min-gm-thresh", default=0.1, type=float,
+                          help="Probability threshold for a voxel to be included in GM stats")
+        group.add_option("--min-wm-thresh", default=0.1, type=float,
+                          help="Probability threshold for a voxel to be included in WM stats")
+        group.add_option("--add-roi",
+                          help="Additional ROI as binarised mask in ASL, structural, or MNI space. The name of the ROI will be the stripped filename. May be specified multiple times")
+        group.add_option("--add-mni-atlas",
+                          help="Additional regions as labelled image in MNI space. If a single region is contained, the name of the ROI will be the stripped filename, otherwise use --add-mni-atlas-names. May be specified multiple times (comma separated)")
+        group.add_option("--add-mni-atlas-labels",
+                          help="Comma separated filenames containing names of regions in atlas given in --add-mni-atlas")
+        #group.add_option("--add-standard-atlases", action="store_true", default=False,
+        #                  help="Add ROIs from Harvard-Oxford cortical/subcortical atlases")
         group.add_option("--save-mni-rois", action="store_true", default=False,
                           help="Save ROIs in MNI space")
+        group.add_option("--save-struct-rois", action="store_true", default=False,
+                          help="Save ROIs in structural space")
         group.add_option("--save-native-rois", action="store_true", default=False,
                           help="Save ROIs in native (ASL) space")
         group.add_option("--save-native-masks", action="store_true", default=False,
@@ -161,13 +163,11 @@ def oxasl_add_roi(wsp, rois, name, roi_native, threshold, roi_struct=None, roi_m
     })
     wsp.log.write("DONE\n")
 
-def oxasl_add_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.5):
+def oxasl_add_fsl_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.5):
     """
     Get ROIs from an FSL atlas
     
     :param rois: Mapping from name to ROI array which will be updated
-    :param mni2struc_warp: Warp image containing MNI->structural space warp
-    :param struct2asl_mat: Matrix for struct->ASL transformation
     :param atlas_name: Name of the FSL atlas
     :param resolution: Resolution in mm
     :param threshold: Threshold for probabilistic atlases
@@ -182,6 +182,25 @@ def oxasl_add_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.5):
         roi_native = reg.change_space(wsp, roi_mni, "native")
         oxasl_add_roi(wsp, rois, label.name, roi_native, threshold=50, roi_mni=roi_mni)
 
+def oxasl_add_custom_atlas(wsp, rois, atlas_img, region_names):
+    """
+    Get ROIs from an atlas described by a label image in MNI space
+ 
+    :param rois: Mapping from name to ROI array which will be updated
+    :param atlas_img: Atlas label image
+    :param region_names: Atlas label image region names
+    """
+    wsp.log.write("\nAdding ROIs from MNI atlas image: %s\n" % (atlas_img.name))
+    labels = [idx for idx in np.unique(atlas_img.data) if idx != 0]
+    if len(labels) != len(region_names):
+        region_names = ["Region %i" % label for label in labels]
+    for idx, label in enumerate(labels):
+        roi_mni = atlas_img.data.copy()
+        roi_mni[roi_mni != label] = 0
+        name = region_names[idx]
+        roi_native = reg.change_space(wsp, roi_mni, "native")
+        oxasl_add_roi(wsp, rois, name, roi_native, threshold=0.5, roi_mni=roi_mni)
+
 def oxasl_perfusion_data(wsp):
     perfusion_data = [
         {
@@ -192,19 +211,19 @@ def oxasl_perfusion_data(wsp):
         },
     ]
     if wsp.perfusion_wm is not None:
-        wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (threshold: %.2f)\n" % PVE_THRESHOLD_BASE)
+        wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.min_gm_thres, wsp.min_wm_thresh))
         perfusion_data.extend([
             {
                 "suffix" : "_gm", 
                 "f" : wsp.perfusion,
                 "var" : wsp.perfusion_var,
-                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > PVE_THRESHOLD_BASE),
+                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > wsp.min_gm_thresh),
             },
             {
                 "suffix" : "_wm", 
                 "f" : wsp.perfusion_wm,
                 "var" : wsp.perfusion_wm_var,
-                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > PVE_THRESHOLD_BASE),
+                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > wsp.min_wm_thresh),
             },
         ])
     else:
@@ -247,17 +266,36 @@ def run(wsp):
         wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "native")
     
     wsp.gm_thresh, wsp.wm_thresh = wsp.ifnone("gm_thresh", 0.8), wsp.ifnone("wm_thresh", 0.9)
+    wsp.min_gm_thresh, wsp.min_wm_thresh = wsp.ifnone("min_gm_thresh", 0.1), wsp.ifnone("min_wm_thresh", 0.1)
 
     rois = []
     wsp.log.write("\nLoading generic ROIs\n")
-    oxasl_add_roi(wsp, rois, "10%+GM", wsp.structural.gm_pv_asl, 0.1)
-    oxasl_add_roi(wsp, rois, "10%+WM", wsp.structural.wm_pv_asl, 0.1)
+    oxasl_add_roi(wsp, rois, "%i%%+GM" % (wsp.min_gm_thresh*100), wsp.structural.gm_pv_asl, wsp.min_gm_thresh)
+    oxasl_add_roi(wsp, rois, "%i%%+WM" % (wsp.min_wm_thresh*100), wsp.structural.wm_pv_asl, wsp.min_wm_thresh)
     oxasl_add_roi(wsp, rois, "%i%%+GM" % (wsp.gm_thresh*100), wsp.structural.gm_pv_asl, wsp.gm_thresh)
     oxasl_add_roi(wsp, rois, "%i%%+WM" % (wsp.wm_thresh*100), wsp.structural.wm_pv_asl, wsp.wm_thresh)
 
+    # Add ROIs from command line
+    print("\nLoading user-specified ROIs")
+    add_roi = [l.strip() for l in wsp.ifnone("add_roi", "").split(",") if l.strip() != ""]
+
+    for fname in add_roi:
+        roi_native = reg.change_space(wsp, Image(fname), "native")
+        oxasl_add_roi(wsp, rois, os.path.basename(fname).split(".")[0], roi_native, 0.5)
+    
+    add_atlas = [l.strip() for l in wsp.ifnone("add_mni_atlas", "").split(",") if l.strip() != ""]
+    atlas_labels = [l.strip() for l in wsp.ifnone("add_mni_atlas_labels", "").split(",") if l.strip() != ""]
+    for idx, fname in enumerate(add_atlas):
+        if idx < len(atlas_labels):
+            with open(atlas_labels[idx]) as f:
+                names = [l.strip() for l in f.readlines()]
+        else:
+            names = [os.path.basename(fname).split(".")[0],]
+        oxasl_add_custom_atlas(wsp, rois, Image(fname), names)
+
     # Add ROIs from standard atlases
-    oxasl_add_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
-    oxasl_add_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
+    oxasl_add_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
+    oxasl_add_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
 
     # Save output masks/PVE maps
     for roi in rois:
@@ -266,6 +304,8 @@ def run(wsp):
             setattr(wsp, fname, roi["roi_native"])
         if wsp.save_native_masks and "mask_native" in roi:
             setattr(wsp, fname, roi["mask_native"])
+        if wsp.save_struct_rois and "roi_struct" in roi:
+            setattr(wsp, fname, roi["roi_struct"])
         if wsp.save_mni_rois and "roi_mni" in roi:
             setattr(wsp, fname, roi["roi_mni"])
 
