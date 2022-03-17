@@ -181,17 +181,15 @@ class Workspace(object):
             return ret
 
     def __getattr__(self, name):
-        if name in self._search_childs:
-            return None
-
         ret = None
-        for wsp in self._search_childs:
-            default_wsp = getattr(self, wsp)
-            if isinstance(default_wsp, Workspace):
-                val = getattr(default_wsp, name)
-                if val is not None:
-                    ret = val
-                    break
+        if name not in self._search_childs:
+            for wsp in self._search_childs:
+                default_wsp = getattr(self, wsp)
+                if isinstance(default_wsp, Workspace):
+                    val = getattr(default_wsp, name)
+                    if val is not None:
+                        ret = val
+                        break
 
         if ret is None and self._parent is not None:
             ret = getattr(self._parent, name)
