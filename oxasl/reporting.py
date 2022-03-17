@@ -542,8 +542,8 @@ latex_documents = [
      u'oxasl', 'manual'),
 ]
 
-extensions = ['rst2pdf.pdfbuilder']
-pdf_documents = [(master_doc, u'rst2pdf', u'oxasl reporting', u'oxasl'),]
+#extensions = ['rst2pdf.pdfbuilder']
+#pdf_documents = [(master_doc, u'rst2pdf', u'oxasl reporting', u'oxasl'),]
 """
 
 def main():
