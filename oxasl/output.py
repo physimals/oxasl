@@ -134,18 +134,19 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
                 if prefix and prefix != "mean":
                     name = "%s_%s" % (name, prefix)
 
-                #if calibrate:
-                #    # Anything that needs calibration also requires sensitivity correction
-                #    img, = corrections.apply_sensitivity_correction(wsp, img)
-
+                # Variance is not output by Fabber natively so we get it by
+                # squaring the standard deviation.
                 if is_variance:
                     img = Image(np.square(img.data), header=img.header)
                 setattr(wsp, name, img)
 
-                if calibrate and wsp.calibration.m0 is not None:
-                    img = calibration.run(wsp, img, multiplier=multiplier, var=is_variance)
-                    name = "%s_calib" % name
-                    setattr(wsp, name, img)
+                if calibrate:
+                    for method in wsp.calibration.calib_method:
+                        calib_wsp = getattr(wsp.calibration, method)
+                        img_calib = calibration.run(calib_wsp, img, multiplier=multiplier, var=is_variance)
+                        sub_wsp_name = "calib_%s" % method
+                        output_wsp = wsp.ifnone(sub_wsp_name, wsp.sub(sub_wsp_name))
+                        setattr(output_wsp, name, img_calib)
 
     if wsp.save_mask:
         wsp.mask = wsp.rois.mask

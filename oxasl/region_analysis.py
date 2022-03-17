@@ -186,24 +186,24 @@ def oxasl_perfusion_data(wsp):
     perfusion_data = [
         {
             "suffix" : "", 
-            "f" : wsp.native.perfusion_calib,
-            "var" :  wsp.native.perfusion_var_calib,
+            "f" : wsp.perfusion,
+            "var" :  wsp.perfusion_var,
             "mask" : wsp.rois.mask.data,
         },
     ]
-    if wsp.native.perfusion_wm_calib is not None:
+    if wsp.perfusion_wm is not None:
         wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (threshold: %.2f)\n" % PVE_THRESHOLD_BASE)
         perfusion_data.extend([
             {
                 "suffix" : "_gm", 
-                "f" : wsp.native.perfusion_calib,
-                "var" : wsp.native.perfusion_var_calib,
+                "f" : wsp.perfusion,
+                "var" : wsp.perfusion_var,
                 "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > PVE_THRESHOLD_BASE),
             },
             {
                 "suffix" : "_wm", 
-                "f" : wsp.native.perfusion_wm_calib,
-                "var" : wsp.native.perfusion_wm_var_calib,
+                "f" : wsp.perfusion_wm,
+                "var" : wsp.perfusion_wm_var,
                 "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > PVE_THRESHOLD_BASE),
             },
         ])
@@ -212,23 +212,29 @@ def oxasl_perfusion_data(wsp):
         perfusion_data.extend([
             {
                 "suffix" : "_gm",
-                "f" : wsp.native.perfusion_calib,
-                "var" :  wsp.native.perfusion_var_calib,
+                "f" : wsp.perfusion,
+                "var" :  wsp.perfusion_var,
                 "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > wsp.gm_thresh),
             },
             {
                 "suffix" : "_wm",
-                "f" : wsp.native.perfusion_calib,
-                "var" :  wsp.native.perfusion_var_calib,
+                "f" : wsp.perfusion,
+                "var" :  wsp.perfusion_var,
                 "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > wsp.wm_thresh),
             },
         ])
     return perfusion_data
 
 def run(wsp):
-    """ Entry point for OXASL """
+    """
+    Entry point for OXASL
+
+    wsp: Output data workspace
+    """
     if not wsp.region_analysis:
         return
+
+    wsp.log.write("\nRegionwise analysis\n")
 
     if wsp.pvwm is not None:
         wsp.structural.wm_pv_asl = wsp.pvwm
@@ -242,33 +248,16 @@ def run(wsp):
     
     wsp.gm_thresh, wsp.wm_thresh = wsp.ifnone("gm_thresh", 0.8), wsp.ifnone("wm_thresh", 0.9)
 
-    wsp.log.write("\nRegionwise analysis\n")
-
-    wsp.log.write("\nLoading perfusion images\n")
-    perfusion_data = oxasl_perfusion_data(wsp)
-    
     rois = []
     wsp.log.write("\nLoading generic ROIs\n")
     oxasl_add_roi(wsp, rois, "10%+GM", wsp.structural.gm_pv_asl, 0.1)
     oxasl_add_roi(wsp, rois, "10%+WM", wsp.structural.wm_pv_asl, 0.1)
     oxasl_add_roi(wsp, rois, "%i%%+GM" % (wsp.gm_thresh*100), wsp.structural.gm_pv_asl, wsp.gm_thresh)
     oxasl_add_roi(wsp, rois, "%i%%+WM" % (wsp.wm_thresh*100), wsp.structural.wm_pv_asl, wsp.wm_thresh)
-    
+
     # Add ROIs from standard atlases
     oxasl_add_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
     oxasl_add_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
-
-    # Get stats in each ROI. Add name to stats dict to make TSV output easier
-    wsp.log.write("\nGetting stats - minimum of %i voxels to report in region\n" % wsp.roi_min_nvoxels)
-    for item in perfusion_data:
-        stats = []
-        for roi in rois:
-            roi_stats = {"name" : roi["name"]}
-            get_stats(roi_stats, item["f"].data, item["var"].data, roi["mask_native"].data, mask=item["mask"], min_nvoxels=wsp.roi_min_nvoxels)
-            stats.append(roi_stats)
-            columns = list(roi_stats.keys())
-
-        setattr(wsp, "roi_stats%s" % item["suffix"], pd.DataFrame(stats, columns=columns))
 
     # Save output masks/PVE maps
     for roi in rois:
@@ -279,5 +268,24 @@ def run(wsp):
             setattr(wsp, fname, roi["mask_native"])
         if wsp.save_mni_rois and "roi_mni" in roi:
             setattr(wsp, fname, roi["roi_mni"])
+
+    for calib_method in wsp.calibration.calib_method:
+        wsp.log.write("\nCalibration method: %s\n" % calib_method)
+        calib_wsp = getattr(wsp.native, "calib_%s" % calib_method)
+
+        wsp.log.write("\nLoading perfusion images\n")
+        perfusion_data = oxasl_perfusion_data(calib_wsp)
+
+        # Get stats in each ROI. Add name to stats dict to make TSV output easier
+        wsp.log.write("\nGetting stats - minimum of %i voxels to report in region\n" % wsp.roi_min_nvoxels)
+        for item in perfusion_data:
+            stats = []
+            for roi in rois:
+                roi_stats = {"name" : roi["name"]}
+                get_stats(roi_stats, item["f"].data, item["var"].data, roi["mask_native"].data, mask=item["mask"], min_nvoxels=wsp.roi_min_nvoxels)
+                stats.append(roi_stats)
+                columns = list(roi_stats.keys())
+
+            setattr(calib_wsp, "roi_stats%s" % item["suffix"], pd.DataFrame(stats, columns=columns))
 
     wsp.log.write("\nDONE\n")

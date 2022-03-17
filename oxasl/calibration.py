@@ -48,16 +48,16 @@ def run(wsp, perf_img, multiplier=1.0, var=False):
     Required workspace attributes
     -----------------------------
 
-     - ``calibration.m0`` : M0 single value or voxelwise Image
+     - ``m0`` : M0 single value or voxelwise Image
     """
     if not perf_img:
         raise ValueError("Perfusion data cannot be None")
-    if not wsp.calibration.m0:
+    if not wsp.m0:
         raise ValueError("No calibration data supplied")
 
     wsp.log.write("\nCalibrating perfusion data: %s\n" % perf_img.name)
     alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
-    m0 = wsp.calibration.m0
+    m0 = wsp.m0
     if isinstance(m0, Image):
         m0 = m0.data
 
@@ -68,7 +68,7 @@ def run(wsp, perf_img, multiplier=1.0, var=False):
         alpha = alpha**2
 
     if isinstance(m0, np.ndarray):
-        # If M0 is zero, make calibrated data zero
+        # If M0 is <= zero, make calibrated data zero
         calibrated = np.zeros(perf_img.shape)
         calibrated[m0 > 0] = perf_img.data[m0 > 0] / m0[m0 > 0]
     else:
