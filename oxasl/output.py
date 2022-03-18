@@ -130,7 +130,7 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
                 mask = reg.change_space(wsp, wsp.rois.mask, img)
                 data[mask.data == 0] = 0
                 img = Image(data, header=img.header)
-                name, multiplier, calibrate, _, _, _ = oxasl_output
+                name, multiplier, calibrate, units, normal_gm, normal_wm = oxasl_output
                 if prefix and prefix != "mean":
                     name = "%s_%s" % (name, prefix)
 
@@ -147,61 +147,47 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
                         sub_wsp_name = "calib_%s" % method
                         output_wsp = wsp.ifnone(sub_wsp_name, wsp.sub(sub_wsp_name))
                         setattr(output_wsp, name, img_calib)
+                        output_report(output_wsp, name, units, normal_gm, normal_wm, method)
+                else:
+                    output_report(wsp, name, units, normal_gm, normal_wm)
 
     if wsp.save_mask:
         wsp.mask = wsp.rois.mask
 
-    output_report(wsp, basildir, report=report)
-
-def output_report(wsp, basildir, report=None):
+def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
     """
     Create report pages from output data
 
     :param wsp: Workspace object containing output
     """
-    if report is None:
-        report = wsp.report
+    report = wsp.report
 
-    roi, gm, wm = None, None, None
-    for oxasl_name, multiplier, calibrate, units, normal_gm, normal_wm in OUTPUT_ITEMS.values():
-        name = oxasl_name + "_calib"
-        img = getattr(wsp, name)
-        if img is None:
-            name = oxasl_name
-            img = getattr(wsp, name)
+    img = getattr(wsp, name)
+    if img is not None and img.ndim == 3:
+        page = report.page("%s_%s" % (name, calib_method))
+        page.heading("Output image: %s (calibration: %s)" % (name, calib_method))
+        if calib_method != "none":
+            alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
+            page.heading("Calibration", level=1)
+            page.text("Calibration method: %s" % calib_method)
+            page.text("Inversion efficiency: %f" % alpha)
 
-        if img is not None and img.ndim == 3:
-            if basildir:
-                page_name = "%s_%s" % (name, basildir)
-            else:
-                page_name = name
-            page = report.page(page_name)
-            page.heading("Output image: %s" % name)
-            if calibrate and name.endswith("_calib"):
-                alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
-                page.heading("Calibration", level=1)
-                page.text("Image was calibrated using supplied M0 image")
-                page.text("Inversion efficiency: %f" % alpha)
-                page.text("Multiplier for physical units: %f" % multiplier)
+        page.heading("Metrics", level=1)
+        data = img.data
+        roi = reg.change_space(wsp, wsp.rois.mask, img).data
+        table = []
+        table.append(["Mean within mask", "%.4g %s" % (np.mean(data[roi > 0.5]), units), ""])
+        if wsp.structural.struc is not None:
+            gm = reg.change_space(wsp, wsp.structural.gm_pv, img).data
+            wm = reg.change_space(wsp, wsp.structural.wm_pv, img).data
+            table.append(["GM mean", "%.4g %s" % (np.mean(data[gm > 0.5]), units), normal_gm])
+            table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[gm > 0.8]), units), normal_gm])
+            table.append(["WM mean", "%.4g %s" % (np.mean(data[wm > 0.5]), units), normal_wm])
+            table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[wm > 0.9]), units), normal_wm])
+        page.table(table, headers=["Metric", "Value", "Typical"])
 
-            page.heading("Metrics", level=1)
-            data = img.data
-            if roi is None:
-                roi = reg.change_space(wsp, wsp.rois.mask, img).data
-            table = []
-            table.append(["Mean within mask", "%.4g %s" % (np.mean(data[roi > 0.5]), units), ""])
-            if wsp.structural.struc is not None:
-                if gm is None:
-                    gm = reg.change_space(wsp, wsp.structural.gm_pv, img).data
-                    wm = reg.change_space(wsp, wsp.structural.wm_pv, img).data
-                table.append(["GM mean", "%.4g %s" % (np.mean(data[gm > 0.5]), units), normal_gm])
-                table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[gm > 0.8]), units), normal_gm])
-                table.append(["WM mean", "%.4g %s" % (np.mean(data[wm > 0.5]), units), normal_wm])
-                table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[wm > 0.9]), units), normal_wm])
-            page.table(table, headers=["Metric", "Value", "Typical"])
-
-            page.heading("Image", level=1)
-            page.image("%s_img" % name, LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
+        page.heading("Image", level=1)
+        page.image("%s_%s_img" % (name, calib_method), LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
 
 def __output_trans_helper(wsp):
     """

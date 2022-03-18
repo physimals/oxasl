@@ -196,7 +196,7 @@ def get_m0_voxelwise(wsp):
     wsp.m0 = Image(m0, header=wsp.calib_img.header)
 
     # Reporting
-    page = wsp.report.page("m0")
+    page = wsp.report.page("m0_voxelwise")
     page.heading("Voxelwise M0 calculation")
     page.text("Voxelwise calibration calculates an M0 value for each voxel from the calibration image")
     page.heading("Correction factors", level=1)
@@ -333,7 +333,7 @@ def get_m0_wholebrain(wsp):
     wsp.log.write(" - M0 of brain: %f\n" % wsp.m0)
 
     # Reporting
-    page = wsp.report.page("m0")
+    page = wsp.report.page("m0_wholebrain")
     page.heading("Whole-brain M0 calculation")
     page.text("Whole-brain calibration calculates an M0 value for each voxel from the calibration image based on partial volume estimates")
     page.text("- Calibration gain: %f" % gain)
@@ -572,7 +572,7 @@ def get_m0_refregion(wsp, mode="longtr"):
     wsp.log.write(" - M0: %f\n" % wsp.m0)
 
     # Reporting
-    page = wsp.report.page("m0")
+    page = wsp.report.page("m0_refregion_%s" % wsp.tissref)
     page.heading("Reference region M0 calculation for %s" % wsp.tissref)
     page.text("Reference region calibration calculates a single M0 value for a region of known tissue type")
     page.heading("Calculation details", level=1)
@@ -597,8 +597,8 @@ def get_tissrefmask(wsp):
     """
     Calculate a calibration reference mask for a particular known tissue type
     """
-    page = wsp.report.page("auto_calib_mask")
-    page.heading("Calibration reference region")
+    page = wsp.report.page("auto_calib_mask_%s" % wsp.tissref)
+    page.heading("Calibration reference region: %s" % wsp.tissref)
     page.text("Reference region was automatically generated for tissue type: %s" % wsp.tissref.upper())
     page.heading("Partial volume map for %s tissue (from structural segmentation)" % wsp.tissref.upper(), level=1)
     wsp.refpve = getattr(wsp.structural, "%s_pv" % wsp.tissref.lower())
