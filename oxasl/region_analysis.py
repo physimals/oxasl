@@ -211,7 +211,7 @@ def oxasl_perfusion_data(wsp):
         },
     ]
     if wsp.perfusion_wm is not None:
-        wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.min_gm_thres, wsp.min_wm_thresh))
+        wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.min_gm_thresh, wsp.min_wm_thresh))
         perfusion_data.extend([
             {
                 "suffix" : "_gm", 
