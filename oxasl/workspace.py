@@ -185,7 +185,7 @@ class Workspace(object):
         if name not in self._search_childs:
             for wsp in self._search_childs:
                 default_wsp = getattr(self, wsp)
-                if isinstance(default_wsp, Workspace):
+                if isinstance(default_wsp, Workspace) and default_wsp != self:
                     val = getattr(default_wsp, name)
                     if val is not None:
                         ret = val
@@ -293,6 +293,7 @@ class Workspace(object):
             parent = None
             kwargs["log"] = self.log
             kwargs["debug"] = self.debug
+            kwargs["report"] = self.report
 
         sub_wsp = Workspace(savedir=savedir, parent=parent, input_wsp=None, **kwargs)
         setattr(self, name, sub_wsp)
