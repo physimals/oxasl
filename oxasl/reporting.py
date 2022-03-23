@@ -107,8 +107,7 @@ class LightboxImage(object):
             nonzero_slices = [idx for idx in range(shape[2]) if np.count_nonzero(img.data[:, :, idx]) > 0]
             if nonzero_slices:
                 return min(nonzero_slices), max(nonzero_slices)
-        else:
-            return 0, shape[2]-1
+        return 0, shape[2]-1
 
     def tofile(self, fname):
         """
