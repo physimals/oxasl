@@ -145,7 +145,9 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
                         calib_wsp = getattr(wsp.calibration, method)
                         img_calib = calibration.run(calib_wsp, img, multiplier=multiplier, var=is_variance)
                         sub_wsp_name = "calib_%s" % method
-                        output_wsp = wsp.ifnone(sub_wsp_name, wsp.sub(sub_wsp_name))
+                        output_wsp = getattr(wsp, sub_wsp_name)
+                        if output_wsp is None:
+                            output_wsp = wsp.sub(sub_wsp_name)
                         setattr(output_wsp, name, img_calib)
                         output_report(output_wsp, name, units, normal_gm, normal_wm, method)
                 else:
