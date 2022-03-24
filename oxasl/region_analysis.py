@@ -278,7 +278,7 @@ def run(wsp):
     oxasl_add_roi(wsp, rois, "%i%%+WM" % (wsp.wm_thresh*100), wsp.structural.wm_pv_asl, wsp.wm_thresh)
 
     # Add ROIs from command line
-    print("\nLoading user-specified ROIs")
+    wsp.log.write("\nLoading user-specified ROIs\n")
     add_roi = [l.strip() for l in wsp.ifnone("add_roi", "").split(",") if l.strip() != ""]
 
     for fname in add_roi:
@@ -299,18 +299,6 @@ def run(wsp):
     oxasl_add_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
     oxasl_add_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
 
-    # Save output masks/PVE maps
-    for roi in rois:
-        fname = roi["name"].replace(" ", "_").replace(",", "").lower()
-        if wsp.save_native_rois and "roi_native" in roi:
-            setattr(wsp, fname, roi["roi_native"])
-        if wsp.save_native_masks and "mask_native" in roi:
-            setattr(wsp, fname, roi["mask_native"])
-        if wsp.save_struct_rois and "roi_struct" in roi:
-            setattr(wsp, fname, roi["roi_struct"])
-        if wsp.save_mni_rois and "roi_mni" in roi:
-            setattr(wsp, fname, roi["roi_mni"])
-
     for calib_method in wsp.calibration.calib_method:
         wsp.log.write("\nCalibration method: %s\n" % calib_method)
         calib_wsp = getattr(wsp.native, "calib_%s" % calib_method)
@@ -329,5 +317,19 @@ def run(wsp):
                 columns = list(roi_stats.keys())
 
             setattr(calib_wsp, "roi_stats%s" % item["suffix"], pd.DataFrame(stats, columns=columns))
+
+    # Save output masks/PVE maps
+    if wsp.save_native_rois or wsp.save_native_masks or wsp.save_struct_rois or wsp.save_mni_rois:
+        wsp.sub("region_rois")
+        for roi in rois:
+            fname = roi["name"].replace(" ", "_").replace(",", "").lower()
+            if wsp.save_native_rois and "roi_native" in roi:
+                setattr(wsp.region_rois, fname + "_native_roi", roi["roi_native"])
+            if wsp.save_native_masks and "mask_native" in roi:
+                setattr(wsp.region_rois, fname + "_native_mask", roi["mask_native"])
+            if wsp.save_struct_rois and "roi_struct" in roi:
+                setattr(wsp.region_rois, fname + "_struct_roi", roi["roi_struct"])
+            if wsp.save_mni_rois and "roi_mni" in roi:
+                setattr(wsp.region_rois, fname + "_mni_roi", roi["roi_mni"])
 
     wsp.log.write("\nDONE\n")
