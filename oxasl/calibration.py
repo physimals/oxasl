@@ -82,5 +82,5 @@ def run(wsp, perf_img, multiplier=1.0, var=False):
         wsp.log.write(" - Using multiplier for physical units: %f\n" % multiplier)
         calibrated *= multiplier
 
-    perf_calib = Image(calibrated, name=perf_img.name + "_calib", header=perf_img.header)
+    perf_calib = Image(calibrated, name=perf_img.name, header=perf_img.header)
     return perf_calib
