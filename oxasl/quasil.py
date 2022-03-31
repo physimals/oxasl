@@ -43,16 +43,3 @@ complexity in prior specification!
 
 Model-free analysis uses asl_mfree.
 """
-
-
-
-
-
-
-
-
-
-
-
-
-"""
