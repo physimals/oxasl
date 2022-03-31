@@ -8,6 +8,7 @@ from __future__ import print_function
 import sys
 
 import scipy
+import numpy as np 
 
 import fsl.wrappers as fsl
 
@@ -40,7 +41,7 @@ def _single_volume(wsp, img, moco=True, discard_first=True):
         if img.ndim == 4:
             if discard_first and img.shape[3] > 1:
                 wsp.log.write("   - Removing first volume to ensure data is in steady state\n")
-                img = Image(img.data[..., :-1], header=img.header)
+                img = image.Image(img.data[..., :-1], header=img.header)
 
             if moco and img.shape[3] > 1:
                 if moco:
@@ -48,7 +49,7 @@ def _single_volume(wsp, img, moco=True, discard_first=True):
                     img = fsl.mcflirt(img, out=fsl.LOAD, log=wsp.fsllog)["out"]
 
             wsp.log.write("   - Taking mean across volumes\n")
-            img = Image(np.mean(img.data, axis=-1), header=img.header)
+            img = image.Image(np.mean(img.data, axis=-1), header=img.header)
 
         return img
     else:

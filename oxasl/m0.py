@@ -496,6 +496,7 @@ def get_m0_refregion(wsp, mode="longtr"):
         # Calibration image is control images and we want to do a saturation recovery fit
         # NB only do the fit in the CSF mask
         # FIXME this is not functional at the moment
+        # FIXME: update to handle a user-provided TI volume 
         options = {
             "data" : calib_data,
             "mask" : refmask,

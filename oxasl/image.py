@@ -41,6 +41,7 @@ class Options(OptionCategory):
         group.add_option("--casl", help="Acquisition was pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
         group.add_option("--tau", "--taus", "--bolus", help="Bolus duration (s). Can be single value or comma separated list, one per TI/PLD")
         group.add_option("--slicedt", help="Timing difference between slices (s) for 2D readout", type=float, default=0.0)
+        group.add_option("--tiimg", help="4D per-voxel/per-timepoint effective TI image (same number of volumes as tc-pairs). Overrides PLDs/TIs though these must still be provided.", default=None)
         group.add_option("--sliceband", help="Number of slices per pand in multi-band setup", type=int)
         group.add_option("--artsupp", help="Arterial suppression (vascular crushing) was used", action="store_true", default=False)
         group.add_option("--ibf", help="input block format - alternative to --order for compatibility. rpt=Blocks of repeats (i.e. repeats are slowest varying), tis=Blocsk of TIs/PLDs")

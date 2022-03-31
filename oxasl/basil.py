@@ -147,6 +147,14 @@ def run(wsp, prefit=True, **kwargs):
     else:
         raise ValueError("Unrecognized mask policy: %s" % mask_policy)
 
+    if wsp.tiimg is not None: 
+        tiimg = wsp.tiimg.nibImage.dataobj[...,0]
+        maskarr = mask.nibImage.dataobj[...]
+        if tiimg[maskarr > 0].min() < 1e-3: 
+            raise ValueError("Some voxels within the analysis mask have close"
+                " to zero TI in the supplied tiimg. This will cause numerical"
+                " errors during fitting.")
+
     # If we only have one volume, set a nominal noise prior as it is not possible to
     # estimate from the data
     if wsp.asldata.nvols / wsp.asldata.ntc == 1:
@@ -158,7 +166,8 @@ def run(wsp, prefit=True, **kwargs):
         wsp.log.write(" - Doing initial fit on mean at each TI\n\n")
         init_wsp = wsp.sub("init")
         main_wsp = wsp.sub("main")
-        basil_fit(init_wsp, wsp.asldata.mean_across_repeats(), mask=mask)
+        basil_fit(init_wsp, wsp.asldata.mean_across_repeats(), mask=mask, 
+            tiimg=(wsp.tiimg.mean_across_repeats() if wsp.tiimg else None))
         wsp.basil_options["continue-from-mvn"] = wsp.init.finalstep.finalMVN
         main_wsp.initmvn = wsp.basil_options["continue-from-mvn"]
     else:
@@ -166,10 +175,10 @@ def run(wsp, prefit=True, **kwargs):
 
     # Main run on full ASL data
     wsp.log.write("\n - Doing fit on full ASL data\n\n")
-    basil_fit(main_wsp, wsp.asldata, mask=mask)
+    basil_fit(main_wsp, wsp.asldata, mask=mask, tiimg=wsp.tiimg)
     wsp.finalstep = main_wsp.finalstep
 
-def basil_fit(wsp, asldata, mask=None):
+def basil_fit(wsp, asldata, mask=None, tiimg=None):
     """
     Run Bayesian model fitting on ASL data
 
@@ -177,11 +186,13 @@ def basil_fit(wsp, asldata, mask=None):
 
     :param wsp: Workspace object
     :param asldata: AslImage object to use as input data
+    :param mask: Mask for ASL data 
+    :param tiimg: User-suppled TI volume, overrides other TI/PLD related params. 
     """
     if len(asldata.tes) > 1:
-        steps = basil_steps_multite(wsp, asldata, mask)
+        steps = basil_steps_multite(wsp, asldata, mask, tiimg)
     else:
-        steps = basil_steps(wsp, asldata, mask)
+        steps = basil_steps(wsp, asldata, mask, tiimg)
 
     prev_result = None
     wsp.asldata_diff = asldata.diff().reorder("rt")
@@ -243,7 +254,7 @@ def _calc_slicedt(wsp, options):
 
         options["tiimg"] = wsp.tiimg
 
-def basil_steps(wsp, asldata, mask=None):
+def basil_steps(wsp, asldata, mask=None, tiimg=None):
     """
     Get the steps required for a BASIL run
 
@@ -286,9 +297,15 @@ def basil_steps(wsp, asldata, mask=None):
     # We choose to pass TIs (not PLDs). The asldata object ensures that
     # TIs are correctly derived from PLDs, when these are specified, by adding
     # the bolus duration.
-    for idx, ti in enumerate(asldata.tis):
-        options["ti%i" % (idx+1)] = ti
-        options["rpt%i" % (idx+1)] = asldata.rpts[idx]
+    have_tiimg = (tiimg is not None)
+    if have_tiimg and (tiimg.nvols == asldata.nvols): 
+        wsp.log.write(" - User supplied TI image overrides PLDs/TIs provided\n")
+        options["tiimg"] = tiimg
+
+    else: 
+        for idx, ti in enumerate(asldata.tis):
+            options["ti%i" % (idx+1)] = ti
+            options["rpt%i" % (idx+1)] = asldata.rpts[idx]
 
     # Bolus duration - use a single value where possible as cannot infer otherwise
     taus = getattr(asldata, "taus", [1.8,])
@@ -303,7 +320,12 @@ def basil_steps(wsp, asldata, mask=None):
         if getattr(asldata, attr, None) is not None:
             options[attr] = getattr(asldata, attr)
 
-    _calc_slicedt(wsp, options)
+    if not have_tiimg: 
+        _calc_slicedt(wsp, options)
+    else: 
+        dt = options.pop('slicedt', None)
+        if dt:  
+            wsp.log.write(" - User supplied TI image overrides slidedt %f \n" % dt)
 
     if wsp.noiseprior:
         # Use an informative noise prior
