@@ -246,11 +246,10 @@ def report_asl(wsp):
     page.heading("ASL input data")
     md_table = [(key, value) for key, value in wsp.asldata.metadata_summary().items()]
     page.table(md_table)
-    try:
-        # Not all data can generate a PWI
-        img = wsp.asldata.perf_weighted()
+    if wsp.pwi is not None:
+        img = wsp.pwi
         img_type = "Perfusion-weighted image"
-    except ValueError:
+    else:
         img = wsp.asldata.mean()
         img_type = "Mean ASL data"
 
@@ -264,9 +263,13 @@ def _cleanup(wsp):
     """
     wsp.log.write("\nDoing cleanup\n")
     if not wsp.save_all:
+        if not wsp.save_preproc:
+            wsp.log.write(" - Removing preprocessed data\n")
         if not wsp.save_corrected:
             wsp.log.write(" - Removing corrected data\n")
             wsp.corrected = None
+        if not wsp.save_corrections:
+            wsp.log.write(" - Removing intermediate correction data\n")
             wsp.senscorr = None
             wsp.distcorr = None
             wsp.moco = None
@@ -284,5 +287,8 @@ def _cleanup(wsp):
         if not wsp.save_calib:
             wsp.log.write(" - Removing calibration data\n")
             wsp.calibration = None
-        wsp.input = None
+        if not wsp.save_filter:
+            wsp.filter = None
+        if not wsp.save_input:
+            wsp.input = None
         wsp.rois = None

@@ -171,6 +171,12 @@ def run(wsp):
         finally:
             shutil.rmtree(topup_input)
 
+    try:
+        wsp.corrected.pwi = wsp.corrected.asldata.perf_weighted()
+    except:
+        # Ignore - not all data can generate a PWI
+        pass
+
 def correct_img(wsp, img, linear_mat):
     """
     Apply combined warp/linear transformations to an image in ASL space

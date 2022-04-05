@@ -25,8 +25,12 @@ class Options(OptionCategory):
         groups = []
 
         g = OptionGroup(parser, "Output options")
-        g.add_option("--save-corrected", help="Save corrected input data", action="store_true", default=False)
+        g.add_option("--save-input", help="Save unprocessed input data", action="store_true", default=False)
+        g.add_option("--save-preproc", help="Save preprocessed input data", action="store_true", default=False)
+        g.add_option("--save-corrected", help="Save corrected input data (distortion/moco/sensitivity corrected)", action="store_true", default=False)
+        g.add_option("--save-corrections", help="Save intermediate correction data (e.g. fieldmaps, moco)", action="store_true", default=False)
         g.add_option("--save-reg", help="Save registration information (transforms etc)", action="store_true", default=False)
+        g.add_option("--save-filter", help="Save data filtering output", action="store_true", default=False)
         g.add_option("--save-basil", help="Save Basil modelling output", action="store_true", default=False)
         g.add_option("--save-calib", help="Save calibration output", action="store_true", default=False)
         g.add_option("--save-all", help="Save all output (enabled when --debug specified)", action="store_true", default=False)

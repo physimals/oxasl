@@ -18,6 +18,11 @@ def run(wsp):
     wsp.sub("preproc")
     wsp.preproc.asldata = wsp.input.asldata
     wsp.preproc.aslspace = wsp.preproc.asldata.mean()
+    try:
+        wsp.preproc.pwi = wsp.asldata.perf_weighted()
+    except:
+        # Ignore - not all data can generate a PWI
+        pass
 
     if wsp.calib_first_vol and wsp.input.calib is None:
         wsp.input.calib = wsp.asldata.calib
