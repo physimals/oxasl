@@ -96,7 +96,7 @@ def run(wsp):
     """
     wsp.sub("calibration")
 
-    wsp.calibration.calib_method = [m.strip().lower() for m in wsp.calib_method.split(",")]
+    wsp.calibration.calib_method = [m.strip().lower() for m in wsp.ifnone("calib_method", "voxelwise").split(",")]
     # Synonyms
     wsp.calibration.calib_method = ["voxelwise" if w == "voxel" else w for w in wsp.calibration.calib_method]
     wsp.calibration.calib_method = ["refregion" if w == "single" else w for w in wsp.calibration.calib_method]
@@ -601,7 +601,8 @@ def get_tissrefmask(wsp):
     page.heading("Calibration reference region: %s" % wsp.tissref)
     page.text("Reference region was automatically generated for tissue type: %s" % wsp.tissref.upper())
     page.heading("Partial volume map for %s tissue (from structural segmentation)" % wsp.tissref.upper(), level=1)
-    wsp.refpve = getattr(wsp.structural, "%s_pv" % wsp.tissref.lower())
+    refpve = getattr(wsp.structural, "%s_pv" % wsp.tissref.lower())
+    wsp.refpve = reg.change_space(wsp, refpve, "struc")
     page.image("refpve", LightboxImage(wsp.refpve, bgimage=wsp.structural.brain))
 
     if wsp.tissref == "csf" and not wsp.csfmaskingoff:

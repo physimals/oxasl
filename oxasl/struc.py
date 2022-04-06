@@ -126,11 +126,11 @@ def segment(wsp):
         else:
             raise ValueError("No structural data provided - cannot segment")
 
-        if wsp.structural.csf_seg is not None:
+        if wsp.structural.csf_seg is None:
             wsp.structural.csf_seg = Image((wsp.structural.csf_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
-        if wsp.structural.gm_seg is not None:
+        if wsp.structural.gm_seg is None:
             wsp.structural.gm_seg = Image((wsp.structural.gm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
-        if wsp.structural.wm_seg is not None:
+        if wsp.structural.wm_seg is None:
             wsp.structural.wm_seg = Image((wsp.structural.wm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
 
         page.heading("Segmentation image", level=1)
@@ -140,3 +140,9 @@ def segment(wsp):
         page.image("gm_pv", LightboxImage(wsp.structural.gm_pv, bgimage=wsp.structural.brain))
         page.text("White matter partial volume")
         page.image("wm_pv", LightboxImage(wsp.structural.wm_pv, bgimage=wsp.structural.brain))
+    else:
+        # User-supplied segmentation - treat as PV as well
+        # Note this is in ASL space whereas above it is in struc space?
+        wsp.structural.csf_pv = wsp.structural.csf_seg
+        wsp.structural.gm_pv = wsp.structural.gm_seg
+        wsp.structural.wm_pv = wsp.structural.wm_seg
