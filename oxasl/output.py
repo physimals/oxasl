@@ -203,9 +203,12 @@ def __output_trans_helper(wsp):
 
     # We loop over these combinations of variables for each output space
     # (structural, standard, custom)
-    suffixes = ("", "_std", "_var", "_calib", "_std_calib", "_var_calib")
-    outputs = ("perfusion", "aCBV", "arrival", "perfusion_wm", 
-        "arrival_wm", "modelfit", "modelfit_mean", "residuals", "texch", "mask")
+    suffixes = ("", "_std", "_var")
+    outputs = (
+        "perfusion", "aCBV", "arrival", "perfusion_wm", 
+        "arrival_wm", "modelfit", "modelfit_mean", 
+        "residuals", "texch", "mask"
+    )
 
     for suff, out in itertools.product(suffixes, outputs):
         data = getattr(wsp.native, out + suff)
@@ -233,6 +236,12 @@ def _output_trans(wsp):
     for space, name in output_spaces:
         wsp.log.write("\nGenerating output in %s space\n" % name)
         output_wsp = wsp.sub(space)
-        for suffix, output, native_output in __output_trans_helper(wsp): 
-            setattr(output_wsp, output + suffix, reg.change_space(wsp, native_output, space, mask=(output == 'mask')))
+        for suffix, output, native_data in __output_trans_helper(wsp): 
+            setattr(output_wsp, output + suffix, reg.change_space(wsp, native_data, space, mask=(output == 'mask')))
+            for method in wsp.calibration.calib_method:
+                sub_wsp_name = "calib_%s" % method
+                native_calib_output_wsp = getattr(wsp.native, sub_wsp_name)
+                native_calib_data = getattr(native_calib_output_wsp, output + suffix)
+                calib_output_wsp = output_wsp.sub(sub_wsp_name)
+                setattr(calib_output_wsp, output + suffix, reg.change_space(wsp, native_calib_data, space, mask=(output == 'mask')))
         wsp.log.write(" - DONE\n")
