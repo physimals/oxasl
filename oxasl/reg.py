@@ -37,6 +37,7 @@ class Options(OptionCategory):
         group.add_option("--nativeref", "--regfrom", help="Registration image (e.g. perfusion weighted image)", type="image")
         group.add_option("--nativeref-method", "--regfrom-method", help="How to choose the registration reference image - calib=use calibration image, mean=use mean ASL data, pwi=use PWI (mean differenced ASL data)")
         group.add_option("--reg-init-bbr", help="Use BBR for initial as well as final registration - generally used in conjunction with --nativeref-method=pwi", action="store_true", default=False)
+        group.add_option("--struc-std-fnirt", help="Use FNIRT to do nonlinear structural/std space registration when FSL_ANAT output is not available", action="store_true", default=False)
         #group.add_option("--bbr", dest="do_bbr", help="Include BBR registration step using EPI_REG", action="store_true", default=False)
         #group.add_option("--flirt", dest="do_flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
         #group.add_option("--flirtsch", help="user-specified FLIRT schedule for registration")
@@ -257,7 +258,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
             page.heading("WM mask aligned with ASL data", level=1)
             page.image("wm_reg_%s" % name, LightboxImage(wm_asl, bgimage=wsp.reg.nativeref))
 
-def reg_struc2std(wsp, fnirt=False, **kwargs):
+def reg_struc2std(wsp, **kwargs):
     """
     Determine structural -> standard space registration
 
@@ -291,7 +292,7 @@ def reg_struc2std(wsp, fnirt=False, **kwargs):
         flirt_result = fsl.flirt(wsp.structural.brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
         wsp.reg.struc2std = flirt_result["omat"]
 
-        if fnirt:
+        if wsp.struc_std_fnirt:
             wsp.log.write(" - Registering structural image to standard space using FNIRT\n")
             fnirt_result = fsl.fnirt(wsp.structural.brain, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
             wsp.reg.struc2std = fnirt_result["cout"]
@@ -411,12 +412,14 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
     else:
         if have_warp:
             kwargs = {"warp" : trans, "premat" : premat, "rel" : True, "postmat" : postmat}
-        elif premat is not None or postmat is not None:
-            raise ValueError("Can't set a pre/post transformation matrix unless using a warp")
         else:
             kwargs = {"premat" : trans}
+            if premat is not None:
+                kwargs["premat"] = np.dot(kwargs["premat"], premat)
+            elif postmat is not None:
+                kwargs["premat"] = np.dot(postmat, kwargs["premat"])
         ret = fsl.applywarp(img, ref, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog, **kwargs)["out"]
-    
+
     if mask:
         # Binarise mask images
         ret = Image((ret.data > mask_thresh).astype(np.int), header=ret.header)
