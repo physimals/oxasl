@@ -7,9 +7,11 @@ from __future__ import print_function
 
 import sys
 
-import scipy
-
 import fsl.wrappers as fsl
+from fsl.data.image import Image
+
+import scipy
+import numpy as np
 
 from oxasl import Workspace, image
 from oxasl.options import AslOptionParser, OptionCategory, OptionGroup, GenericOptions
