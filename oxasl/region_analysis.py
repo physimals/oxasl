@@ -194,7 +194,6 @@ def oxasl_add_custom_atlas(wsp, rois, atlas_img, region_names):
     labels = [idx for idx in np.unique(atlas_img.data) if idx != 0]
     if len(labels) != len(region_names):
         region_names = ["Region %i" % label for label in labels]
-    print(region_names)
     for idx, label in enumerate(labels):
         roi_mni_data = atlas_img.data.copy()
         roi_mni_data[roi_mni_data != label] = 0
