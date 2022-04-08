@@ -62,7 +62,7 @@ def run(wsp):
             wsp.basil_options = wsp.ifnone("basil_options", {})
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
                                       "pgm" : wsp.structural.gm_pv_asl})
-            basil.run(wsp.sub("basil_pvcorr", prefit=False))
+            basil.run(wsp.sub("basil_pvcorr"), prefit=False)
             wsp.basildirs.append("pvcorr")
 
         if wsp.surf_pvcorr:
