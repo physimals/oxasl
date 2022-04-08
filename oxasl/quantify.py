@@ -14,31 +14,49 @@ try:
 except ImportError:
     oxasl_multite = None
 
+try:
+    import oxasl_ve
+except ImportError:
+    oxasl_ve = None
+
 def run(wsp):
     wsp.basildirs = []
 
     # Quantification in native space
     quantify = _get_quantify_method(wsp)
-
-    quantify.run(wsp.sub("basil"))
-    wsp.basildirs.append("")
+    quantify(wsp)
 
     # Re-do registration using PWI as reference
-    reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False)
+    reg.run(wsp, redo=True, struc_bbr=True, struc_flirt=False, use_basil_wsp=wsp.basil)
 
     # Quantification in alternate spaces
-    for quantify_space in ("struc", "std", "custom"):
-        if wsp.ifnone("quantify_%s" % quantify_space, False):
-            basil_wsp = wsp.sub("basil_%s" % quantify_space)
-            wsp.basildirs.append(quantify_space)
-            basil_wsp.image_space = quantify_space
-            quantify.run(basil_wsp) 
+    for basildir in wsp.basildirs:
+        for quantify_space in ("struc", "std", "custom"):
+            if wsp.ifnone("quantify_%s" % quantify_space, False):
+                if basildir:
+                    quantify_name = "%s_%s" % (basildir, quantify_space)
+                else:
+                    quantify_name = quantify_space
+                basil_wsp = wsp.sub("basil_ " + quantify_name)
+                wsp.basildirs.append(quantify_name)
+                basil_wsp.image_space = quantify_space
+                quantify.run(basil_wsp) 
+
+def _default_quantify(wsp):
+    basil.run(wsp.sub("basil"))
+    wsp.basildirs.append("")
 
 def _get_quantify_method(wsp):
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
         if wsp.asldata.ntes == 1:
-            return basil
+            return _default_quantify
         elif oxasl_multite is None:
             raise ValueError("Multi-TE data supplied but oxasl_multite is not installed")
         else:
             return oxasl_multite
+    elif wsp.asldata.iaf == "ve":
+        if oxasl_ve is None:
+            raise ValueError("VE data supplied but oxasl_ve is not installed")
+        else:
+            return oxasl_ve.run
+
