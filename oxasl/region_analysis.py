@@ -203,46 +203,44 @@ def oxasl_add_custom_atlas(wsp, rois, atlas_img, region_names):
         oxasl_add_roi(wsp, rois, name, roi_native, threshold=0.5, roi_mni=roi_mni)
 
 def oxasl_perfusion_data(wsp):
-    perfusion_data = [
-        {
-            "suffix" : "", 
-            "f" : wsp.perfusion,
-            "var" :  wsp.perfusion_var,
-            "mask" : wsp.rois.mask.data,
-        },
-    ]
     if wsp.perfusion_wm is not None:
         wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.min_gm_thresh, wsp.min_wm_thresh))
-        perfusion_data.extend([
+        perfusion_data = [
             {
                 "suffix" : "_gm", 
                 "f" : wsp.perfusion,
                 "var" : wsp.perfusion_var,
-                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > wsp.min_gm_thresh),
+                "mask" : np.logical_and(wsp.mask.data, wsp.structural.gm_pv_asl.data > wsp.min_gm_thresh),
             },
             {
                 "suffix" : "_wm", 
                 "f" : wsp.perfusion_wm,
                 "var" : wsp.perfusion_wm_var,
-                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > wsp.min_wm_thresh),
+                "mask" : np.logical_and(wsp.mask.data, wsp.structural.wm_pv_asl.data > wsp.min_wm_thresh),
             },
-        ])
+        ]
     else:
         wsp.log.write(" - No partial volume corrected results - will mask ROIs using 'pure' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.gm_thresh, wsp.wm_thresh))
-        perfusion_data.extend([
+        perfusion_data = [
+            {
+                "suffix" : "", 
+                "f" : wsp.perfusion,
+                "var" :  wsp.perfusion_var,
+                "mask" : wsp.mask.data,
+            },
             {
                 "suffix" : "_gm",
                 "f" : wsp.perfusion,
                 "var" :  wsp.perfusion_var,
-                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.gm_pv_asl.data > wsp.gm_thresh),
+                "mask" : np.logical_and(wsp.mask.data, wsp.structural.gm_pv_asl.data > wsp.gm_thresh),
             },
             {
                 "suffix" : "_wm",
                 "f" : wsp.perfusion,
                 "var" :  wsp.perfusion_var,
-                "mask" : np.logical_and(wsp.rois.mask.data, wsp.structural.wm_pv_asl.data > wsp.wm_thresh),
+                "mask" : np.logical_and(wsp.mask.data, wsp.structural.wm_pv_asl.data > wsp.wm_thresh),
             },
-        ])
+        ]
     return perfusion_data
 
 def run(wsp):

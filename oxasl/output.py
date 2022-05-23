@@ -67,9 +67,9 @@ def run(wsp):
         else:
             basil_wsp = "basil"
             output_wsp = "output"
-        _output_basil(getattr(wsp, basil_wsp), wsp.sub(output_wsp), basildir)
+        _output_basil(getattr(wsp, basil_wsp), wsp.sub(output_wsp))
 
-def _output_basil(basil_wsp, output_wsp, basildir):
+def _output_basil(basil_wsp, output_wsp):
     """
     Do model fitting on TC/CT or subtracted data
 
@@ -83,12 +83,12 @@ def _output_basil(basil_wsp, output_wsp, basildir):
      - ``output.struc``  - Structural space output
     """
     if basil_wsp.image_space is None:
-        _output_native(output_wsp.sub("native"), basil_wsp, basildir)
+        _output_native(output_wsp.sub("native"), basil_wsp)
         _output_trans(output_wsp)
     else:
-        _output_native(output_wsp, basil_wsp, basildir)
+        _output_native(output_wsp, basil_wsp)
 
-def _output_native(wsp, basil_wsp, basildir, report=None):
+def _output_native(wsp, basil_wsp):
     """
     Create output images from a Basil run
 
@@ -103,6 +103,9 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
     # with the model
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
         wsp.diffdata_mean = wsp.asldata.diff().mean_across_repeats()
+
+    # Save the analysis mask
+    wsp.mask = basil_wsp.analysis_mask
 
     # Output model fitting results
     prefixes = ["", "mean"]
@@ -131,7 +134,7 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
                 data = np.copy(img.data)
                 data[~np.isfinite(data)] = 0
                 data[img.data < 0] = 0
-                mask = reg.change_space(wsp, wsp.rois.mask, img)
+                mask = reg.change_space(wsp, basil_wsp.analysis_mask, img)
                 data[mask.data == 0] = 0
                 img = Image(data, header=img.header)
                 name, multiplier, calibrate, units, normal_gm, normal_wm = oxasl_output
@@ -157,9 +160,6 @@ def _output_native(wsp, basil_wsp, basildir, report=None):
                 else:
                     output_report(wsp, name, units, normal_gm, normal_wm)
 
-    if wsp.save_mask:
-        wsp.mask = wsp.rois.mask
-
 def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
     """
     Create report pages from output data
@@ -180,7 +180,7 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
 
         page.heading("Metrics", level=1)
         data = img.data
-        roi = reg.change_space(wsp, wsp.rois.mask, img).data
+        roi = reg.change_space(wsp, wsp.mask, img).data
         table = []
         table.append(["Mean within mask", "%.4g %s" % (np.mean(data[roi > 0.5]), units), ""])
         if wsp.structural.struc is not None:
@@ -193,7 +193,7 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
         page.table(table, headers=["Metric", "Value", "Typical"])
 
         page.heading("Image", level=1)
-        page.image("%s_%s_img" % (name, calib_method), LightboxImage(img, zeromask=False, mask=wsp.rois.mask, colorbar=True))
+        page.image("%s_%s_img" % (name, calib_method), LightboxImage(img, zeromask=False, mask=wsp.mask, colorbar=True))
 
 def __output_trans_helper(wsp):
     """

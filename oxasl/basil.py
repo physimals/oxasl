@@ -128,6 +128,14 @@ def run(wsp, prefit=True, **kwargs):
     # Pick up extra BASIL options
     wsp.basil_options = dict(wsp.ifnone("basil_options", {}))
 
+    # Save a copy of the *analysis* mask to be used for this data as this might change later
+    # e.g. for PVC. Fitting may occur in a different mask. Two locations for compatibility...
+    if wsp.rois is not None and wsp.rois.mask is not None:
+        wsp.analysis_mask = wsp.rois.mask
+    else:
+        wsp.analysis_mask = wsp.mask
+
+    # Now determine the *fitting* mask
     mask_policy = wsp.ifnone("basil_mask", "default")
     if mask_policy in ("default", "dilated"):
         wsp.log.write(" - Using pipeline analysis mask\n")
