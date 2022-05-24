@@ -187,8 +187,6 @@ def get_m0_voxelwise(wsp):
         if edgecorr:
             wsp.log.write(" - Doing edge correction\n")
             m0 = _edge_correct(m0, wsp.rois.mask)
-        wsp.log.write(" - Masking M0 image")
-        m0[wsp.rois.mask.data == 0] = 0
         wsp.log.write(" - mean in mask: %f\n" % np.mean(m0[wsp.rois.mask.data > 0]))
     else:
         wsp.log.write(" - Mean M0 (no mask): %f\n" % np.mean(m0))
@@ -230,20 +228,20 @@ def _edge_correct(m0, brain_mask):
     # beyond the boundary (by setting them to nan)
     m0 = scipy.ndimage.generic_filter(m0, np.nanmedian, size=3, mode='constant', cval=np.nan)
 
-    # Erode mask using 3x3x3 structuring element
+    # Erode mask using 3x3x3 structuring element and zero M0 values outside the mask (i.e. edge voxels)
     mask_ero = scipy.ndimage.morphology.binary_erosion(brain_mask, structure=np.ones([3, 3, 3]), border_value=1)
     m0[mask_ero == 0] = 0
 
-    # Extrapolate remaining data to fit original mask
+    # Extrapolate remaining data
     # ASL_FILE works slicewise using a mean 5x5 filter on nonzero values, so we will do the same
-    # Note that we run the filter twice to allow zero-voxels that initially have no non-zero neighbours
-    # to be extrapolated the second time. This does not affect any previously extrapolated voxels.
+    # Note that we run the filter continuously until the whole volume is full. Subsequent runs do not
+    # affect existing nonzero data, but we want to fill everything so if the mask changes (e.g. prior to PVC)
+    # we don't end up with zero calibration data in an unmasked voxel
     for z in range(m0.shape[2]):
-        zslice = m0[..., z]
-        zslice_extrap = scipy.ndimage.filters.generic_filter(zslice, _masked_mean, footprint=np.ones([5, 5]))
-        zslice_extrap = scipy.ndimage.filters.generic_filter(zslice_extrap, _masked_mean, footprint=np.ones([5, 5]))
+        zslice_extrap = np.copy(m0[..., z])
+        while np.any(np.isclose(zslice_extrap, 0)):
+            zslice_extrap = scipy.ndimage.filters.generic_filter(zslice_extrap, _masked_mean, footprint=np.ones([5, 5]))
         m0[..., z] = zslice_extrap
-    m0[brain_mask == 0] = 0
 
     return m0
 
