@@ -196,8 +196,8 @@ def oxasl_add_custom_atlas(wsp, rois, atlas_img, region_names):
         region_names = ["Region %i" % label for label in labels]
     for idx, label in enumerate(labels):
         roi_mni_data = atlas_img.data.copy()
-        roi_mni_data[roi_mni_data != label] = 0
-        roi_mni = Image(roi_mni_data, header=atlas_img.header)
+        roi_mni_bin = (roi_mni_data == label).astype(np.int)
+        roi_mni = Image(roi_mni_bin, header=atlas_img.header)
         name = region_names[idx]
         roi_native = reg.change_space(wsp, roi_mni, "native")
         oxasl_add_roi(wsp, rois, name, roi_native, threshold=0.5, roi_mni=roi_mni)
@@ -277,11 +277,10 @@ def run(wsp):
     # Add ROIs from command line
     wsp.log.write("\nLoading user-specified ROIs\n")
     add_roi = [l.strip() for l in wsp.ifnone("add_roi", "").split(",") if l.strip() != ""]
-
     for fname in add_roi:
         roi_native = reg.change_space(wsp, Image(fname), "native")
         oxasl_add_roi(wsp, rois, os.path.basename(fname).split(".")[0], roi_native, 0.5)
-    
+
     add_atlas = [l.strip() for l in wsp.ifnone("add_mni_atlas", "").split(",") if l.strip() != ""]
     atlas_labels = [l.strip() for l in wsp.ifnone("add_mni_atlas_labels", "").split(",") if l.strip() != ""]
     for idx, fname in enumerate(add_atlas):
