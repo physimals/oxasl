@@ -52,6 +52,7 @@ OUTPUT_ITEMS = {
     "delttiss" : ("arrival", 1, False, "s", "", ""),
     "fwm" : ("perfusion_wm", 6000, True, "ml/100g/min", "", "10-20"),
     "deltwm" : ("arrival_wm", 1, False, "s", "", ""),
+    "noise_means" : ("noise", 1, False, "", "", ""),
     "modelfit" : ("modelfit", 1, False, "", "", ""),
     "modelfit_mean" : ("modelfit_mean", 1, False, "", "", ""),
     "residuals" : ("residuals", 1, False, "", "", ""),

@@ -284,6 +284,7 @@ def basil_steps(wsp, asldata, mask=None):
         "save-mean" : True,
         "save-mvn" : True,
         "save-std" : True,
+        "save-noise-mean" : True,
         "save-model-fit" : True,
         "save-residuals" : wsp.ifnone("output_residuals", False),
     }
