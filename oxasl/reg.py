@@ -275,7 +275,16 @@ def reg_struc2std(wsp, **kwargs):
     if wsp.reg.std2struc is not None:
         return
 
-    if wsp.fslanat:
+    if wsp.struc2std_warp is not None:
+        wsp.log.write(" - Using user-specified structural->std nonlinear transformation warp\n")
+        wsp.reg.struc2std = wsp.struc2std_warp
+
+    elif wsp.struc2std is not None:
+        wsp.log.write(" - Using user-specified structural->std linear transformation matrix\n")
+        wsp.reg.struc2std = wsp.struc2std
+        wsp.log.write(str(wsp.reg.struc2std) + "\n")
+
+    elif wsp.fslanat:
         warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff.nii.gz")
         mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
         if os.path.isfile(warp):
@@ -284,6 +293,7 @@ def reg_struc2std(wsp, **kwargs):
         elif os.path.isfile(mat):
             wsp.log.write(" - Using structural->std linear transformation from FSL_ANAT\n")
             wsp.reg.struc2std = load_matrix(mat)
+            wsp.log.write(str(wsp.reg.struc2std) + "\n")
 
     if wsp.reg.struc2std is None:
         wsp.log.write(" - Registering structural image to standard space using FLIRT\n")

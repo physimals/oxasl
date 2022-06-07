@@ -34,8 +34,8 @@ class Options(OptionCategory):
         group.add_option("--csf-seg", help="CSF segmentation of structural image in structural space", type="image", default=None)
         group.add_option("--fslanat", help="FSL_ANAT output directory for structural information", default=None)
         group.add_option("--fastsrc", help="Images from a FAST segmentation - if not set FAST will be run on structural image")
-        group.add_option("--struc2std", help="Structural to MNI152 linear registration (.mat)")
-        group.add_option("--struc2std-warp", help="Structural to MNI152 non-linear registration (warp)")
+        group.add_option("--struc2std", help="Structural to MNI152 linear registration (.mat)", type="matrix")
+        group.add_option("--struc2std-warp", help="Structural to MNI152 non-linear registration (warp)", type="image")
 
         return [group, ]
 
