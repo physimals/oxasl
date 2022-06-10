@@ -233,6 +233,29 @@ def _edge_correct(m0, brain_mask):
     m0[mask_ero == 0] = 0
 
     # Extrapolate remaining data
+    # ASL_FILE works slicewise using a mean 5x5 filter on nonzero values, so we will do the same as far as possible
+    #
+    # Note that we run the filter continuously until the whole volume is full. Subsequent runs do not
+    # affect existing nonzero data, but we want to fill everything so if the mask changes (e.g. prior to PVC)
+    # we don't end up with zero calibration data in an unmasked voxel
+    #
+    # Finally, there is an edge case where a z-slice is entirely zero after erosion. In this case we have nothing to
+    # extrapolate from, so we avoid the 2D extrapolation step. A final 3D extrapolation picks up these slices.
+    for z in range(m0.shape[2]):
+        zslice_extrap = np.copy(m0[..., z])
+        if np.all(np.isclose(zslice_extrap, 0)):
+            continue
+        while np.any(np.isclose(zslice_extrap, 0)):
+            zslice_extrap = scipy.ndimage.filters.generic_filter(zslice_extrap, _masked_mean, footprint=np.ones([5, 5]))
+        m0[..., z] = zslice_extrap
+
+    # If any zeros remain because of completely empty slices, fill them in using 3D extrapolation
+    while np.any(np.isclose(m0, 0)):
+        m0 = scipy.ndimage.filters.generic_filter(m0, _masked_mean, footprint=np.ones([5, 5, 5]))
+
+    return m0
+
+    # Extrapolate remaining data
     # ASL_FILE works slicewise using a mean 5x5 filter on nonzero values, so we will do the same
     # Note that we run the filter continuously until the whole volume is full. Subsequent runs do not
     # affect existing nonzero data, but we want to fill everything so if the mask changes (e.g. prior to PVC)
