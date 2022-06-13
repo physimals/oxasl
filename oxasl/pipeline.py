@@ -217,13 +217,15 @@ def oxasl(wsp):
     senscorr.run(wsp)
     corrections.run(wsp)
     mask.run(wsp)
-    m0.run(wsp)
 
     # Quantification
     filter.run(wsp)
     prequantify.run(wsp)
     quantify.run(wsp)
     pvc.run(wsp)
+
+    # Calibration and output
+    m0.run(wsp)
     output.run(wsp)
 
     # Post processing and reporting
