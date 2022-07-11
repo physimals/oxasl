@@ -89,7 +89,7 @@ def test_input_wsp():
 
 def test_default_wsp():
     """ Test default sub-workspaces for search """
-    wsp = Workspace(defaults=["cars"])
+    wsp = Workspace(search_childs=["cars"])
     assert(wsp.cars is None)
     wsp.ferrari = 9
     wsp.merc = 8
@@ -106,7 +106,7 @@ def test_default_wsp():
     
 def test_default_wsp_multiple():
     """ Test multiple default sub-workspaces for search """
-    wsp = Workspace(defaults=["plants", "trees"])
+    wsp = Workspace(search_childs=["plants", "trees"])
     wsp.daffodil = 9
     wsp.larch = 1
     wsp.sub("trees")

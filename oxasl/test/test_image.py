@@ -204,7 +204,7 @@ def test_diff_ct():
 def test_diff_hadamard_ltr():
     had_mat = scipy.linalg.hadamard(8)
     # For nth sub-bolus make control=0, tag=n
-    d = np.zeros([5, 5, 5, 48], dtype=np.float)
+    d = np.zeros([5, 5, 5, 48], dtype=float)
     for img in range(48):
         for sub_bolus in range(7):
             if had_mat[img % 8, sub_bolus+1] == 1:
@@ -228,7 +228,7 @@ def test_diff_hadamard_ltr():
 def test_diff_hadamard_lrt():
     had_mat = scipy.linalg.hadamard(8)
     # For nth sub-bolus make control=0, tag=n
-    d = np.zeros([1, 1, 1, 48], dtype=np.float)
+    d = np.zeros([1, 1, 1, 48], dtype=float)
     for img in range(48):
         for sub_bolus in range(7):
             if had_mat[img % 8, sub_bolus+1] == 1:
