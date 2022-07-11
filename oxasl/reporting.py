@@ -290,7 +290,7 @@ class ReportPage(object):
         # Required because csv does not support unicode in python 2
         if six.PY2:
             for row in tabdata:
-                writer.writerow([unicode(s).encode("utf-8") for s in row])
+                writer.writerow([six.text_type(s).encode("utf-8") for s in row])
             for line in csvtxt.getvalue().splitlines():
                 self._content += "    " + line.decode("utf-8") + "\n"
         else:
