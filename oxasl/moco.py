@@ -9,20 +9,13 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 from __future__ import unicode_literals
 
 import os
-import sys
-import math
-import warnings
-import traceback
 
 import numpy as np
 
-from fsl.data.image import Image, defaultExt
 import fsl.wrappers as fsl
 
-from oxasl import __version__, Workspace, struc, brain, reg
-from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, OptionGroup, load_matrix
-from oxasl.wrappers import epi_reg
-from oxasl.reporting import LightboxImage, LineGraph
+from oxasl import reg
+from oxasl.reporting import LineGraph
 
 def run(wsp):
     """

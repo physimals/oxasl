@@ -17,20 +17,17 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 """
 from __future__ import unicode_literals
 
-import os
 import sys
-import tempfile
-import shutil
 
 import numpy as np
 
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from oxasl import reg, struc
-from oxasl.options import OptionCategory, OptionGroup
-from oxasl.reporting import LightboxImage, LineGraph
-from oxasl.wrappers import epi_reg, fnirtfileutils
+from oxasl import reg
+from oxasl.options import OptionGroup
+from oxasl.reporting import LightboxImage
+from oxasl.wrappers import epi_reg
 
 def add_options(parser):
     g = OptionGroup(parser, "Distortion correction using fieldmap")

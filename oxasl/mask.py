@@ -6,7 +6,6 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 import numpy as np
 import scipy as sp
 
-import fsl.wrappers as fsl
 from fsl.data.image import Image
 
 from oxasl import reg

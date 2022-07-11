@@ -5,10 +5,6 @@ OXASL - Module which generates perfusion stats within various ROIs
 Copyright (c) 2008-2020 Univerisity of Oxford
 """
 import os
-import sys
-import argparse
-import csv
-import glob
 
 import numpy as np
 import scipy.stats
@@ -16,7 +12,6 @@ import pandas as pd
 
 from fsl.data import atlases
 from fsl.data.image import Image
-import fsl.wrappers as fsl
 
 from oxasl import reg
 from oxasl.options import OptionCategory, OptionGroup

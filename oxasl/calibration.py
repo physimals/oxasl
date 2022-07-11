@@ -4,22 +4,11 @@ OXASL - Module to calibrate a perfusion output using previously calculated M0 va
 
 Copyright (c) 2008-2020 Univerisity of Oxford
 """
-
-import sys
-import os
-import math
-import traceback
-
 import numpy as np
-import scipy.ndimage
 
 from fsl.data.image import Image
-from fsl.data.atlases import AtlasRegistry
 
-from oxasl import Workspace, struc, reg
-from oxasl.image import summary
 from oxasl.options import OptionCategory
-from oxasl.reporting import LightboxImage
 
 class Options(OptionCategory):
     """

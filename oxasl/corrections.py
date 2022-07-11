@@ -28,8 +28,6 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 """
 from __future__ import unicode_literals
 
-import os
-import sys
 import tempfile
 import shutil
 
@@ -38,10 +36,9 @@ import numpy as np
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from oxasl import reg, struc
+from oxasl import reg
 from oxasl.options import OptionCategory
-from oxasl.reporting import LightboxImage, LineGraph
-from oxasl.wrappers import epi_reg, fnirtfileutils
+from oxasl.wrappers import fnirtfileutils
 
 class Options(OptionCategory):
     """

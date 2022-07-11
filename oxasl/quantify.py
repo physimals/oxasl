@@ -7,7 +7,7 @@ Fits a kinetic model to differenced ASL data
 Copyright (c) 2008-2020 Univerisity of Oxford
 """
 
-from oxasl import basil, reg, output
+from oxasl import basil, reg
 
 try:
     import oxasl_multite

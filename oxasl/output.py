@@ -10,7 +10,7 @@ import numpy as np
 from fsl.data.image import Image
 
 from oxasl.options import OptionCategory, OptionGroup
-from oxasl import reg, corrections, calibration
+from oxasl import reg, calibration
 from oxasl.reporting import LightboxImage
 
 class Options(OptionCategory):

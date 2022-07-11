@@ -8,7 +8,7 @@ import numpy as np
 
 from fsl.data.image import Image
 
-from oxasl import basil, mask, reg, output
+from oxasl import basil, mask, reg
 from oxasl.options import OptionCategory, OptionGroup
 
 class Options(OptionCategory):

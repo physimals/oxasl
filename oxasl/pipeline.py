@@ -51,11 +51,6 @@ from __future__ import print_function
 import sys
 import os
 import traceback
-import itertools
-
-import numpy as np
-
-from fsl.data.image import Image
 
 # Quick-and-dirty plugin imports - to be replaced with entry points and a defined plugin api
 # at some point
