@@ -186,7 +186,7 @@ def reg_asl2custom(wsp):
             _, wsp.reg.custom2struc = reg_flirt(wsp, wsp.reg.customref, wsp.structural.struc)
             wsp.reg.struc2custom = np.linalg.inv(wsp.reg.custom2struc)
 
-        wsp.reg.asl2custom = struc2custom @ wsp.reg.asl2struc
+        wsp.reg.asl2custom = wsp.reg.struc2custom @ wsp.reg.asl2struc
         wsp.reg.custom2asl = np.linalg.inv(wsp.reg.asl2custom)
 
 def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
@@ -580,7 +580,7 @@ def main():
     """
     try:
         parser = AslOptionParser(usage="asl_reg [options]", version=__version__)
-        parser.add_category(RegOptions())
+        parser.add_category(Options())
         parser.add_category(struc.StructuralImageOptions())
         parser.add_category(GenericOptions())
 
