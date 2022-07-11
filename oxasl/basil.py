@@ -234,15 +234,11 @@ def _calc_slicedt(wsp, options):
     if img_space != "native":
         asldata = options["data"]
         _x, _y, z, _t = np.indices(list(asldata.data.shape[:3]) + [asldata.ntis,])
-        print(z.shape)
         tis_arr = np.array(asldata.tis) + (z.astype(np.float32) * options["slicedt"])
-        print(tis_arr.shape)
 
         tis_img = Image(tis_arr, header=options["data"].header)
         wsp.tiimg = reg.change_space(wsp, tis_img, wsp.ifnone("image_space", "native"))
-        
-        #print(ztrans.data)
-        print(wsp.tiimg.data.shape)
+
         del options["slicedt"]
         ti_idx = 1
         while "ti%i" % ti_idx in options:
@@ -704,9 +700,11 @@ class FabberStep(Step):
         Run Fabber, initialising it from the output of a previous step
         """
         if prev_output is not None:
+            print("Final MVN shape from prev: ", prev_output["finalMVN"].shape)
             self.options["continue-from-mvn"] = prev_output["finalMVN"]
-        from .wrappers import fabber
-        ret = fabber(self.options, output=LOAD, progress_log=log, log=fsllog, **kwargs)
+        from .wrappers import fabber, vaby
+        #ret = fabber(self.options, output=LOAD, progress_log=log, log=fsllog, **kwargs)
+        ret = vaby(self.options, output=LOAD, progress_log=log, log=fsllog)
         log.write("\n")
         return ret
 
