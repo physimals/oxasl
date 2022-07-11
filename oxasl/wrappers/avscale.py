@@ -1,6 +1,7 @@
 """
 Wrapper for avscale command
 """
+import six
 
 import fsl.utils.assertions as asrt
 from fsl.wrappers import wrapperutils  as wutils
