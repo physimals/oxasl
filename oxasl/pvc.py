@@ -11,6 +11,11 @@ from fsl.data.image import Image
 from oxasl import basil, mask, reg
 from oxasl.options import OptionCategory, OptionGroup
 
+try:
+    import oxasl_surfpvc
+except ImportError:
+    oxasl_surfpvc = None
+
 class Options(OptionCategory):
     """
     Options for corrections of the input data
