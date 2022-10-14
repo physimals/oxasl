@@ -190,7 +190,7 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
             wm = reg.change_space(wsp, wsp.structural.wm_pv, img).data
             cortex = _get_cortex(wsp)
             some_gm, some_wm = gm > 0.5, wm > 0.5
-            pure_gm, pure_wm = gm > 0.8, wm > 0.9
+            pure_gm, pure_wm = gm > wsp.gm_thresh, wm > wsp.wm_thresh
             table.append(["GM mean", "%.4g %s" % (np.mean(data[some_gm]), units), normal_gm])
             table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[pure_gm]), units), normal_gm])
             table.append(["Cortical GM mean", "%.4g %s" % (np.mean(data[np.logical_and(pure_gm, cortex)]), units), normal_gm])
