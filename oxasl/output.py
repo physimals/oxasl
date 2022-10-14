@@ -8,6 +8,7 @@ import itertools
 import numpy as np
 
 from fsl.data.image import Image
+from fsl.data.atlases import AtlasRegistry
 
 from oxasl.options import OptionCategory, OptionGroup
 from oxasl import reg, calibration
@@ -80,7 +81,7 @@ def _output_basil(basil_wsp, output_wsp):
      - ``basil``         - Contains model fitting output on data without partial volume correction
      - ``basil_pvcorr``  - Contains model fitting output with partial volume correction if
                            ``wsp.pvcorr`` is ``True``
-     - ``output.native`` - Native (ASL) space output from last Basil modelling output
+     - ``output.native`` - ASL space output from last Basil modelling output
      - ``output.struc``  - Structural space output
     """
     if basil_wsp.image_space is None:
@@ -187,14 +188,28 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
         if wsp.structural.struc is not None:
             gm = reg.change_space(wsp, wsp.structural.gm_pv, img).data
             wm = reg.change_space(wsp, wsp.structural.wm_pv, img).data
-            table.append(["GM mean", "%.4g %s" % (np.mean(data[gm > 0.5]), units), normal_gm])
-            table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[gm > 0.8]), units), normal_gm])
-            table.append(["WM mean", "%.4g %s" % (np.mean(data[wm > 0.5]), units), normal_wm])
-            table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[wm > 0.9]), units), normal_wm])
+            cortex = _get_cortex(wsp)
+            some_gm, some_wm = gm > 0.5, wm > 0.5
+            pure_gm, pure_wm = gm > 0.8, wm > 0.9
+            table.append(["GM mean", "%.4g %s" % (np.mean(data[some_gm]), units), normal_gm])
+            table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[pure_gm]), units), normal_gm])
+            table.append(["Cortical GM mean", "%.4g %s" % (np.mean(data[np.logical_and(pure_gm, cortex)]), units), normal_gm])
+            table.append(["WM mean", "%.4g %s" % (np.mean(data[some_wm]), units), normal_wm])
+            table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[pure_wm]), units), normal_wm])
+            table.append(["Cerebral wM mean", "%.4g %s" % (np.mean(data[np.logical_and(pure_wm, cortex)]), units), normal_wm])
+
         page.table(table, headers=["Metric", "Value", "Typical"])
 
         page.heading("Image", level=1)
         page.image("%s_%s_img" % (name, calib_method), LightboxImage(img, zeromask=False, mask=wsp.mask, colorbar=True))
+
+def _get_cortex(wsp):
+    atlases = AtlasRegistry()
+    atlases.rescanAtlases()
+    atlas = atlases.loadAtlas("harvardoxford-subcortical", loadSummary=False, resolution=2)
+    cort_std = Image(np.mean(atlas.data[..., 0:2] + atlas.data[..., 11:13], axis=-1) * 2, header=atlas.header)
+    cort_asl = reg.change_space(wsp, cort_std, "asl").data
+    return cort_asl > 50
 
 def __output_trans_helper(wsp):
     """
