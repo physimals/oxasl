@@ -301,8 +301,8 @@ def get_m0_wholebrain(wsp):
     Required Workspace attributes
     -----------------------------
 
-      - ``calib``     - Calibration Image in ASL native space
-      - ``rois.mask`` - Brain mask Image in ASL native space
+      - ``calib``     - Calibration Image in ASL space
+      - ``rois.mask`` - Brain mask Image in ASL space
       - ``struc``     - Structural image
     """
     wsp.log.write("\n - Doing wholebrain region calibration\n")
@@ -331,7 +331,7 @@ def get_m0_wholebrain(wsp):
     for tiss_type in ("wm", "gm", "csf"):
         pve_struc = getattr(wsp.structural, "%s_pv" % tiss_type)
         wsp.log.write(" - Transforming %s tissue PVE into ASL space\n" % tiss_type)
-        pve = reg.change_space(wsp, pve_struc, "native")
+        pve = reg.change_space(wsp, pve_struc, "asl")
         t1r, t2r, t2sr, pcr = tissue_defaults(tiss_type)
         if t2star:
             t2r = t2sr
@@ -467,7 +467,7 @@ def get_m0_refregion(wsp, mode="longtr"):
             wsp.refmask_trans = wsp.refmask
         else:
             wsp.log.write(" (Transforming to ASL image space)\n")
-            wsp.refmask_trans = reg.change_space(wsp, wsp.refmask, "native", source_space="calib", mask=True)
+            wsp.refmask_trans = reg.change_space(wsp, wsp.refmask, "asl", source_space="calib", mask=True)
         refmask = wsp.refmask_trans.data
     elif wsp.tissref.lower() in ("csf", "wm", "gm"):
         get_tissrefmask(wsp)
@@ -662,7 +662,7 @@ def get_tissrefmask(wsp):
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
     # FIXME calibration image may not be in ASL space! Oxford_asl does not handle this currently
-    wsp.refpve_calib = reg.change_space(wsp, wsp.refpve, "native")
+    wsp.refpve_calib = reg.change_space(wsp, wsp.refpve, "asl")
     #wsp.refpve_calib.data[wsp.refpve_calib.data < 0.001] = 0 # Better for display
     page.heading("Reference region in ASL space", level=1)
     page.text("Partial volume map")

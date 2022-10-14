@@ -83,7 +83,7 @@ def run(wsp, prefit=True, **kwargs):
      - ``onestep`` : If True, do all inference in a single step (default: False)
      - ``basil_options`` : Optional dictionary of additional options for underlying model
     """
-    wsp.log.write("\nRunning BASIL Bayesian modelling on ASL data in '%s' data space\n" % wsp.ifnone("image_space", "native"))
+    wsp.log.write("\nRunning BASIL Bayesian modelling on ASL data in '%s' data space\n" % wsp.ifnone("image_space", "asl"))
 
     # Single or Multi TI setup
     if wsp.asldata.ntis == 1:
@@ -230,8 +230,8 @@ def _calc_slicedt(wsp, options):
     we may need to warn if the resulting image has significant slice time variation
     across X or Y axes
     """
-    img_space = wsp.ifnone("image_space", "native")
-    if img_space != "native":
+    img_space = wsp.ifnone("image_space", "asl")
+    if img_space != "asl":
         asldata = options["data"]
         _x, _y, z, _t = np.indices(list(asldata.data.shape[:3]) + [asldata.ntis,])
         print(z.shape)
@@ -239,7 +239,7 @@ def _calc_slicedt(wsp, options):
         print(tis_arr.shape)
 
         tis_img = Image(tis_arr, header=options["data"].header)
-        wsp.tiimg = reg.change_space(wsp, tis_img, wsp.ifnone("image_space", "native"))
+        wsp.tiimg = reg.change_space(wsp, tis_img, wsp.ifnone("image_space", "asl"))
         
         #print(ztrans.data)
         print(wsp.tiimg.data.shape)
@@ -692,7 +692,7 @@ class Step(object):
         for key in list(options.keys()):
             poss_img = self.options[key]
             if isinstance(poss_img, Image):
-                image_space = wsp.ifnone("image_space", "native")
+                image_space = wsp.ifnone("image_space", "asl")
                 self.options[key] = reg.change_space(wsp, poss_img, image_space, mask=(key == 'mask'))
 
 class FabberStep(Step):

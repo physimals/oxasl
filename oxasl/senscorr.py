@@ -81,7 +81,7 @@ def run(wsp):
         sensitivity = Image(wsp.calib.data.astype(np.float) / cref_data, header=wsp.calib.header)
     elif wsp.senscorr_auto and wsp.structural.bias is not None:
         wsp.log.write(" - Sensitivity image calculated from bias field\n")
-        bias = reg.change_space(wsp, wsp.structural.bias, "native")
+        bias = reg.change_space(wsp, wsp.structural.bias, "asl")
         sensitivity = Image(np.reciprocal(bias.data), header=bias.header)
     else:
         wsp.log.write(" - No source of sensitivity correction was found\n")

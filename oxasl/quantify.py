@@ -22,7 +22,7 @@ except ImportError:
 def run(wsp):
     wsp.basildirs = []
 
-    # Quantification in native space
+    # Quantification in ASL space
     quantify = _get_quantify_method(wsp)
     quantify(wsp)
 

@@ -66,7 +66,7 @@ def run(wsp):
         page.heading("Brain extracted structural image", level=1)
         page.image("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
         wsp.rois.mask_struc = wsp.structural.brain_mask
-        wsp.rois.mask_asl = reg.change_space(wsp, wsp.structural.brain_mask, "native")
+        wsp.rois.mask_asl = reg.change_space(wsp, wsp.structural.brain_mask, "asl")
         wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((wsp.rois.mask_asl.data > 0.25)).astype(np.int), header=wsp.rois.mask_asl.header)
         mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:

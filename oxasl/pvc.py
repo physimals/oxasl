@@ -61,8 +61,8 @@ def run(wsp):
                 wsp.structural.wm_pv_asl = wsp.pvwm
                 wsp.structural.gm_pv_asl = wsp.pvgm
             else:
-                wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "native")
-                wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "native")
+                wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "asl")
+                wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "asl")
 
             wsp.basil_options = wsp.ifnone("basil_options", {})
             wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 

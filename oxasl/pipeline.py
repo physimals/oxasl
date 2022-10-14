@@ -37,13 +37,13 @@ The processing sequence is approximately:
 
 7. If required, a mask is generated from the corrected data
 
-8. Model fitting is carried out to determine native space perfusion and other parameter maps
+8. Model fitting is carried out to determine ASL space perfusion and other parameter maps
 
 9. The ASL->structural registration is re-done using the perfusion image as the ASL reference.
 
 10. If applicable, calibration is applied to the raw perfusion images
 
-11. Raw and calibrated output images are generated in all output spaces (native, structural standard)
+11. Raw and calibrated output images are generated in all output spaces (asl, structural standard)
 
 """
 from __future__ import print_function

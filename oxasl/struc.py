@@ -67,7 +67,7 @@ def run(wsp):
     #elif wsp.structural.struc_lores
     #    wsp.log.write("Low-resolution tructural image: %s\n" % wsp.structural.struc_lores.name)
     else:
-        wsp.log.write(" - No structural data supplied - output will be native space only\n")
+        wsp.log.write(" - No structural data supplied - output will be ASL space only\n")
 
     if wsp.structural.struc is not None and wsp.structural.brain is None:
         wsp.log.write(" - Brain-extracting structural image\n")

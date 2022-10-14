@@ -49,10 +49,10 @@ class Options(OptionCategory):
                           help="Save ROIs in MNI space")
         group.add_option("--save-struct-rois", action="store_true", default=False,
                           help="Save ROIs in structural space")
-        group.add_option("--save-native-rois", action="store_true", default=False,
-                          help="Save ROIs in native (ASL) space")
-        group.add_option("--save-native-masks", action="store_true", default=False,
-                          help="Save binary masks in native (ASL) space")
+        group.add_option("--save-asl-rois", "--save-native-rois", action="store_true", default=False,
+                          help="Save ROIs in ASL space")
+        group.add_option("--save-asl-masks", "--save-native-masks", action="store_true", default=False,
+                          help="Save binary masks in ASL space")
 
         return [group, ]
 
@@ -174,7 +174,7 @@ def oxasl_add_fsl_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.5):
     atlas = registry.loadAtlas(desc.atlasID, resolution=2)
     for label in desc.labels:
         roi_mni = atlas.get(label=label)
-        roi_native = reg.change_space(wsp, roi_mni, "native")
+        roi_native = reg.change_space(wsp, roi_mni, "asl")
         oxasl_add_roi(wsp, rois, label.name, roi_native, threshold=50, roi_mni=roi_mni)
 
 def oxasl_add_custom_atlas(wsp, rois, atlas_img, region_names):
@@ -194,7 +194,7 @@ def oxasl_add_custom_atlas(wsp, rois, atlas_img, region_names):
         roi_mni_bin = (roi_mni_data == label).astype(np.int)
         roi_mni = Image(roi_mni_bin, header=atlas_img.header)
         name = region_names[idx]
-        roi_native = reg.change_space(wsp, roi_mni, "native")
+        roi_native = reg.change_space(wsp, roi_mni, "asl")
         oxasl_add_roi(wsp, rois, name, roi_native, threshold=0.5, roi_mni=roi_mni)
 
 def oxasl_perfusion_data(wsp):
@@ -252,12 +252,12 @@ def run(wsp):
     if wsp.pvwm is not None:
         wsp.structural.wm_pv_asl = wsp.pvwm
     else:
-        wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "native")
+        wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "asl")
 
     if wsp.pvwm is not None:
         wsp.structural.gm_pv_asl = wsp.pvgm
     else:
-        wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "native")
+        wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "asl")
     
     wsp.gm_thresh, wsp.wm_thresh = wsp.ifnone("gm_thresh", 0.8), wsp.ifnone("wm_thresh", 0.9)
     wsp.min_gm_thresh, wsp.min_wm_thresh = wsp.ifnone("min_gm_thresh", 0.1), wsp.ifnone("min_wm_thresh", 0.1)
@@ -273,7 +273,7 @@ def run(wsp):
     wsp.log.write("\nLoading user-specified ROIs\n")
     add_roi = [l.strip() for l in wsp.ifnone("add_roi", "").split(",") if l.strip() != ""]
     for fname in add_roi:
-        roi_native = reg.change_space(wsp, Image(fname), "native")
+        roi_native = reg.change_space(wsp, Image(fname), "asl")
         oxasl_add_roi(wsp, rois, os.path.basename(fname).split(".")[0], roi_native, 0.5)
 
     add_atlas = [l.strip() for l in wsp.ifnone("add_mni_atlas", "").split(",") if l.strip() != ""]
