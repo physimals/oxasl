@@ -24,13 +24,14 @@ def get_wsp():
 
 def test_get_ref_imgs_supplied():
     """
-    Test a pre-supplied nativeref is preferred to anything else
+    Test a pre-supplied aslref is preferred to anything else
     """
     wsp = get_wsp()
-    user_nativeref = Image(np.random.rand(5, 5, 5))
-    wsp.nativeref = user_nativeref
+    wsp.sub("input")
+    user_aslref = Image(np.random.rand(5, 5, 5))
+    wsp.input.aslref = user_aslref
     reg.get_ref_imgs(wsp)
-    assert(np.allclose(user_nativeref.data, wsp.reg.nativeref.data))
+    assert(np.allclose(user_aslref.data, wsp.reg.aslref.data))
 
 def test_get_ref_imgs_asldata_mean_tc():
     """
@@ -40,7 +41,7 @@ def test_get_ref_imgs_asldata_mean_tc():
     wsp.asldata = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="tc", ibf="rpt")
     reg.get_ref_imgs(wsp)
     meanasl_brain = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
-    assert(np.allclose(meanasl_brain.data, wsp.reg.nativeref.data))
+    assert(np.allclose(meanasl_brain.data, wsp.reg.aslref.data))
 
 def test_get_ref_imgs_asldata_mean_ct():
     """
@@ -50,7 +51,7 @@ def test_get_ref_imgs_asldata_mean_ct():
     wsp.asldata = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="ct", ibf="rpt")
     reg.get_ref_imgs(wsp)
     meanasl_brain = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
-    assert(np.allclose(meanasl_brain.data, wsp.reg.nativeref.data))
+    assert(np.allclose(meanasl_brain.data, wsp.reg.aslref.data))
 
 def test_get_ref_imgs_calib():
     """
@@ -60,4 +61,4 @@ def test_get_ref_imgs_calib():
     wsp.asldata = AslImage(np.random.rand(5, 5, 5, 4), tis=[1, 2], iaf="diff", ibf="rpt")
     reg.get_ref_imgs(wsp)
     calib_brain = brain.brain(wsp, wsp.calib, thresh=0.2)
-    assert(np.allclose(calib_brain.data, wsp.reg.nativeref.data))
+    assert(np.allclose(calib_brain.data, wsp.reg.aslref.data))
