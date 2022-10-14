@@ -33,6 +33,7 @@ class Options(OptionCategory):
         g.add_option('--cores', help="Number of processor cores to use for --surf-pvcorr", type=int)
         g.add_option("--pvgm", help="GM PV estimates in ASL space (apply PVEc only, don't estimate PVs)", type="image", default=None)
         g.add_option("--pvwm", help="As above, WM PV estimates in ASL space", type="image", default=None)
+        g.add_option("--pvcsf", help="As above, CSF PV estimates in ASL space", type="image", default=None)
         ret.append(g)
 
         return ret
