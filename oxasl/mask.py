@@ -44,7 +44,7 @@ def run(wsp):
      - ``struc_brain``: Already brain-extracted structural image
      - ``asl2struc`` : Existring ASL->Structural space transformation matrix
      - ``calib``   : Calibration image
-     - ``nativeref`` : ASL registration source image
+     - ``aslref`` : ASL registration source image
     """
     if wsp.rois is not None and wsp.rois.mask is not None:
         return
@@ -71,8 +71,8 @@ def run(wsp):
         mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
-        wsp.rois.mask_src = "nativeref"
-        wsp.rois.mask = Image((wsp.reg.nativeref.data != 0).astype(np.int), header=wsp.reg.nativeref.header)
+        wsp.rois.mask_src = "aslref"
+        wsp.rois.mask = Image((wsp.reg.aslref.data != 0).astype(np.int), header=wsp.reg.aslref.header)
         mask_source = "generated from brain extracted registration ASL image"
 
     wsp.log.write(" - Mask %s\n" % mask_source)

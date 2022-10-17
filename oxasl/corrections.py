@@ -104,7 +104,7 @@ def run(wsp):
             kwargs["warp%i" % (idx+1)] = warp
 
         wsp.log.write(" - Converting all warps to single transform and extracting Jacobian\n")
-        result = fsl.convertwarp(ref=wsp.reg.nativeref, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
+        result = fsl.convertwarp(ref=wsp.reg.aslref, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
         wsp.corrected.total_warp = result["out"]
 
         # Calculation of the jacobian for the warp - method suggested in:

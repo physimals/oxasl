@@ -165,7 +165,7 @@ def get_fieldmap_correction(wsp):
     # version is better tested
     if sys.platform.startswith("win"):
         import oxasl.epi_reg as pyepi
-        result = pyepi.epi_reg(wsp, epi=wsp.reg.nativeref, **epi_reg_opts)
+        result = pyepi.epi_reg(wsp, epi=wsp.reg.aslref, **epi_reg_opts)
     else:
         result = epi_reg(epi=wsp.asldata.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, log=wsp.fsllog, **epi_reg_opts)
 
@@ -176,7 +176,7 @@ def get_fieldmap_correction(wsp):
     wsp.fieldmap.asl2struc = result["out"]
     wsp.fieldmap.struc2asl = np.linalg.inv(wsp.fieldmap.asl2struc)
 
-    result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.reg.nativeref, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True, log=wsp.fsllog)
+    result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.reg.aslref, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True, log=wsp.fsllog)
     wsp.fieldmap.warp = result["out"]
 
     page = wsp.report.page("fmap")
