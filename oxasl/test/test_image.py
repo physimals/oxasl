@@ -747,3 +747,20 @@ def test_calib_first_vol_fail():
     d = np.random.rand(5, 5, 5, 8)
     with pytest.raises(Exception):
         img = AslImage(name="asldata", image=d, tis=[1.5, 2.0], iaf="tc", order="lrt", calib_first_vol=True)
+
+def test_quant():
+    """ Prequantified data """
+    d = np.random.rand(5, 5, 5, 1)
+    img = AslImage(name="asldata", image=d, iaf="quant")
+    assert img.ntis == 1
+    assert img.tis == [0]
+    assert img.iaf == "quant"
+    assert not img.have_plds
+    assert img.rpts == [1]
+    assert np.all(img.data == d[..., 0])
+
+def test_quant_must_be_3d():
+    """ Prequantified data will fail if not 3d """
+    d = np.random.rand(5, 5, 5, 2)
+    with pytest.raises(Exception):
+        img = AslImage(name="asldata", image=d, iaf="quant")

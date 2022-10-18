@@ -77,7 +77,7 @@ def data_order(iaf, ibf, order, multite=False):
     If any parameters had to be guessed (rather than inferred from other information) a
     warning is output.
 
-    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've', 'vediff', 'hadamard' or 'mp'), ordering (sequence of
+    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 'quant', 've', 'vediff', 'hadamard' or 'mp'), ordering (sequence of
              2 or three chars, 'l'=labelling images, 'r'=repeats, 't'=TIs/PLDs, 'e'=TEs. The characters
              are in order from fastest to slowest varying), Boolean indicating whether the block
              format needed to be guessed
@@ -98,7 +98,7 @@ def data_order(iaf, ibf, order, multite=False):
             # Order specified and did not include labelling images so we are entitled
             # to assume differenced data without a warning
             iaf = "diff"
-    elif iaf not in ("diff", "tc", "ct", "mp", "ve", "vediff", "hadamard"):
+    elif iaf not in ("diff", "tc", "ct", 'quant', "mp", "ve", "vediff", "hadamard"):
         raise ValueError("Unrecognized data format: iaf=%s" % iaf)
 
     ibf_guessed = False
@@ -117,7 +117,7 @@ def data_order(iaf, ibf, order, multite=False):
         if not order:
             raise ValueError("Unrecognized data block format: ibf=%s" % ibf)
 
-    if iaf != "diff" and "l" not in order:
+    if iaf not in ("diff", 'quant') and "l" not in order:
         order = "l" + order
 
     if multite and "e" not in order:
@@ -162,7 +162,7 @@ class AslImage(Image):
 
       - ``iaf`` - ``tc`` = tag then control, ``ct`` = control then tag, ``mp`` = multiphase,
         ``ve`` = vessel encoded, ``vediff`` = Pairwise subtracted vessel encoded, ``diff`` = already differenced,
-        ``hadamard` = Hadamard encoded
+        ``hadamard` = Hadamard encoded, ``quant`` = already quantified
 
     :ivar nvols:  Number of volumes in data
     :ivar iaf:    Data format - see above
@@ -303,7 +303,7 @@ class AslImage(Image):
             tis = plds
             have_plds = True
 
-        if ntis is None and tis is None:
+        if ntis is None and tis is None and self.iaf != "quant":
             raise ValueError("Number of TIs/PLDs not specified")
         elif tis is not None:
             if isinstance(tis, six.string_types):
@@ -311,6 +311,11 @@ class AslImage(Image):
             ntis = len(tis)
             if ntis is not None and len(tis) != ntis:
                 raise ValueError("Number of TIs/PLDs specified as: %i, but a list of %i TIs/PLDs was given" % (ntis, len(tis)))
+
+        if self.iaf == "quant":
+            if (ntis is not None and ntis > 1) or (tis is not None and tis != [0]):
+                raise ValueError("Cannot specify TIs/PLDs for quantified data")
+            ntis, tis = 1, [0]
 
         self.setMeta("ntis", int(ntis))
         self.setMeta("have_plds", have_plds)
@@ -325,6 +330,9 @@ class AslImage(Image):
         # Determine the number of repeats (fixed or variable)
         #
         # Sets the attribute rpts (list, one per TI/PLD)
+        if self.iaf == "quant" and self.nvols > 1:
+            raise ValueError("Cannot have multi-volume data if iaf=quant")
+
         nvols_norpts = self.ntc * self.ntis * self.ntes
         if rpts is None:
             # Calculate fixed number of repeats
@@ -604,7 +612,7 @@ class AslImage(Image):
         :return: AslImage instance containing differenced data
         """
         extra_kwargs = {}
-        if self.iaf == "diff":
+        if self.iaf in ("diff", "quant"):
             # Already differenced
             return self
         elif self.iaf in ("tc", "ct"):
@@ -813,6 +821,8 @@ class AslImage(Image):
             label_type = "Control-Label pairs"
         elif self.iaf == "mp":
             label_type = "Multiphase"
+        elif self.iaf == "quant":
+            label_type = "Already quantified"
         elif self.iaf == "ve":
             label_type = "Vessel encoded"
         elif self.iaf == "vediff":
@@ -822,6 +832,10 @@ class AslImage(Image):
         else:
             label_type = "Already differenced"
         md["Label type"] = label_type
+
+        if self.iaf == "quant":
+            # Other parameters basically irrelevant if data is already quantified
+            return md
 
         if self.iaf == "mp":
             md["Phases"] = str(self.phases)
