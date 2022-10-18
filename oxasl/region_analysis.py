@@ -68,12 +68,16 @@ def _addvar(f):
 
 def mean_invvarweighted(val, var):
     """ Inverse variance weighted mean (i.e. precision weighted mean) """
+    if var is None:
+        return None
     prec = 1 / var
     prec[~np.isfinite(prec)] = 0
     return np.sum(val * prec) / np.sum(prec)
 
 def i2(val, var):
     """ I^2 Measure of heterogenaity """
+    if var is None:
+        return None
     prec = 1 / var
     prec[~np.isfinite(prec)] = 0
     n = len(val)
@@ -121,7 +125,7 @@ def get_stats_binary(wsp, stats, img, var_img, roi, suffix="",
     """
     if list(img.shape) != list(roi.shape):
         raise ValueError("Image must have same dimensions as ROI")
-    if list(var_img.shape) != list(roi.shape):
+    if var_img is not None and list(var_img.shape) != list(roi.shape):
         raise ValueError("Variance image must have same dimensions as ROI")
     if mask is not None and list(mask.shape) != list(roi.shape):
         raise ValueError("Mask must have same dimensions as ROI")
@@ -132,14 +136,17 @@ def get_stats_binary(wsp, stats, img, var_img, roi, suffix="",
         mask = np.logical_and(mask, ~np.isnan(img))
     if ignore_inf:
         mask = np.logical_and(mask, np.isfinite(img))
-    if ignore_zerovar:
+    if var_img is not None and ignore_zerovar:
         mask = np.logical_and(mask, var_img > 0)
 
     effective_roi = np.logical_and(roi, mask)
 
     sample_data = img[effective_roi]
-    sample_var = var_img[effective_roi]
-    sample_var[sample_var == 0] = 1e-6
+    if var_img is not None:
+        sample_var = var_img[effective_roi]
+        sample_var[sample_var == 0] = 1e-6
+    else:
+        sample_var = None
     nvoxels = len(sample_data)
     stats["Nvoxels" + suffix] = nvoxels
     for stat, fn in STATS_FNS.items():
@@ -191,7 +198,7 @@ def get_stats_fuzzy(wsp, stats, img, var_img, roi_set, suffix="",
     roi_shape = list(roi_set.shape)[:3]
     if list(img.shape) != roi_shape:
         raise ValueError("Image must have same dimensions as ROI")
-    if list(var_img.shape) != roi_shape:
+    if var_img is not None and list(var_img.shape) != roi_shape:
         raise ValueError("Variance image must have same dimensions as ROI")
     if mask is not None and list(mask.shape) != roi_shape:
         raise ValueError("Mask must have same dimensions as ROI")
@@ -202,7 +209,7 @@ def get_stats_fuzzy(wsp, stats, img, var_img, roi_set, suffix="",
         mask = np.logical_and(mask, ~np.isnan(img))
     if ignore_inf:
         mask = np.logical_and(mask, np.isfinite(img))
-    if ignore_zerovar:
+    if var_img is not None and ignore_zerovar:
         mask = np.logical_and(mask, var_img > 0)
 
     # Only take voxels where at least one of the ROIs has non-zero percentage
@@ -285,10 +292,15 @@ def apply_psf(array, psf):
     return blurred_array
 
 def get_stats(wsp, roi_stats, roi, data_item):
+    f = data_item["f"].data
+    var = data_item.get("var", None)
+    if var is not None:
+        var = var.data
+
     if "fuzzy_asl" in roi:
-        get_stats_fuzzy(wsp, roi_stats, data_item["f"].data, data_item["var"].data, roi["fuzzy_asl"], mask=data_item["mask"])
+        get_stats_fuzzy(wsp, roi_stats, f, var, roi["fuzzy_asl"], mask=data_item["mask"])
     elif "mask_asl" in roi:
-        get_stats_binary(wsp, roi_stats, data_item["f"].data, data_item["var"].data, roi["mask_asl"], mask=data_item["mask"], min_nvoxels=wsp.roi_min_nvoxels)
+        get_stats_binary(wsp, roi_stats, f, var, roi["mask_asl"], mask=data_item["mask"], min_nvoxels=wsp.roi_min_nvoxels)
     else:
         # Should never happen
         raise RuntimeError("No ASL-space ROI to get stats: %s" % str(roi))
@@ -466,13 +478,19 @@ def get_perfusion_data(wsp):
     return data
 
 def get_arrival_data(wsp):
+    if wsp.arrival is None:
+        return []
+
     # Note that for the arrival mask we also remove voxels which will be
     # eliminated from the perfusion stats because of nan/inf values or zero
     # variances. This is a bit of a hack but should help ensure that the
     # voxel set is consistent between the two measures. Perfusion can have
     # invalid values in voxels where the arrival time is valid because of
     # voxelwise calibration, however we do not expect the reverse to occur
-    f_good = np.logical_and(np.isfinite(wsp.perfusion.data), wsp.perfusion_var.data > 0)
+    if wsp.perfusion_var is None:
+        f_good = np.isfinite(wsp.perfusion.data)
+    else:
+        f_good = np.logical_and(np.isfinite(wsp.perfusion.data), wsp.perfusion_var.data > 0)
     effective_mask = np.logical_and(wsp.mask.data, f_good)
 
     if wsp.perfusion_wm is not None:
@@ -502,14 +520,14 @@ def get_arrival_data(wsp):
             },
             {
                 "suffix" : "_arrival_gm",
-                "f" : wsp.perfusion,
-                "var" :  wsp.perfusion_var,
+                "f" : wsp.arrival,
+                "var" :  wsp.arrival_var,
                 "mask" : np.logical_and(effective_mask, wsp.structural.gm_pv_asl.data > wsp.gm_thresh),
             },
             {
                 "suffix" : "_arrival_wm",
                 "f" : wsp.perfusion,
-                "var" :  wsp.perfusion_var,
+                "var" :  wsp.arrival_var,
                 "mask" : np.logical_and(effective_mask, wsp.structural.wm_pv_asl.data > wsp.wm_thresh),
             },
         ]
@@ -582,7 +600,10 @@ def run(wsp):
 
     for calib_method in wsp.calibration.calib_method:
         wsp.log.write("\nCalibration method: %s\n" % calib_method)
-        calib_wsp = getattr(wsp.native, "calib_%s" % calib_method)
+        if calib_method != "prequantified":
+            calib_wsp = getattr(wsp.native, "calib_%s" % calib_method)
+        else:
+            calib_wsp = wsp.native
 
         wsp.log.write("\nLoading perfusion images\n")
         stats_data = get_perfusion_data(calib_wsp)

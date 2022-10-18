@@ -46,7 +46,21 @@ def _default_quantify(wsp):
     basil.run(wsp.sub("basil"))
     wsp.basildirs.append("")
 
+def _already_quantified(wsp):
+    wsp.log.write(" - Skipping quantification, data is already quantified\n")
+    basildir = wsp.sub("basil")
+    # Two possible locations for compatibility
+    if wsp.rois is not None and wsp.rois.mask is not None:
+        basildir.analysis_mask = wsp.rois.mask
+    else:
+        basildir.analysis_mask = wsp.mask
+    finaldir = basildir.sub("finalstep")
+    finaldir.mean_ftiss = wsp.asldata
+    wsp.basildirs.append("")
+
 def _get_quantify_method(wsp):
+    if wsp.asldata.iaf == "quant":
+        return _already_quantified
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
         if wsp.asldata.ntes == 1:
             return _default_quantify

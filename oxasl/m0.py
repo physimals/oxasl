@@ -96,6 +96,14 @@ def run(wsp):
     """
     wsp.sub("calibration")
 
+    if wsp.asldata.iaf == "quant":
+        wsp.log.write("\nCalibration\n")
+        wsp.log.write(" - No calibration, data is already quantified\n")
+        wsp.calibration.calib_method = ["prequantified"]
+        wsp.calibration.sub("prequantified")
+        wsp.calibration.prequantified.m0 = 1.0
+        return
+
     wsp.calibration.calib_method = [m.strip().lower() for m in wsp.ifnone("calib_method", "voxelwise").split(",")]
     # Synonyms
     wsp.calibration.calib_method = ["voxelwise" if w == "voxel" else w for w in wsp.calibration.calib_method]

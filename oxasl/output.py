@@ -62,6 +62,7 @@ OUTPUT_ITEMS = {
 }
 
 def run(wsp):
+    wsp.log.write("\nGenerating output images\n")
     for basildir in wsp.basildirs:
         if basildir:
             basil_wsp = "basil_%s" % basildir
@@ -101,6 +102,7 @@ def _output_native(wsp, basil_wsp):
     :param basil_wsp: Workspace in which Basil modelling has been run. The ``finalstep``
                       attribute is expected to point to the final output workspace
     """
+    wsp.log.write(" - Generating native (ASL) space output\n")
     # Output the differenced data averaged across repeats for kinetic curve comparison
     # with the model
     if wsp.asldata.iaf in ("tc", "ct", "diff"):
@@ -151,14 +153,17 @@ def _output_native(wsp, basil_wsp):
 
                 if calibrate:
                     for method in wsp.calibration.calib_method:
-                        calib_wsp = getattr(wsp.calibration, method)
-                        img_calib = calibration.run(calib_wsp, img, multiplier=multiplier, var=is_variance)
-                        sub_wsp_name = "calib_%s" % method
-                        output_wsp = getattr(wsp, sub_wsp_name)
-                        if output_wsp is None:
-                            output_wsp = wsp.sub(sub_wsp_name)
-                        setattr(output_wsp, name, img_calib)
-                        output_report(output_wsp, name, units, normal_gm, normal_wm, method)
+                        if method != "prequantified":
+                            calib_wsp = getattr(wsp.calibration, method)
+                            img_calib = calibration.run(calib_wsp, img, multiplier=multiplier, var=is_variance)
+                            sub_wsp_name = "calib_%s" % method
+                            calib_output_wsp = getattr(wsp, sub_wsp_name)
+                            if calib_output_wsp is None:
+                                calib_output_wsp = wsp.sub(sub_wsp_name)
+                            setattr(calib_output_wsp, name, img_calib)
+                            output_report(calib_output_wsp, name, units, normal_gm, normal_wm, method)
+                        else:
+                            output_report(wsp, name, units, normal_gm, normal_wm, method)
                 else:
                     output_report(wsp, name, units, normal_gm, normal_wm)
 
@@ -250,14 +255,17 @@ def _output_trans(wsp):
         output_spaces.append(("custom", "user-defined custom"))
 
     for space, name in output_spaces:
-        wsp.log.write("\nGenerating output in %s space\n" % name)
+        wsp.log.write(" - Generating output in %s space\n" % name)
         output_wsp = wsp.sub(space)
         for suffix, output, native_data in __output_trans_helper(wsp): 
             setattr(output_wsp, output + suffix, reg.change_space(wsp, native_data, space, mask=(output == 'mask')))
             for method in wsp.calibration.calib_method:
-                sub_wsp_name = "calib_%s" % method
-                native_calib_output_wsp = getattr(wsp.native, sub_wsp_name)
-                native_calib_data = getattr(native_calib_output_wsp, output + suffix)
-                calib_output_wsp = output_wsp.sub(sub_wsp_name)
-                setattr(calib_output_wsp, output + suffix, reg.change_space(wsp, native_calib_data, space, mask=(output == 'mask')))
-        wsp.log.write(" - DONE\n")
+                if method != "prequantified":
+                    sub_wsp_name = "calib_%s" % method
+                    native_calib_output_wsp = getattr(wsp.native, sub_wsp_name)
+                    native_calib_data = getattr(native_calib_output_wsp, output + suffix)
+                    calib_output_wsp = output_wsp.sub(sub_wsp_name)
+                    setattr(calib_output_wsp, output + suffix, reg.change_space(wsp, native_calib_data, space, mask=(output == 'mask')))
+                else:
+                    native_data = getattr(wsp.native, output + suffix)
+                    setattr(output_wsp, output + suffix, reg.change_space(wsp, native_data, space, mask=(output == 'mask')))
