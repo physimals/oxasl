@@ -17,6 +17,7 @@ from oxasl import Workspace, image
 from oxasl.options import AslOptionParser, OptionCategory, OptionGroup, GenericOptions
 
 def run(wsp):
+    wsp.log.write("\nPre-processing input images\n")
     wsp.sub("preproc")
     wsp.preproc.asldata = wsp.input.asldata
     wsp.preproc.aslspace = wsp.preproc.asldata.mean()
