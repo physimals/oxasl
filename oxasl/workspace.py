@@ -295,6 +295,11 @@ class Workspace(object):
             kwargs["debug"] = self.debug
             kwargs["report"] = self.report
 
+        # We don't want sub-workspaces to have default search children unless
+        # explicitly asked for FIXME probably better if always needs to be
+        # explicit
+        if "search_childs" not in kwargs:
+            kwargs["search_childs"] = []
         sub_wsp = Workspace(savedir=savedir, parent=parent, input_wsp=None, **kwargs)
         setattr(self, name, sub_wsp)
         return sub_wsp
