@@ -138,8 +138,7 @@ def _output_native(wsp, basil_wsp):
                 data = np.copy(img.data)
                 data[~np.isfinite(data)] = 0
                 data[img.data < 0] = 0
-                mask = reg.change_space(wsp, basil_wsp.analysis_mask, img)
-                data[mask.data == 0] = 0
+                data[wsp.mask.data == 0] = 0
                 img = Image(data, header=img.header)
                 name, multiplier, calibrate, units, normal_gm, normal_wm = oxasl_output
                 if prefix and prefix != "mean":
@@ -191,9 +190,14 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
         table = []
         table.append(["Mean within mask", "%.4g %s" % (np.mean(data[roi > 0.5]), units), ""])
         if wsp.structural.struc is not None:
-            gm = reg.change_space(wsp, wsp.structural.gm_pv, img).data
-            wm = reg.change_space(wsp, wsp.structural.wm_pv, img).data
-            cortex = _get_cortex(wsp)
+            if wsp.structural.gm_pv_asl is None:
+                wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, img).data
+                wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, img).data
+            gm = wsp.structural.gm_pv_asl
+            wm = wsp.structural.wm_pv_asl
+            if wsp.structural.cortex_asl is None:
+                wsp.structural.cortex_asl = _get_cortex(wsp)
+            cortex = wsp.structural.cortex_asl
             some_gm, some_wm = gm > 0.5, wm > 0.5
             pure_gm, pure_wm = gm > wsp.gm_thresh, wm > wsp.wm_thresh
             table.append(["GM mean", "%.4g %s" % (np.mean(data[some_gm]), units), normal_gm])
