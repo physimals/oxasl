@@ -111,7 +111,7 @@ def run(wsp):
     if any([c not in ("voxelwise", "refregion", "wholebrain") for c in wsp.calibration.calib_method]):
         raise ValueError("Unknown calibration method found in: %s" % wsp.calib_method)
 
-    wsp.calibration.tissref = [t.strip().lower() for t in wsp.tissref.split(",")]
+    wsp.calibration.tissref = [t.strip().lower() for t in wsp.ifnone("tissref", "").split(",") if t.strip().lower() != ""]
 
     wsp.log.write("\nCalibration - calculating M0\n")
     if wsp.calib_m0 is not None:
