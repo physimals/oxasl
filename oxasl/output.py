@@ -193,8 +193,8 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
             if wsp.structural.gm_pv_asl is None:
                 wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, img).data
                 wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, img).data
-            gm = wsp.structural.gm_pv_asl
-            wm = wsp.structural.wm_pv_asl
+            gm = wsp.structural.gm_pv_asl.data
+            wm = wsp.structural.wm_pv_asl.data
             if wsp.structural.cortex_asl is None:
                 wsp.structural.cortex_asl = _get_cortex(wsp)
             cortex = wsp.structural.cortex_asl
