@@ -5,7 +5,7 @@ FIXME need satrecov tests
 FIXME need sensitivity correction tests
 FIXME need test with edge correction
 """
-import math
+import os
 
 import pytest
 import numpy as np
@@ -22,6 +22,7 @@ def get_wsp():
     wsp.input.calib = Image(np.random.rand(5, 5, 5))
     return wsp
 
+@pytest.mark.skipif("FSLDIR" not in os.environ, reason="FSL not installed")
 def test_get_ref_imgs_supplied():
     """
     Test a pre-supplied aslref is preferred to anything else
@@ -33,6 +34,7 @@ def test_get_ref_imgs_supplied():
     reg.get_ref_imgs(wsp)
     assert(np.allclose(user_aslref.data, wsp.reg.aslref.data))
 
+@pytest.mark.skipif("FSLDIR" not in os.environ, reason="FSL not installed")
 def test_get_ref_imgs_asldata_mean_tc():
     """
     Test brain extracted ASL mean is used for TC data
@@ -43,6 +45,7 @@ def test_get_ref_imgs_asldata_mean_tc():
     meanasl_brain = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
     assert(np.allclose(meanasl_brain.data, wsp.reg.aslref.data))
 
+@pytest.mark.skipif("FSLDIR" not in os.environ, reason="FSL not installed")
 def test_get_ref_imgs_asldata_mean_ct():
     """
     Test brain extracted ASL mean is used for CT data
@@ -53,6 +56,7 @@ def test_get_ref_imgs_asldata_mean_ct():
     meanasl_brain = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
     assert(np.allclose(meanasl_brain.data, wsp.reg.aslref.data))
 
+@pytest.mark.skipif("FSLDIR" not in os.environ, reason="FSL not installed")
 def test_get_ref_imgs_calib():
     """
     Test brain extracted calibration image is used for differenced data

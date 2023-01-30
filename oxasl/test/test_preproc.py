@@ -1,3 +1,5 @@
+import os
+import pytest
 import numpy as np
 
 from oxasl import Workspace, AslImage, preproc
@@ -74,6 +76,7 @@ def test_preproc_smooth():
     assert wsp.asldata_preproc.ntc == wsp.asldata.ntc
     assert wsp.asldata_preproc.order == wsp.asldata.order
 
+@pytest.mark.skipif("FSLDIR" not in os.environ, reason="FSL not installed")
 def test_preproc_moco():
     wsp = Workspace()
     d = np.random.rand(5, 5, 5, 6)
