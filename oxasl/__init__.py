@@ -133,7 +133,7 @@ __all__ = [
     "senscorr",
     "corrections",
     "reporting",
-    "filter",
+    "filtering",
     "prequantify",
     "quantify",
     "pvc",
