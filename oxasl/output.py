@@ -32,7 +32,7 @@ class Options(OptionCategory):
         g.add_option("--save-corrections", help="Save intermediate correction data (e.g. fieldmaps, moco)", action="store_true", default=False)
         g.add_option("--save-reg", help="Save registration information (transforms etc)", action="store_true", default=False)
         g.add_option("--save-filter", help="Save data filtering output", action="store_true", default=False)
-        g.add_option("--save-basil", help="Save Basil modelling output", action="store_true", default=False)
+        g.add_option("--save-quantification", help="Save quantification output", action="store_true", default=False)
         g.add_option("--save-calib", help="Save calibration output", action="store_true", default=False)
         g.add_option("--save-all", help="Save all output (enabled when --debug specified)", action="store_true", default=False)
         g.add_option("--output-stddev", "--output-std", help="Output standard deviation of estimated variables", action="store_true", default=False)
@@ -63,43 +63,32 @@ OUTPUT_ITEMS = {
 
 def run(wsp):
     wsp.log.write("\nGenerating output images\n")
-    for basildir in wsp.basildirs:
-        if basildir:
-            basil_wsp = "basil_%s" % basildir
-            output_wsp = "output_%s" % basildir
-        else:
-            basil_wsp = "basil"
-            output_wsp = "output"
-        _output_basil(getattr(wsp, basil_wsp), wsp.sub(output_wsp))
+    for quantify_wsp in wsp.quantify_wsps:
+        try:
+            quantify_name = quantify_wsp[quantify_wsp.index("_"):]
+        except ValueError:
+            quantify_name = ""
+        output_wsp = "output%s" % quantify_name
+        _output_from_quantification(getattr(wsp, quantify_wsp), wsp.sub(output_wsp))
 
-def _output_basil(basil_wsp, output_wsp):
+def _output_from_quantification(quantify_wsp, output_wsp):
     """
-    Do model fitting on TC/CT or subtracted data
-
-    Workspace attributes updated
-    ----------------------------
-
-     - ``basil``         - Contains model fitting output on data without partial volume correction
-     - ``basil_pvcorr``  - Contains model fitting output with partial volume correction if
-                           ``wsp.pvcorr`` is ``True``
-     - ``output.native`` - ASL space output from last Basil modelling output
-     - ``output.struc``  - Structural space output
     """
-    if basil_wsp.image_space is None:
-        _output_native(output_wsp.sub("native"), basil_wsp)
+    if quantify_wsp.image_space is None:
+        _output_native(output_wsp.sub("native"), quantify_wsp)
         _output_trans(output_wsp)
     else:
-        _output_native(output_wsp, basil_wsp)
+        _output_native(output_wsp, quantify_wsp)
 
-def _output_native(wsp, basil_wsp):
+def _output_native(wsp, quantify_wsp):
     """
-    Create output images from a Basil run
+    Create output images from quantification
 
     This includes basic sanity-processing (removing negatives and NaNs) plus
     calibration using existing M0
 
     :param wsp: Workspace object for output
-    :param basil_wsp: Workspace in which Basil modelling has been run. The ``finalstep``
+    :param quantify_wsp: Workspace in which quantification has been run. The ``finalstep``
                       attribute is expected to point to the final output workspace
     """
     wsp.log.write(" - Generating native (ASL) space output\n")
@@ -109,7 +98,7 @@ def _output_native(wsp, basil_wsp):
         wsp.diffdata_mean = wsp.asldata.diff().mean_across_repeats()
 
     # Save the analysis mask
-    wsp.mask = basil_wsp.analysis_mask
+    wsp.mask = quantify_wsp.analysis_mask
 
     # Output model fitting results
     prefixes = ["", "mean"]
@@ -131,10 +120,10 @@ def _output_native(wsp, basil_wsp):
             else:
                 fabber_output = fabber_name
 
-            img = basil_wsp.finalstep.ifnone(fabber_output, None)
+            img = quantify_wsp.finalstep.ifnone(fabber_output, None)
             if img is not None:
                 # Make negative/nan values = 0 and ensure masked value zeroed
-                # since Basil may use a different fitting mask to the pipeline mask
+                # since quantification may use a different fitting mask to the pipeline mask
                 data = np.copy(img.data)
                 data[~np.isfinite(data)] = 0
                 data[img.data < 0] = 0
@@ -193,8 +182,8 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
             if wsp.structural.gm_pv_asl is None:
                 wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, img).data
                 wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, img).data
-            gm = wsp.structural.gm_pv_asl.data
-            wm = wsp.structural.wm_pv_asl.data
+            gm = np.asarray(wsp.structural.gm_pv_asl.data)
+            wm = np.asarray(wsp.structural.wm_pv_asl.data)
             if wsp.structural.cortex_asl is None:
                 wsp.structural.cortex_asl = _get_cortex(wsp)
             cortex = wsp.structural.cortex_asl

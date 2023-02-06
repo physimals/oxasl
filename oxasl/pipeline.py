@@ -85,7 +85,7 @@ except ImportError:
     oxasl_multite = None
 
 from oxasl import *
-from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, OptionGroup
+from oxasl.options import AslOptionParser, GenericOptions, OptionGroup
 from oxasl.reporting import LightboxImage
 
 def add_options(parser):
@@ -109,9 +109,8 @@ def add_options(parser):
     g.add_option("--infert2", help="Infer T2 value (multi-TE data only)", action="store_true", default=False)
     g.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
     g.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
-    g.add_option("--basil-mask", help="Masking policy to use for Basil model fitting. Does not affect analysis mask used in rest of pipeline. 'dilate' means dilate the default analysis mask. 'none' means use no masking",
+    g.add_option("--quantification-mask", help="Masking policy to use for quantification. Does not affect analysis mask used in rest of pipeline. 'dilate' means dilate the default analysis mask. 'none' means use no masking",
                  type="choice", choices=["default", "dilated", "none"])
-    g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
     parser.add_option_group(g)
     
     g = OptionGroup(parser, "Physiological parameters (all have default values from literature)")
@@ -139,7 +138,7 @@ def main():
         parser.add_category(reg.Options())
         distcorr.add_options(parser)
         parser.add_category(senscorr.Options())
-        parser.add_category(pvc.Options())
+        parser.add_category(basil.Options())
         parser.add_category(corrections.Options())
         if oxasl_ve:
             parser.add_category(oxasl_ve.VeaslOptions())
@@ -214,10 +213,9 @@ def oxasl(wsp):
     mask.run(wsp)
 
     # Quantification
-    filter.run(wsp)
+    filtering.run(wsp)
     prequantify.run(wsp)
     quantify.run(wsp)
-    pvc.run(wsp)
 
     # Calibration and output
     m0.run(wsp)
@@ -275,9 +273,9 @@ def _cleanup(wsp):
         if not wsp.save_reg:
             wsp.log.write(" - Removing registration data\n")
             wsp.reg = None
-        if not wsp.save_basil:
+        if not wsp.save_quantification:
             wsp.log.write(" - Removing model fitting data\n")
-            wsp.basil = None
+            wsp.quantification = None
         if not wsp.save_struc:
             wsp.log.write(" - Removing structural segementation data\n")
             wsp.structural = None

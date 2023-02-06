@@ -136,7 +136,7 @@ def run(wsp, prefit=True, **kwargs):
         wsp.analysis_mask = wsp.mask
 
     # Now determine the *fitting* mask
-    mask_policy = wsp.ifnone("basil_mask", "default")
+    mask_policy = wsp.ifnone("quantification_mask", "default")
     if mask_policy in ("default", "dilated"):
         wsp.log.write(" - Using pipeline analysis mask\n")
         # Two possible locations for compatibility
@@ -193,7 +193,7 @@ def basil_fit(wsp, asldata, mask=None):
 
     prev_result = None
     wsp.asldata_diff = asldata.diff().reorder("rt")
-    wsp.basil_mask = mask
+    wsp.quantification_mask = mask
 
     for idx, step in enumerate(steps):
         step_wsp = wsp.sub("step%i" % (idx+1))
@@ -705,7 +705,7 @@ class FabberStep(Step):
         """
         if prev_output is not None:
             self.options["continue-from-mvn"] = prev_output["finalMVN"]
-        from .wrappers import fabber
+        from oxasl.wrappers import fabber
         ret = fabber(self.options, output=LOAD, progress_log=log, log=fsllog, **kwargs)
         log.write("\n")
         return ret
@@ -744,7 +744,7 @@ class PvcInitStep(Step):
 
         # load these into the MVN
         mvn = prev_output["finalMVN"]
-        from .wrappers import mvntool
+        from oxasl.wrappers import mvntool
         params = prev_output["paramnames"]
         mvn = mvntool(mvn, params.index("ftiss")+1, output=LOAD, mask=mask, write=True, valim=gmcbf_init, var=0.1, log=fsllog)["output"]
         mvn = mvntool(mvn, params.index("fwm")+1, output=LOAD, mask=mask, write=True, valim=wmcbf_init, var=0.1, log=fsllog)["output"]
