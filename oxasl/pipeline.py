@@ -109,8 +109,6 @@ def add_options(parser):
     g.add_option("--infert2", help="Infer T2 value (multi-TE data only)", action="store_true", default=False)
     g.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
     g.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
-    g.add_option("--quantification-mask", help="Masking policy to use for quantification. Does not affect analysis mask used in rest of pipeline. 'dilate' means dilate the default analysis mask. 'none' means use no masking",
-                 type="choice", choices=["default", "dilated", "none"])
     parser.add_option_group(g)
     
     g = OptionGroup(parser, "Physiological parameters (all have default values from literature)")

@@ -32,6 +32,8 @@ class Options(OptionCategory):
         ret = []
 
         g = OptionGroup(parser, "BASIL quantification")
+        g.add_option("--basil-mask", help="Masking policy to use for model fitting. Does not affect analysis mask used in rest of pipeline. 'dilate' means dilate the default analysis mask. 'none' means use no masking",
+                     type="choice", choices=["default", "dilated", "none"])
         g.add_option("--basil-options", "--fit-options", help="File containing additional options for Basil model fitting", type="optfile", default=None)
         ret.append(g)
 

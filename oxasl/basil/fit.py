@@ -136,7 +136,7 @@ def run(wsp, prefit=True, **kwargs):
         wsp.analysis_mask = wsp.mask
 
     # Now determine the *fitting* mask
-    mask_policy = wsp.ifnone("quantification_mask", "default")
+    mask_policy = wsp.ifnone("basil_mask", "default")
     if mask_policy in ("default", "dilated"):
         wsp.log.write(" - Using pipeline analysis mask\n")
         # Two possible locations for compatibility
@@ -193,7 +193,7 @@ def basil_fit(wsp, asldata, mask=None):
 
     prev_result = None
     wsp.asldata_diff = asldata.diff().reorder("rt")
-    wsp.quantification_mask = mask
+    wsp.basil_mask = mask
 
     for idx, step in enumerate(steps):
         step_wsp = wsp.sub("step%i" % (idx+1))
