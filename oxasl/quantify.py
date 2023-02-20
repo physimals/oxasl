@@ -22,12 +22,13 @@ except ImportError:
 def run(wsp):
     wsp.quantify_wsps = []
     quantify = _get_quantify_method(wsp)
+    wsp.log.write("\nQuantifying perfusion from ASL data\n")
     quantify(wsp)
 
 def _already_quantified(wsp):
     # Make fake basil-like directory for already quantified data
     wsp.log.write(" - Skipping quantification, data is already quantified\n")
-    quantify_wsp = wsp.sub("quant")
+    quantify_wsp = wsp.sub("prequant")
     # Two possible locations for compatibility
     if wsp.rois is not None and wsp.rois.mask is not None:
         quantify_wsp.analysis_mask = wsp.rois.mask
@@ -35,7 +36,7 @@ def _already_quantified(wsp):
         quantify_wsp.analysis_mask = wsp.mask
     finaldir = quantify_wsp.sub("finalstep")
     finaldir.mean_ftiss = wsp.asldata
-    wsp.quantify_wsps.append("quant")
+    wsp.quantify_wsps.append("prequant")
     return quantify_wsp
 
 def _get_quantify_method(wsp):
