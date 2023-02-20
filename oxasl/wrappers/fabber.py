@@ -21,7 +21,7 @@ def _matching_image(base_img, img):
     if isinstance(base_img, nib.Nifti1Image):
         return img.nibImage
     elif isinstance(base_img, np.ndarray):
-        return img.nibImage.get_data()
+        return img.nibImage.get_fdata()
     else:
         return img
 
