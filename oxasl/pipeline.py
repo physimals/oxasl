@@ -143,7 +143,7 @@ def main():
         if oxasl_mp:
             parser.add_category(oxasl_mp.MultiphaseOptions())
         if oxasl_enable:
-            parser.add_category(oxasl_enable.EnableOptions())
+            parser.add_category(oxasl_enable.Options())
         if oxasl_multite:
             parser.add_category(oxasl_multite.MultiTEOptions())
         if oxasl_deblur:

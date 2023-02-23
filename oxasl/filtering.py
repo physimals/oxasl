@@ -22,10 +22,7 @@ def run(wsp):
     wsp.sub("filter")
 
     if oxasl_enable and wsp.use_enable:
-        oxasl_enable.init()
-        #wsp.sub("enable")
-        oxasl_enable.run(wsp)
-        #wsp.corrected.asldata = wsp.enable.asldata_enable
+        oxasl_enable.run(wsp, output_wsp=wsp.filter)
 
     if oxasl_deblur and wsp.deblur:
         oxasl_deblur.run(wsp, output_wsp=wsp.filter)
