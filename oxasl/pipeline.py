@@ -139,9 +139,9 @@ def main():
         parser.add_category(basil.Options())
         parser.add_category(corrections.Options())
         if oxasl_ve:
-            parser.add_category(oxasl_ve.VeaslOptions())
+            parser.add_category(oxasl_ve.Options())
         if oxasl_mp:
-            parser.add_category(oxasl_mp.MultiphaseOptions())
+            parser.add_category(oxasl_mp.Options())
         if oxasl_enable:
             parser.add_category(oxasl_enable.Options())
         if oxasl_multite:

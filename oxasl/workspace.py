@@ -94,7 +94,7 @@ class Workspace(object):
     directly setting an attribute, as it supports a ``save`` option.
     """
 
-    def __init__(self, savedir=None, input_wsp="input", parent=None, search_childs=("filter", "corrected", "preproc", "input"), auto_asldata=False, **kwargs):
+    def __init__(self, savedir=None, input_wsp="input", parent=None, search_childs=("prequantify", "filter", "corrected", "preproc", "input"), auto_asldata=False, **kwargs):
         """
         Create workspace
 

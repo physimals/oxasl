@@ -17,4 +17,5 @@ def run(wsp):
     if wsp.asldata.iaf == "mp":
         if oxasl_mp is None:
             raise ValueError("Multiphase data supplied but oxasl_mp is not installed")
-        oxasl_mp.run(wsp)
+        wsp.sub("prequantify")
+        oxasl_mp.run(wsp, output_wsp=wsp.prequantify)
