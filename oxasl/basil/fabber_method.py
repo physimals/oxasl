@@ -64,9 +64,11 @@ def _default_pvcorr(wsp):
         wsp.log.write("\nUsing user-supplied PV estimates\n")
         wsp.structural.wm_pv_asl = wsp.pvwm
         wsp.structural.gm_pv_asl = wsp.pvgm
-    else:
+    elif wsp.structural.struc is not None:
         wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "asl")
         wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "asl")
+    else:
+        raise RuntimeError("Can't do partial volume correction without either user PV estimates or structural image")
 
     wsp.basil_options = wsp.ifnone("basil_options", {})
     wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
