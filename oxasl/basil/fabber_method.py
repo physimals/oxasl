@@ -1,5 +1,5 @@
 """
-OXASL - Quantification using Basil
+OXASL - Quantification using Fabber
 
 Includes partial volume correction
 
@@ -11,8 +11,7 @@ import numpy as np
 from fsl.data.image import Image
 
 from oxasl import mask, reg
-
-from . import fit
+from . import multistep_fit
 
 try:
     import oxasl_surfpvc
@@ -21,7 +20,7 @@ except ImportError:
 
 def run(wsp):
     # Basic non-PVC run
-    fit.run(wsp.sub("basil"))
+    multistep_fit.run(wsp.sub("basil"))
     wsp.quantify_wsps.append("basil")
 
     # Re-do registration using PWI as reference
@@ -33,7 +32,7 @@ def run(wsp):
             quantify_name = "basil_%s" % quantify_space
             quantify_wsp = wsp.sub(quantify_name)
             quantify_wsp.image_space = quantify_space
-            fit.run(quantify_wsp) 
+            multistep_fit.run(quantify_wsp) 
             wsp.quantify_wsps.append(quantify_name)
 
     # If the user has provided manual PV maps (pvgm and pvgm) then do PVEc, even if they
@@ -73,7 +72,7 @@ def _default_pvcorr(wsp):
     wsp.basil_options = wsp.ifnone("basil_options", {})
     wsp.basil_options.update({"pwm" : wsp.structural.wm_pv_asl, 
                                 "pgm" : wsp.structural.gm_pv_asl})
-    fit.run(wsp.sub("basil_pvcorr"), prefit=False)
+    multistep_fit.run(wsp.sub("basil_pvcorr"), prefit=False)
     wsp.quantify_wsps.append("basil_pvcorr")
 
 def _surf_pvcorr(wsp):
@@ -90,5 +89,5 @@ def _surf_pvcorr(wsp):
     new_roi = (wsp.basil_options["pwm"].data > min_pv) | (wsp.basil_options["pgm"].data > min_pv)
     wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
 
-    fit.run(wsp.sub("basil_surf_pvcorr"), prefit=False)
+    multistep_fit.run(wsp.sub("basil_surf_pvcorr"), prefit=False)
     wsp.quantify_wsps.append("basil_surf_pvcorr")
