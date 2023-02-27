@@ -221,7 +221,7 @@ def oxasl(wsp):
 
     # Post processing and reporting
     region_analysis.run(wsp.output)
-    if wsp.pvcorr:
+    if wsp.pvcorr and wsp.output_pvcorr:
         region_analysis.run(wsp.output_pvcorr)
 
     if wsp.save_report:
