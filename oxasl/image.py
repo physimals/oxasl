@@ -3,9 +3,11 @@ OXASL -  Classes for representing ASL data and constructing instances from comma
 
 Copyright (c) 2008-2020 Univerisity of Oxford
 """
+import collections
+import json
+import os
 import sys
 import warnings
-import collections
 
 import six
 import numpy as np
@@ -14,6 +16,11 @@ import scipy.linalg
 from fsl.data.image import Image
 
 from .options import OptionCategory, OptionGroup
+
+try:
+    import oxasl_bids
+except ImportError:
+    oxasl_bids = None
 
 class Options(OptionCategory):
     """
@@ -164,6 +171,8 @@ class AslImage(Image):
         ``ve`` = vessel encoded, ``vediff`` = Pairwise subtracted vessel encoded, ``diff`` = already differenced,
         ``hadamard` = Hadamard encoded, ``quant`` = already quantified
 
+    If oxasl_bids is installed, some/all of the image metadata can be extracted from a .json sidecar if one exists
+
     :ivar nvols:  Number of volumes in data
     :ivar iaf:    Data format - see above
     :ivar order:  Data ordering string - see above
@@ -207,6 +216,21 @@ class AslImage(Image):
         else:
             self.setMeta("calib", kwargs.pop("calib", None))
             Image.__init__(self, image, name=name, **img_args)
+
+        # If we are initializing from a filename and we have oxasl_bids we can get metadata
+        # from the BIDS sidecar
+        if oxasl_bids is not None and kwargs.pop("use_bids", True) and isinstance(image, str):
+            if ".nii" in image:
+                sidecar_fname = image[:image.index(".nii")] + ".json"
+            else:
+                sidecar_fname = image + ".json"
+            if os.path.exists(sidecar_fname):
+                with open(sidecar_fname, "r") as f:
+                    metadata = json.load(f)
+                    metadata["img_shape"] = self.shape
+                md = oxasl_bids.oxasl_config_from_metadata(metadata, "asl")
+                for k, v in md.items():
+                    kwargs[k] = v
 
         order = kwargs.pop("order", None)
         iaf = kwargs.pop("iaf", None)
