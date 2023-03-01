@@ -228,9 +228,7 @@ class AslImage(Image):
                 with open(sidecar_fname, "r") as f:
                     metadata = json.load(f)
                     metadata["img_shape"] = self.shape
-                md = oxasl_bids.oxasl_config_from_metadata(metadata, "asl")
-                for k, v in md.items():
-                    kwargs[k] = v
+                kwargs.update(oxasl_bids.oxasl_config_from_metadata(metadata, "asl"))
 
         order = kwargs.pop("order", None)
         iaf = kwargs.pop("iaf", None)
@@ -332,9 +330,19 @@ class AslImage(Image):
         elif tis is not None:
             if isinstance(tis, six.string_types):
                 tis = [float(ti) for ti in tis.split(",")]
-            ntis = len(tis)
             if ntis is not None and len(tis) != ntis:
                 raise ValueError("Number of TIs/PLDs specified as: %i, but a list of %i TIs/PLDs was given" % (ntis, len(tis)))
+            if len(tis) == self.nvols and self.iaf in ("tc", "ct"):
+                # Special case: we have label/control pairs with a TI/PLD for each volume.
+                # However label/control TIs/PLDs must be equal in ASL and we expect a single value
+                # for each pair. Check this is the case and reduce the number (note that
+                # this scenario is common with BIDS datasets or JSON sidecars)
+                tis_even = tis[::2]
+                tis_odd = tis[1::2]
+                if not np.allclose(tis_even, tis_odd):
+                    raise ValueError(f"Inconsistent TIs/PLDs for label/control pairs: {tis_even} vs {tis_odd}")
+                tis = tis_even
+            ntis = len(tis)
 
         if self.iaf == "quant":
             if (ntis is not None and ntis > 1) or (tis is not None and tis != [0]):
