@@ -6,7 +6,6 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 import numpy as np
 import scipy as sp
 
-import fsl.wrappers as fsl
 from fsl.data.image import Image
 
 from oxasl import reg
@@ -45,7 +44,7 @@ def run(wsp):
      - ``struc_brain``: Already brain-extracted structural image
      - ``asl2struc`` : Existring ASL->Structural space transformation matrix
      - ``calib``   : Calibration image
-     - ``nativeref`` : ASL registration source image
+     - ``aslref`` : ASL registration source image
     """
     if wsp.rois is not None and wsp.rois.mask is not None:
         return
@@ -67,13 +66,13 @@ def run(wsp):
         page.heading("Brain extracted structural image", level=1)
         page.image("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
         wsp.rois.mask_struc = wsp.structural.brain_mask
-        wsp.rois.mask_asl = reg.change_space(wsp, wsp.structural.brain_mask, "native")
+        wsp.rois.mask_asl = reg.change_space(wsp, wsp.structural.brain_mask, "asl")
         wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((wsp.rois.mask_asl.data > 0.25)).astype(np.int), header=wsp.rois.mask_asl.header)
         mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
-        wsp.rois.mask_src = "nativeref"
-        wsp.rois.mask = Image((wsp.reg.nativeref.data != 0).astype(np.int), header=wsp.reg.nativeref.header)
+        wsp.rois.mask_src = "aslref"
+        wsp.rois.mask = Image((wsp.reg.aslref.data != 0).astype(np.int), header=wsp.reg.aslref.header)
         mask_source = "generated from brain extracted registration ASL image"
 
     wsp.log.write(" - Mask %s\n" % mask_source)

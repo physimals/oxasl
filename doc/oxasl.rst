@@ -185,7 +185,7 @@ Generic:
                     Output directory
 --overwrite         Overwrite output directory if it already exists
 -m MASK, --mask=MASK
-                    Brain mask image in native ASL space
+                    Brain mask image in ASL space
 --optfile=OPTFILE   File containing additional options
 --debug             Debug mode
 --version           show program's version number and exit

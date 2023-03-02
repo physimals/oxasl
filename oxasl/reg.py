@@ -34,9 +34,10 @@ class Options(OptionCategory):
         groups = []
 
         group = OptionGroup(parser, "Registration")
-        group.add_option("--nativeref", "--regfrom", help="Registration image (e.g. perfusion weighted image)", type="image")
-        group.add_option("--nativeref-method", "--regfrom-method", help="How to choose the registration reference image - calib=use calibration image, mean=use mean ASL data, pwi=use PWI (mean differenced ASL data)")
-        group.add_option("--reg-init-bbr", help="Use BBR for initial as well as final registration - generally used in conjunction with --nativeref-method=pwi", action="store_true", default=False)
+        group.add_option("--aslref", "--nativeref", "--regfrom", help="ASL Registration image (e.g. perfusion weighted image)", type="image")
+        group.add_option("--aslref-method", "--nativeref-method", "--regfrom-method", help="How to choose the ASL registration reference image - calib=use calibration image, mean=use mean ASL data, pwi=use PWI (mean differenced ASL data)")
+        group.add_option("--reg-init-bbr", help="Use BBR for initial as well as final registration - generally used in conjunction with --aslref-method=pwi", action="store_true", default=False)
+        group.add_option("--struc-std-fnirt", help="Use FNIRT to do nonlinear structural/std space registration when FSL_ANAT output is not available", action="store_true", default=False)
         #group.add_option("--bbr", dest="do_bbr", help="Include BBR registration step using EPI_REG", action="store_true", default=False)
         #group.add_option("--flirt", dest="do_flirt", help="Include rigid-body registration step using FLIRT", action="store_true", default=True)
         #group.add_option("--flirtsch", help="user-specified FLIRT schedule for registration")
@@ -58,7 +59,7 @@ class Options(OptionCategory):
 
         return groups
 
-def run(wsp, redo=False, struc_flirt=True, struc_bbr=False):
+def run(wsp, redo=False, struc_flirt=True, struc_bbr=False, use_quantification_wsp=None):
     if wsp.reg is None:
         wsp.sub("reg")
         redo = True
@@ -71,72 +72,72 @@ def run(wsp, redo=False, struc_flirt=True, struc_bbr=False):
             struc_bbr = True
 
         # Save any previous registration data
-        if wsp.reg.nativeref is not None:
+        if wsp.reg.aslref is not None:
             idx = 1
-            while getattr(wsp.reg, "nativeref_old_%i" % idx) is not None:
+            while getattr(wsp.reg, "aslref_old_%i" % idx) is not None:
                 idx += 1
-            for attr in ("nativeref", "asl2struc", "struc2asl"):
+            for attr in ("aslref", "asl2struc", "struc2asl"):
                 setattr(wsp.reg, "%s_old_%i" % (attr, idx), getattr(wsp.reg, attr))
 
-        get_ref_imgs(wsp)
+        get_ref_imgs(wsp, use_quantification_wsp)
         reg_asl2calib(wsp)
         reg_asl2struc(wsp, flirt=struc_flirt, bbr=struc_bbr)
         reg_asl2custom(wsp)
 
-def get_ref_imgs(wsp):
+def get_ref_imgs(wsp, use_quantification_wsp=None):
     """
     Get the images that define the various processing 'spaces' and are used for registration
-    to/from these spaces. The built in spaces are 'native' (ASL) 'struc' and 'std' (MNI).
+    to/from these spaces. The built in spaces are 'asl' (aka 'native') 'struc' and 'std' (MNI).
 
     Note that the 'custom' space requires a user-specified reference image and transformation
     from structural space
 
-    nativeref defines the 'native' space
+    aslref defines the 'asl' space
 
     Optional workspace attributes
     -----------------------------
 
-     - ``nativeref`` : User-supplied registration reference image
-     - ``nativeref_method`` : Method for choosing registration reference image
+     - ``aslref`` : User-supplied registration reference image
+     - ``aslref_method`` : Method for choosing registration reference image
      - ``asldata`` : Raw ASL data
      - ``calib``   : Calibration image
 
     Updated workspace attributes
     ----------------------------
 
-     - ``nativeref``    : Registration reference image in ASL space
+     - ``aslref``    : Registration reference image in ASL space
      - ``strucref``     : Registration reference image in structural space
      - ``stdref``       : Registration reference image in standard space
     """
-    if wsp.input is not None and wsp.input.nativeref_method is None:
+    if wsp.input is not None and wsp.input.aslref_method is None:
         if wsp.asldata is not None and wsp.asldata.iaf in ("tc", "ct"):
-            wsp.reg.nativeref_method = "mean"
+            wsp.reg.aslref_method = "mean"
         elif wsp.calib is not None and wsp.asldata is not None and wsp.calib.sameSpace(wsp.asldata):
-            wsp.reg.nativeref_method = "calib"
+            wsp.reg.aslref_method = "calib"
         else:
-            wsp.reg.nativeref_method = "mean"
+            wsp.reg.aslref_method = "mean"
 
-    if wsp.basil is not None:
-        wsp.log.write(" - ASL Registration reference image is PWI image generated by Basil\n")
-        pwi = np.copy(wsp.basil.finalstep.mean_ftiss.data)
+    if use_quantification_wsp:
+        wsp.log.write(" - ASL Registration reference image is PWI image generated by quantification\n")
+        pwi = np.copy(use_quantification_wsp.finalstep.mean_ftiss.data)
         pwi[pwi < 0] = 0
-        wsp.reg.nativeref = Image(pwi, header=wsp.basil.finalstep.mean_ftiss.header)
-    elif wsp.input.nativeref is not None:
+        wsp.reg.aslref = Image(pwi, header=use_quantification_wsp.finalstep.mean_ftiss.header)
+    elif wsp.input.aslref is not None:
         wsp.log.write(" - ASL Registration reference image supplied by user\n")
-        wsp.reg.nativeref = wsp.input.nativeref
-    elif wsp.reg.nativeref_method == "mean":
+        wsp.reg.aslref = wsp.input.aslref
+    elif wsp.reg.aslref_method == "mean":
         wsp.log.write(" - ASL Registration reference is mean ASL signal (brain extracted)\n")
-        wsp.reg.nativeref = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
-    elif wsp.reg.nativeref_method == "calib":
+        wsp.reg.aslref = brain.brain(wsp, wsp.asldata.mean(), thresh=0.2)
+    elif wsp.reg.aslref_method == "calib":
         wsp.log.write(" - ASL Registration reference is calibration image (brain extracted)\n")
         if not wsp.calib.sameSpace(wsp.asldata):
             raise ValueError("Calibration image is not in same space as ASL data - cannot use as registration reference")
-        wsp.reg.nativeref = brain.brain(wsp, wsp.calib, thresh=0.2)
-    elif wsp.reg.nativeref_method == "pwi":
+        wsp.reg.aslref = brain.brain(wsp, wsp.calib, thresh=0.2)
+    elif wsp.reg.aslref_method == "pwi":
         wsp.log.write(" - ASL Registration reference is PWI (brain extracted)\n")
-        wsp.reg.nativeref = brain.brain(wsp, wsp.asldata.perf_weighted(), thresh=0.2)
+        wsp.reg.aslref = brain.brain(wsp, wsp.asldata.perf_weighted(), thresh=0.2)
     else:
-        raise ValueError("Unrecognized nativeref_method: %s" % wsp.nativeref_method)
+        raise ValueError("Unrecognized aslref_method: %s" % wsp.aslref_method)
 
     if wsp.input is not None: wsp.reg.calibref = wsp.input.calib
     if wsp.structural is not None: wsp.reg.strucref = wsp.structural.struc
@@ -156,9 +157,7 @@ def reg_asl2calib(wsp):
         wsp.reg.calib2asl = wsp.moco.calib2asl
     elif wsp.calib is not None:
         wsp.log.write(" - Registering calibration image to ASL image\n")
-        print(wsp.reg.nativeref)
-        print(wsp.calib)
-        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.nativeref, wsp.calib)
+        _, wsp.reg.asl2calib = reg_flirt(wsp, wsp.reg.aslref, wsp.calib)
         wsp.reg.calib2asl = np.linalg.inv(wsp.reg.asl2calib)
 
     if wsp.reg.asl2calib is not None:
@@ -187,7 +186,7 @@ def reg_asl2custom(wsp):
             _, wsp.reg.custom2struc = reg_flirt(wsp, wsp.reg.customref, wsp.structural.struc)
             wsp.reg.struc2custom = np.linalg.inv(wsp.reg.custom2struc)
 
-        wsp.reg.asl2custom = struc2custom @ wsp.reg.asl2struc
+        wsp.reg.asl2custom = wsp.reg.struc2custom @ wsp.reg.asl2struc
         wsp.reg.custom2asl = np.linalg.inv(wsp.reg.asl2custom)
 
 def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
@@ -200,7 +199,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
     Required workspace attributes
     -----------------------------
 
-     - ``nativeref``            : Registration reference image in ASL space
+     - ``aslref``            : Registration reference image in ASL space
      - ``struc``              : Structural image
 
     Updated workspace attributes
@@ -208,7 +207,7 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
 
      - ``asl2struc``    : ASL->structural transformation matrix
      - ``struc2asl``    : Structural->ASL transformation matrix
-     - ``regto``        : ``nativeref`` image transformed to structural space
+     - ``regto``        : ``aslref`` image transformed to structural space
     """
     if wsp.structural is not None and wsp.structural.struc is not None:
         if wsp.struc2asl is not None or wsp.asl2struc is not None:
@@ -220,11 +219,11 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
                 wsp.reg.asl2struc = np.linalg.inv(wsp.reg.struc2asl)
             if wsp.reg.struc2asl is None:
                 wsp.reg.struc2asl = np.linalg.inv(wsp.reg.asl2struc)
-            wsp.reg.regto = change_space(wsp, wsp.reg.nativeref, "struc")
+            wsp.reg.regto = change_space(wsp, wsp.reg.aslref, "struc")
         else:
             wsp.log.write("\nRegistering ASL data to structural data\n")
             if flirt:
-                wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.nativeref, wsp.structural.brain, wsp.reg.asl2struc)
+                wsp.reg.regto, wsp.reg.asl2struc = reg_flirt(wsp, wsp.reg.aslref, wsp.structural.brain, wsp.reg.asl2struc)
             if bbr:
                 wsp.reg.regto, wsp.reg.asl2struc = reg_bbr(wsp)
 
@@ -250,14 +249,14 @@ def reg_asl2struc(wsp, flirt=True, bbr=False, name="initial"):
         page.matrix(wsp.reg.struc2asl)
 
         if wsp.structural.gm_seg is not None:
-            gm_asl = change_space(wsp, wsp.structural.gm_seg, "native", interp="nn")
+            gm_asl = change_space(wsp, wsp.structural.gm_seg, "asl", interp="nn")
             page.heading("GM mask aligned with ASL data", level=1)
-            page.image("gm_reg_%s" % name, LightboxImage(gm_asl, bgimage=wsp.reg.nativeref))
-            wm_asl = change_space(wsp, wsp.structural.wm_seg, "native", interp="nn")
+            page.image("gm_reg_%s" % name, LightboxImage(gm_asl, bgimage=wsp.reg.aslref))
+            wm_asl = change_space(wsp, wsp.structural.wm_seg, "asl", interp="nn")
             page.heading("WM mask aligned with ASL data", level=1)
-            page.image("wm_reg_%s" % name, LightboxImage(wm_asl, bgimage=wsp.reg.nativeref))
+            page.image("wm_reg_%s" % name, LightboxImage(wm_asl, bgimage=wsp.reg.aslref))
 
-def reg_struc2std(wsp, fnirt=False, **kwargs):
+def reg_struc2std(wsp, **kwargs):
     """
     Determine structural -> standard space registration
 
@@ -276,7 +275,16 @@ def reg_struc2std(wsp, fnirt=False, **kwargs):
     if wsp.reg.std2struc is not None:
         return
 
-    if wsp.fslanat:
+    if wsp.struc2std_warp is not None:
+        wsp.log.write(" - Using user-specified structural->std nonlinear transformation warp\n")
+        wsp.reg.struc2std = wsp.struc2std_warp
+
+    elif wsp.struc2std is not None:
+        wsp.log.write(" - Using user-specified structural->std linear transformation matrix\n")
+        wsp.reg.struc2std = wsp.struc2std
+        wsp.log.write(str(wsp.reg.struc2std) + "\n")
+
+    elif wsp.fslanat:
         warp = os.path.join(wsp.fslanat, "T1_to_MNI_nonlin_coeff.nii.gz")
         mat = os.path.join(wsp.fslanat, "T1_to_MNI_lin.mat")
         if os.path.isfile(warp):
@@ -285,13 +293,14 @@ def reg_struc2std(wsp, fnirt=False, **kwargs):
         elif os.path.isfile(mat):
             wsp.log.write(" - Using structural->std linear transformation from FSL_ANAT\n")
             wsp.reg.struc2std = load_matrix(mat)
+            wsp.log.write(str(wsp.reg.struc2std) + "\n")
 
     if wsp.reg.struc2std is None:
         wsp.log.write(" - Registering structural image to standard space using FLIRT\n")
         flirt_result = fsl.flirt(wsp.structural.brain, os.path.join(os.environ["FSLDIR"], "data/standard/MNI152_T1_2mm_brain"), omat=fsl.LOAD)
         wsp.reg.struc2std = flirt_result["omat"]
 
-        if fnirt:
+        if wsp.struc_std_fnirt:
             wsp.log.write(" - Registering structural image to standard space using FNIRT\n")
             fnirt_result = fsl.fnirt(wsp.structural.brain, aff=wsp.reg.struc2std, config="T1_2_MNI152_2mm.cnf", cout=fsl.LOAD)
             wsp.reg.struc2std = fnirt_result["cout"]
@@ -315,10 +324,10 @@ def get_img_space(wsp, img):
 
     :param wsp: Workspace object
     :param img: Image
-    :return: Name of image space for ``img``, e.g. ``native``, ``struc``
+    :return: Name of image space for ``img``, e.g. ``asl``, ``struc``
     """ 
     img_space = None
-    for space in ('native', 'calib', 'struc', 'std', 'custom'):
+    for space in ('asl', 'calib', 'struc', 'std', 'custom'):
         ref = getattr(wsp.reg, "%sref" % space)
         if ref is not None and img.sameSpace(ref):
             img_space = space
@@ -347,6 +356,12 @@ def change_space(wsp, img, target_space, source_space=None, **kwargs):
     if isinstance(target_space, Image):
         target_space = get_img_space(wsp, target_space)
 
+    # Backwards compatiblity for naming convention
+    if source_space == "native":
+        source_space = "asl"
+    if target_space == "native":
+        target_space = "asl"
+
     target_ref = getattr(wsp.reg, "%sref" % target_space)
     if target_ref is None:
         raise RuntimeError("Couldn't find reference image for target space: %s" % target_space)
@@ -359,12 +374,6 @@ def change_space(wsp, img, target_space, source_space=None, **kwargs):
         # Calculating the nonlinear standard space registration is slow so we only do
         # it if necessary
         reg_struc2std(wsp, **kwargs)
-
-    # FIXME decide on naming convention!
-    if source_space == "native":
-        source_space = "asl"
-    if target_space == "native":
-        target_space = "asl"
 
     # For ASL to/from std space, go via structural image using a pre/post matrix
     # Not necessary for custom space because we already have asl2custom and custom2asl
@@ -411,12 +420,14 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
     else:
         if have_warp:
             kwargs = {"warp" : trans, "premat" : premat, "rel" : True, "postmat" : postmat}
-        elif premat is not None or postmat is not None:
-            raise ValueError("Can't set a pre/post transformation matrix unless using a warp")
         else:
             kwargs = {"premat" : trans}
+            if premat is not None:
+                kwargs["premat"] = np.dot(kwargs["premat"], premat)
+            elif postmat is not None:
+                kwargs["premat"] = np.dot(postmat, kwargs["premat"])
         ret = fsl.applywarp(img, ref, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog, **kwargs)["out"]
-    
+
     if mask:
         # Binarise mask images
         ret = Image((ret.data > mask_thresh).astype(np.int), header=ret.header)
@@ -492,9 +503,9 @@ def reg_bbr(wsp):
     # version is better tested
     if sys.platform.startswith("win"):
         import oxasl.epi_reg as pyepi
-        result = pyepi.epi_reg(wsp, wsp.reg.nativeref)
+        result = pyepi.epi_reg(wsp, wsp.reg.aslref)
     else:
-        result = epi_reg(epi=wsp.reg.nativeref, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight, log=wsp.fsllog)
+        result = epi_reg(epi=wsp.reg.aslref, t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, init=wsp.reg.asl2struc, inweight=wsp.inweight, log=wsp.fsllog)
     return result["out%s" % defaultExt()], result["out"]
 
     #OUTPUT
@@ -569,14 +580,14 @@ def main():
     """
     try:
         parser = AslOptionParser(usage="asl_reg [options]", version=__version__)
-        parser.add_category(RegOptions())
+        parser.add_category(Options())
         parser.add_category(struc.StructuralImageOptions())
         parser.add_category(GenericOptions())
 
         options, _ = parser.parse_args(sys.argv)
         wsp = Workspace(**vars(options))
 
-        if not options.nativeref:
+        if not options.aslref:
             sys.stderr.write("Input file not specified\n")
             parser.print_help()
             sys.exit(1)

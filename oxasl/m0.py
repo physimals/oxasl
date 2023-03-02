@@ -96,14 +96,22 @@ def run(wsp):
     """
     wsp.sub("calibration")
 
-    wsp.calibration.calib_method = [m.strip().lower() for m in wsp.calib_method.split(",")]
+    if wsp.asldata.iaf == "quant":
+        wsp.log.write("\nCalibration\n")
+        wsp.log.write(" - No calibration, data is already quantified\n")
+        wsp.calibration.calib_method = ["prequantified"]
+        wsp.calibration.sub("prequantified")
+        wsp.calibration.prequantified.m0 = 1.0
+        return
+
+    wsp.calibration.calib_method = [m.strip().lower() for m in wsp.ifnone("calib_method", "voxelwise").split(",")]
     # Synonyms
     wsp.calibration.calib_method = ["voxelwise" if w == "voxel" else w for w in wsp.calibration.calib_method]
     wsp.calibration.calib_method = ["refregion" if w == "single" else w for w in wsp.calibration.calib_method]
     if any([c not in ("voxelwise", "refregion", "wholebrain") for c in wsp.calibration.calib_method]):
         raise ValueError("Unknown calibration method found in: %s" % wsp.calib_method)
 
-    wsp.calibration.tissref = [t.strip().lower() for t in wsp.tissref.split(",")]
+    wsp.calibration.tissref = [t.strip().lower() for t in wsp.ifnone("tissref", "").split(",") if t.strip().lower() != ""]
 
     wsp.log.write("\nCalibration - calculating M0\n")
     if wsp.calib_m0 is not None:
@@ -187,8 +195,6 @@ def get_m0_voxelwise(wsp):
         if edgecorr:
             wsp.log.write(" - Doing edge correction\n")
             m0 = _edge_correct(m0, wsp.rois.mask)
-        wsp.log.write(" - Masking M0 image")
-        m0[wsp.rois.mask.data == 0] = 0
         wsp.log.write(" - mean in mask: %f\n" % np.mean(m0[wsp.rois.mask.data > 0]))
     else:
         wsp.log.write(" - Mean M0 (no mask): %f\n" % np.mean(m0))
@@ -230,20 +236,43 @@ def _edge_correct(m0, brain_mask):
     # beyond the boundary (by setting them to nan)
     m0 = scipy.ndimage.generic_filter(m0, np.nanmedian, size=3, mode='constant', cval=np.nan)
 
-    # Erode mask using 3x3x3 structuring element
+    # Erode mask using 3x3x3 structuring element and zero M0 values outside the mask (i.e. edge voxels)
     mask_ero = scipy.ndimage.morphology.binary_erosion(brain_mask, structure=np.ones([3, 3, 3]), border_value=1)
     m0[mask_ero == 0] = 0
 
-    # Extrapolate remaining data to fit original mask
-    # ASL_FILE works slicewise using a mean 5x5 filter on nonzero values, so we will do the same
-    # Note that we run the filter twice to allow zero-voxels that initially have no non-zero neighbours
-    # to be extrapolated the second time. This does not affect any previously extrapolated voxels.
+    # Extrapolate remaining data
+    # ASL_FILE works slicewise using a mean 5x5 filter on nonzero values, so we will do the same as far as possible
+    #
+    # Note that we run the filter continuously until the whole volume is full. Subsequent runs do not
+    # affect existing nonzero data, but we want to fill everything so if the mask changes (e.g. prior to PVC)
+    # we don't end up with zero calibration data in an unmasked voxel
+    #
+    # Finally, there is an edge case where a z-slice is entirely zero after erosion. In this case we have nothing to
+    # extrapolate from, so we avoid the 2D extrapolation step. A final 3D extrapolation picks up these slices.
     for z in range(m0.shape[2]):
-        zslice = m0[..., z]
-        zslice_extrap = scipy.ndimage.filters.generic_filter(zslice, _masked_mean, footprint=np.ones([5, 5]))
-        zslice_extrap = scipy.ndimage.filters.generic_filter(zslice_extrap, _masked_mean, footprint=np.ones([5, 5]))
+        zslice_extrap = np.copy(m0[..., z])
+        if np.all(np.isclose(zslice_extrap, 0)):
+            continue
+        while np.any(np.isclose(zslice_extrap, 0)):
+            zslice_extrap = scipy.ndimage.filters.generic_filter(zslice_extrap, _masked_mean, footprint=np.ones([5, 5]))
         m0[..., z] = zslice_extrap
-    m0[brain_mask == 0] = 0
+
+    # If any zeros remain because of completely empty slices, fill them in using 3D extrapolation
+    while np.any(np.isclose(m0, 0)):
+        m0 = scipy.ndimage.filters.generic_filter(m0, _masked_mean, footprint=np.ones([5, 5, 5]))
+
+    return m0
+
+    # Extrapolate remaining data
+    # ASL_FILE works slicewise using a mean 5x5 filter on nonzero values, so we will do the same
+    # Note that we run the filter continuously until the whole volume is full. Subsequent runs do not
+    # affect existing nonzero data, but we want to fill everything so if the mask changes (e.g. prior to PVC)
+    # we don't end up with zero calibration data in an unmasked voxel
+    for z in range(m0.shape[2]):
+        zslice_extrap = np.copy(m0[..., z])
+        while np.any(np.isclose(zslice_extrap, 0)):
+            zslice_extrap = scipy.ndimage.filters.generic_filter(zslice_extrap, _masked_mean, footprint=np.ones([5, 5]))
+        m0[..., z] = zslice_extrap
 
     return m0
 
@@ -280,8 +309,8 @@ def get_m0_wholebrain(wsp):
     Required Workspace attributes
     -----------------------------
 
-      - ``calib``     - Calibration Image in ASL native space
-      - ``rois.mask`` - Brain mask Image in ASL native space
+      - ``calib``     - Calibration Image in ASL space
+      - ``rois.mask`` - Brain mask Image in ASL space
       - ``struc``     - Structural image
     """
     wsp.log.write("\n - Doing wholebrain region calibration\n")
@@ -310,7 +339,7 @@ def get_m0_wholebrain(wsp):
     for tiss_type in ("wm", "gm", "csf"):
         pve_struc = getattr(wsp.structural, "%s_pv" % tiss_type)
         wsp.log.write(" - Transforming %s tissue PVE into ASL space\n" % tiss_type)
-        pve = reg.change_space(wsp, pve_struc, "native")
+        pve = reg.change_space(wsp, pve_struc, "asl")
         t1r, t2r, t2sr, pcr = tissue_defaults(tiss_type)
         if t2star:
             t2r = t2sr
@@ -446,7 +475,7 @@ def get_m0_refregion(wsp, mode="longtr"):
             wsp.refmask_trans = wsp.refmask
         else:
             wsp.log.write(" (Transforming to ASL image space)\n")
-            wsp.refmask_trans = reg.change_space(wsp, wsp.refmask, "native", source_space="calib", mask=True)
+            wsp.refmask_trans = reg.change_space(wsp, wsp.refmask, "asl", source_space="calib", mask=True)
         refmask = wsp.refmask_trans.data
     elif wsp.tissref.lower() in ("csf", "wm", "gm"):
         get_tissrefmask(wsp)
@@ -602,7 +631,8 @@ def get_tissrefmask(wsp):
     page.heading("Calibration reference region: %s" % wsp.tissref)
     page.text("Reference region was automatically generated for tissue type: %s" % wsp.tissref.upper())
     page.heading("Partial volume map for %s tissue (from structural segmentation)" % wsp.tissref.upper(), level=1)
-    wsp.refpve = getattr(wsp.structural, "%s_pv" % wsp.tissref.lower())
+    refpve = getattr(wsp.structural, "%s_pv" % wsp.tissref.lower())
+    wsp.refpve = reg.change_space(wsp, refpve, "struc")
     page.image("refpve", LightboxImage(wsp.refpve, bgimage=wsp.structural.brain))
 
     if wsp.tissref == "csf" and not wsp.csfmaskingoff:
@@ -641,7 +671,7 @@ def get_tissrefmask(wsp):
 
     wsp.log.write(" - Transforming tissue reference mask into ASL space\n")
     # FIXME calibration image may not be in ASL space! Oxford_asl does not handle this currently
-    wsp.refpve_calib = reg.change_space(wsp, wsp.refpve, "native")
+    wsp.refpve_calib = reg.change_space(wsp, wsp.refpve, "asl")
     #wsp.refpve_calib.data[wsp.refpve_calib.data < 0.001] = 0 # Better for display
     page.heading("Reference region in ASL space", level=1)
     page.text("Partial volume map")

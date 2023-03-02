@@ -9,20 +9,13 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 from __future__ import unicode_literals
 
 import os
-import sys
-import math
-import warnings
-import traceback
 
 import numpy as np
 
-from fsl.data.image import Image, defaultExt
 import fsl.wrappers as fsl
 
-from oxasl import __version__, Workspace, struc, brain, reg
-from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, OptionGroup, load_matrix
-from oxasl.wrappers import epi_reg
-from oxasl.reporting import LightboxImage, LineGraph
+from oxasl import reg
+from oxasl.reporting import LineGraph
 
 def run(wsp):
     """
@@ -64,10 +57,12 @@ def run(wsp):
     nvols = wsp.preproc.asldata.shape[3]
     # If available, use the calibration image as reference since this will be most consistent if the data has a range
     # of different TIs and background suppression etc. This also removes motion effects between asldata and calibration image
-    if wsp.input.nativeref is not None:
-        wsp.log.write(" - Using user-specified nativeref as reference\n")
-        ref_source = "User specified: %s" % (wsp.input.nativeref.name)
-        mcflirt_result = fsl.mcflirt(wsp.preproc.asldata, reffile=wsp.input.nativeref, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
+    if wsp.input.aslref is not None:
+        wsp.log.write(" - Using user-specified aslref as reference\n")
+        ref_source = "User specified: %s" % (wsp.input.aslref.name)
+        wsp.moco.ref = wsp.input.aslref
+        wsp.moco.input = wsp.preproc.asldata
+        mcflirt_result = fsl.mcflirt(wsp.moco.input, reffile=wsp.moco.ref, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         mats = [mcflirt_result[os.path.join("out.mat", "MAT_%04i" % vol)] for vol in range(nvols)]
     elif wsp.preproc.calib is not None:
         wsp.log.write(" - Using calibration image as reference\n")
@@ -81,18 +76,25 @@ def run(wsp):
         wsp.moco.asl2calib = mats[int(float(len(mats))/2)]
         wsp.moco.calib2asl = np.linalg.inv(wsp.moco.asl2calib)
         mats = [np.dot(wsp.moco.calib2asl, mat) for mat in mats]
-
         wsp.log.write("   ASL middle volume->Calib:\n%s\n" % str(wsp.moco.asl2calib))
         wsp.log.write("   Calib->ASL middle volume:\n%s\n" % str(wsp.moco.calib2asl))
     else:
         wsp.log.write(" - Using ASL data middle volume as reference\n")
         ref_source = "ASL data middle volume: %i" % int(float(wsp.preproc.asldata.shape[3])/2)
-        mcflirt_result = fsl.mcflirt(wsp.preproc.asldata, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
+        wsp.moco.input = wsp.preproc.asldata
+        mcflirt_result = fsl.mcflirt(wsp.moco.input, out=fsl.LOAD, mats=fsl.LOAD, log=wsp.fsllog)
         mats = [mcflirt_result[os.path.join("out.mat", "MAT_%04i" % vol)] for vol in range(nvols)]
 
     # Convert motion correction matrices into single (4*nvols, 4) matrix - convenient for writing
-    # to file, and same form that applywarp expects
+    # to file, and same form that applywarp expects. Also save output ASL data + PWI
     wsp.moco.mc_mats = np.concatenate(mats, axis=0)
+    output = reg.transform(wsp, wsp.moco.input, trans=wsp.moco.mc_mats, ref=wsp.preproc.aslspace)
+    wsp.moco.output = wsp.asldata.derived(output)
+    try:
+        wsp.moco.pwi = wsp.moco.output.perf_weighted()
+    except:
+        # Ignore - not all data can generate a PWI
+        pass
 
     page = wsp.report.page("moco")
     page.heading("Motion correction", level=0)

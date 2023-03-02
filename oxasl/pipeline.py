@@ -37,13 +37,13 @@ The processing sequence is approximately:
 
 7. If required, a mask is generated from the corrected data
 
-8. Model fitting is carried out to determine native space perfusion and other parameter maps
+8. Model fitting is carried out to determine ASL space perfusion and other parameter maps
 
 9. The ASL->structural registration is re-done using the perfusion image as the ASL reference.
 
 10. If applicable, calibration is applied to the raw perfusion images
 
-11. Raw and calibrated output images are generated in all output spaces (native, structural standard)
+11. Raw and calibrated output images are generated in all output spaces (asl, structural standard)
 
 """
 from __future__ import print_function
@@ -51,11 +51,6 @@ from __future__ import print_function
 import sys
 import os
 import traceback
-import itertools
-
-import numpy as np
-
-from fsl.data.image import Image
 
 # Quick-and-dirty plugin imports - to be replaced with entry points and a defined plugin api
 # at some point
@@ -90,7 +85,7 @@ except ImportError:
     oxasl_multite = None
 
 from oxasl import *
-from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, OptionGroup
+from oxasl.options import AslOptionParser, GenericOptions, OptionGroup
 from oxasl.reporting import LightboxImage
 
 def add_options(parser):
@@ -114,9 +109,6 @@ def add_options(parser):
     g.add_option("--infert2", help="Infer T2 value (multi-TE data only)", action="store_true", default=False)
     g.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
     g.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
-    g.add_option("--basil-mask", help="Masking policy to use for Basil model fitting. Does not affect analysis mask used in rest of pipeline. 'dilate' means dilate the default analysis mask. 'none' means use no masking",
-                 type="choice", choices=["default", "dilated", "none"])
-    g.add_option("--basil-options", "--fit-options", help="File containing additional options for model fitting step", type="optfile", default=None)
     parser.add_option_group(g)
     
     g = OptionGroup(parser, "Physiological parameters (all have default values from literature)")
@@ -144,14 +136,14 @@ def main():
         parser.add_category(reg.Options())
         distcorr.add_options(parser)
         parser.add_category(senscorr.Options())
-        parser.add_category(pvc.Options())
+        parser.add_category(basil.Options())
         parser.add_category(corrections.Options())
         if oxasl_ve:
-            parser.add_category(oxasl_ve.VeaslOptions())
+            parser.add_category(oxasl_ve.Options())
         if oxasl_mp:
-            parser.add_category(oxasl_mp.MultiphaseOptions())
+            parser.add_category(oxasl_mp.Options())
         if oxasl_enable:
-            parser.add_category(oxasl_enable.EnableOptions())
+            parser.add_category(oxasl_enable.Options())
         if oxasl_multite:
             parser.add_category(oxasl_multite.MultiTEOptions())
         if oxasl_deblur:
@@ -217,18 +209,19 @@ def oxasl(wsp):
     senscorr.run(wsp)
     corrections.run(wsp)
     mask.run(wsp)
-    m0.run(wsp)
 
     # Quantification
-    filter.run(wsp)
+    filtering.run(wsp)
     prequantify.run(wsp)
     quantify.run(wsp)
-    pvc.run(wsp)
+
+    # Calibration and output
+    m0.run(wsp)
     output.run(wsp)
 
     # Post processing and reporting
     region_analysis.run(wsp.output)
-    if wsp.pvcorr:
+    if wsp.pvcorr and wsp.output_pvcorr:
         region_analysis.run(wsp.output_pvcorr)
 
     if wsp.save_report:
@@ -246,11 +239,10 @@ def report_asl(wsp):
     page.heading("ASL input data")
     md_table = [(key, value) for key, value in wsp.asldata.metadata_summary().items()]
     page.table(md_table)
-    try:
-        # Not all data can generate a PWI
-        img = wsp.asldata.perf_weighted()
+    if wsp.pwi is not None:
+        img = wsp.pwi
         img_type = "Perfusion-weighted image"
-    except ValueError:
+    else:
         img = wsp.asldata.mean()
         img_type = "Mean ASL data"
 
@@ -264,9 +256,13 @@ def _cleanup(wsp):
     """
     wsp.log.write("\nDoing cleanup\n")
     if not wsp.save_all:
+        if not wsp.save_preproc:
+            wsp.log.write(" - Removing preprocessed data\n")
         if not wsp.save_corrected:
             wsp.log.write(" - Removing corrected data\n")
             wsp.corrected = None
+        if not wsp.save_corrections:
+            wsp.log.write(" - Removing intermediate correction data\n")
             wsp.senscorr = None
             wsp.distcorr = None
             wsp.moco = None
@@ -275,14 +271,17 @@ def _cleanup(wsp):
         if not wsp.save_reg:
             wsp.log.write(" - Removing registration data\n")
             wsp.reg = None
-        if not wsp.save_basil:
+        if not wsp.save_quantification:
             wsp.log.write(" - Removing model fitting data\n")
-            wsp.basil = None
+            wsp.quantification = None
         if not wsp.save_struc:
             wsp.log.write(" - Removing structural segementation data\n")
             wsp.structural = None
         if not wsp.save_calib:
             wsp.log.write(" - Removing calibration data\n")
             wsp.calibration = None
-        wsp.input = None
+        if not wsp.save_filter:
+            wsp.filter = None
+        if not wsp.save_input:
+            wsp.input = None
         wsp.rois = None

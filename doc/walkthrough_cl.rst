@@ -64,7 +64,7 @@ This is the program reporting its current version and some useful information ab
 data you have given::
 
     Initialising structural data
-    - No structural data supplied - output will be native space only
+    - No structural data supplied - output will be ASL space only
 
     Applying preprocessing corrections
     - Data transformations
@@ -207,7 +207,7 @@ Adding structural information
 By providing structural information we get the following benefits:
 
  - Better brain extraction 
- - Output in both native (ASL data) space and also in structural space for overlaying onto structural image
+ - Output in both ASL (native) space and also in structural space for overlaying onto structural image
  - Possibility of automatic reference-region calibration (with calibration image, see below)
  - Possibility of partial volume correction (see below)
 
@@ -281,7 +281,7 @@ better aligned to the structural image::
 Output images
 ^^^^^^^^^^^^^
 
-The native output should be much the same as the previous example (possibly with a slightly
+The ASL space (native) output should be much the same as the previous example (possibly with a slightly
 different brain mask). However we now also have output in structural space in the ``output/struct``
 subdirectory. These images are transformed into the same space as the structural image so they
 can easily be overlaid onto the structural image. e.g. this perfusion image:
@@ -373,7 +373,7 @@ the ``perfusion_calib`` image looks identical to the ``perfusion`` image but the
 range is different and should be comparable between different calibrated scans.
 
 .. image:: images/calib_perfusion.png
-   :alt: Calibrated perfusion in native space
+   :alt: Calibrated perfusion in ASL space
 
 Summary report
 ^^^^^^^^^^^^^^
@@ -441,7 +441,7 @@ perfusion map with distortion correction enabled (right image) and disabled (lef
 The largest difference is at the anterior end which corresponds to ``--pedir=y``.
 
 .. image:: images/distcorr_perfusion_compare.png
-   :alt: Calibrated perfusion in native space
+   :alt: Calibrated perfusion in ASL space
 
 Summary report
 ^^^^^^^^^^^^^^

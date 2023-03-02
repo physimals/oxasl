@@ -1,6 +1,7 @@
 """
 Wrapper for avscale command
 """
+import six
 
 import six 
 

@@ -21,7 +21,7 @@ def _matching_image(base_img, img):
     if isinstance(base_img, nib.Nifti1Image):
         return img.nibImage
     elif isinstance(base_img, np.ndarray):
-        return img.nibImage.get_data()
+        return img.nibImage.get_fdata()
     else:
         return img
 
@@ -126,7 +126,7 @@ def fabber(options, output=LOAD, ref_nii=None, progress_log=None, **kwargs):
     try:
         ret["paramnames"] = fab.get_model_params(options)
         if log.get("cmd", None):
-            log["cmd"].write("Using fabber:\n  core lib=%s\n  core_exe=%s\n  model libs=%s\n  model exes=%s\n" % (fab.core_lib, fab.core_exe, fab.model_libs, fab.model_exes))
+            log["cmd"].write(" - Using fabber:\n  core lib=%s\n  core_exe=%s\n  model libs=%s\n  model exes=%s\n" % (fab.core_lib, fab.core_exe, fab.model_libs, fab.model_exes))
             log["cmd"].write("fabber ")
             for key, value in options.items():
                 if not isinstance(value, six.string_types) and not isinstance(value, (int, float)):

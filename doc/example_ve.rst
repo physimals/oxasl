@@ -9,7 +9,7 @@ Obtaining and installing ``VEASL``
 Vessel encoded ASL can only be processed when the ``VEASL`` tool for 
 vessel decoding is installed. Currently we are not able to distribute
 this tool publically, so if you are interested in processing VEPCASL data
-please contact Michael Chappell (michael.chappell@eng.ox.ac.uk) to obtain 
+please contact Michael Chappell (michael.chappell@nottingham.ac.uk) to obtain 
 a copy of the VEASL code.
 
 VEASL must be installed in your path. The ideal installation locations are 

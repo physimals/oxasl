@@ -114,7 +114,7 @@ class GenericOptions(OptionCategory):
         group = OptionGroup(parser, self.title)
         group.add_option("--output", "-o", help="Output %s" % self.output_type, default=self.default_output)
         group.add_option("--overwrite", help="Overwrite output %s if it already exists" % self.output_type, action="store_true", default=False)
-        group.add_option("--mask", "-m", help="Brain mask image in native ASL space", default=None, type="image")
+        group.add_option("--mask", "-m", help="Brain mask image in ASL space", default=None, type="image")
         group.add_option("--optfile", help="File containing additional options")
         group.add_option("--log-cmds", help="Log all external commands run", action="store_true", default=False)
         group.add_option("--log-cmdout", help="Log the standard output of all external commands run", action="store_true", default=False)

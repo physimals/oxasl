@@ -151,7 +151,7 @@ the GUI ready for the next analysis that we want to run.*
 
 Once the analysis had completed, view the final result::
 
-    fsleyes oxasl/native_space/perfusion_calib.nii.gz
+    fsleyes oxasl/output/native/calib_voxelwise/perfusion.nii.gz
 
 Note that if you just supply a name for the output directory (not
 a full path), as we have here, this will be placed in the 'working
@@ -161,7 +161,7 @@ the GUI.
 You will find something that looks very similar to the PWI we viewed before, but now the values at every voxel are in ml/100g/min.
 
 You will also find a PWI saved as
-``oxasl/native_space/perfusion``. This is very similar to the
+``oxasl/output/native/perfusion``. This is very similar to the
 PWI displayed in the preview pane, except that the kinetic
 model inversion has been applied to it, this is the image
 pre-calibration.
@@ -216,7 +216,7 @@ next analysis.*
 
 To view the final result::
 
-    fsleyes oxasl/native_space/perfusion_calib.nii.gz
+    fsleyes oxasl/output/native/calib_voxelwise/perfusion.nii.gz
 
 The result will be similar to the analysis in Example 1 although the effect of distortion
 correction should be noticeable in the anterior portion of the
@@ -260,15 +260,15 @@ directory:
 
   - ``oxasl/struct_space`` - this sub-drectory contains results
     transformed into the same space as the structural image. The
-    files in here will match those in the ``native_space``
+    files in here will match those in the ``native``
     subdirectory of the earlier analysis, i.e., containing perfusion
     images with and without calibration. 
-  - ``oxasl/native_space/asl2struct.mat`` - this is the
+  - ``oxasl/output/native/asl2struct.mat`` - this is the
     (linear) transformation between ASL and structural space. It can be
     used along with a transformation between structural and template
     space to transform the ASL data into the template space. It was used
-    to create the results in ``oxasl/struct_space``. 
-  - ``oxasl/native_space/perfusion_calib_gm_mean.txt`` -
+    to create the results in ``oxasl/output/struct``. 
+  - ``oxasl/output/native/perfusion_calib_gm_mean.txt`` -
     this contains the result of calculating the perfusion within a gray
     matter mask, these are in ml/100g/min. The mask was derived from the partial volume estimates
     created by ``fsl_anat`` and transformed into ASL space
@@ -276,10 +276,10 @@ directory:
     absolute perfusion values found and it is not aytpical too see
     values in the range 30-50 here. There is also a white matter result
     (for which a threshold of 90% was used). 
-  - ``oxasl/native_space/gm_mask.nii.gz`` - this is the gray
+  - ``oxasl/output/native/gm_mask.nii.gz`` - this is the gray
     matter mask used in the above calculations. There is also the
     associated white matter mask. 
-  - ``oxasl/native_space/gm_roi.nii.gz`` - this is another
+  - ``oxasl/output/native/gm_roi.nii.gz`` - this is another
     mask that represents areas in which there is some grey matter (at
     least 10% from the partial volume estimates). This can be useful for
     visualisation, but mainly when looking at partial volume corrected
@@ -375,9 +375,9 @@ substantially longer to run.
 
 You will find the results of this analysis already completed for
 you in the directory ``~/fsl_course_data/ASL/oxasl_spld_pvout``. In this results directory you will still find an analysis performed
-without partial volume correction in ``oxasl/native_space``
+without partial volume correction in ``oxasl/output/native``
 as before. The results of partial volume correction can be found in
-``oxasl/native_space/pvcorr``. This new subdirectory has the
+``oxasl/output/native/pvcorr``. This new subdirectory has the
 same structure as the non-corrected results, only now
 ``perfusion_calib.nii.gz`` is an estimate of perfusion only
 in gray matter, it has been joined by a new set of images for the
@@ -561,7 +561,7 @@ wish to click 'Run' right now.
 You will find the results of this analysis already completed for
 you in the directory
 ``~/fsl_course_data/ASL/oxasl_mpld_pvout``. This results directory contains, as a further subdirectory, ``pvcorr``,
-within the ``native_space`` subdirectory, the partial volume
+within the ``native`` subdirectory, the partial volume
 corrected results: gray matter (``perfusion_calib.nii.gz``
 etc) and white matter perfusion
 (``perfusion_wm_calib.nii.gz`` etc)

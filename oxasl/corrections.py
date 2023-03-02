@@ -28,8 +28,6 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 """
 from __future__ import unicode_literals
 
-import os
-import sys
 import tempfile
 import shutil
 
@@ -38,10 +36,9 @@ import numpy as np
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from oxasl import reg, struc
+from oxasl import reg
 from oxasl.options import OptionCategory
-from oxasl.reporting import LightboxImage, LineGraph
-from oxasl.wrappers import epi_reg, fnirtfileutils
+from oxasl.wrappers import fnirtfileutils
 
 class Options(OptionCategory):
     """
@@ -107,7 +104,7 @@ def run(wsp):
             kwargs["warp%i" % (idx+1)] = warp
 
         wsp.log.write(" - Converting all warps to single transform and extracting Jacobian\n")
-        result = fsl.convertwarp(ref=wsp.reg.nativeref, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
+        result = fsl.convertwarp(ref=wsp.reg.aslref, out=fsl.LOAD, rel=True, jacobian=fsl.LOAD, log=wsp.fsllog, **kwargs)
         wsp.corrected.total_warp = result["out"]
 
         # Calculation of the jacobian for the warp - method suggested in:
@@ -170,6 +167,12 @@ def run(wsp):
             #    wsp.log.write("         To avoid this supply structural image(s)\n")
         finally:
             shutil.rmtree(topup_input)
+
+    try:
+        wsp.corrected.pwi = wsp.corrected.asldata.perf_weighted()
+    except:
+        # Ignore - not all data can generate a PWI
+        pass
 
 def correct_img(wsp, img, linear_mat):
     """

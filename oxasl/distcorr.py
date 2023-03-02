@@ -17,20 +17,17 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 """
 from __future__ import unicode_literals
 
-import os
 import sys
-import tempfile
-import shutil
 
 import numpy as np
 
 import fsl.wrappers as fsl
 from fsl.data.image import Image
 
-from oxasl import reg, struc
-from oxasl.options import OptionCategory, OptionGroup
-from oxasl.reporting import LightboxImage, LineGraph
-from oxasl.wrappers import epi_reg, fnirtfileutils
+from oxasl import reg
+from oxasl.options import OptionGroup
+from oxasl.reporting import LightboxImage
+from oxasl.wrappers import epi_reg
 
 def add_options(parser):
     g = OptionGroup(parser, "Distortion correction using fieldmap")
@@ -102,7 +99,7 @@ def get_cblip_correction(wsp):
     wsp.topup.params = my_topup_params
 
     # Run TOPUP to calculate correction
-    wsp.topup.calib_blipped = reg.change_space(wsp, Image(np.stack((wsp.calib.data, wsp.cblip.data), axis=-1), header=wsp.calib.header), 'native')
+    wsp.topup.calib_blipped = reg.change_space(wsp, Image(np.stack((wsp.calib.data, wsp.cblip.data), axis=-1), header=wsp.calib.header), 'asl')
     topup_result = fsl.topup(imain=wsp.topup.calib_blipped, datain=wsp.topup.params, config="b02b0.cnf", out=fsl.LOAD, iout=fsl.LOAD, fout=fsl.LOAD, log=wsp.fsllog)
     wsp.topup.fieldcoef, wsp.topup.movpar = topup_result["out_fieldcoef"], topup_result["out_movpar"]
     wsp.topup.iout = topup_result["iout"]
@@ -168,7 +165,7 @@ def get_fieldmap_correction(wsp):
     # version is better tested
     if sys.platform.startswith("win"):
         import oxasl.epi_reg as pyepi
-        result = pyepi.epi_reg(wsp, epi=wsp.reg.nativeref, **epi_reg_opts)
+        result = pyepi.epi_reg(wsp, epi=wsp.reg.aslref, **epi_reg_opts)
     else:
         result = epi_reg(epi=wsp.asldata.perf_weighted(), t1=wsp.structural.struc, t1brain=wsp.structural.brain, out=fsl.LOAD, wmseg=wsp.structural.wm_seg, log=wsp.fsllog, **epi_reg_opts)
 
@@ -179,7 +176,7 @@ def get_fieldmap_correction(wsp):
     wsp.fieldmap.asl2struc = result["out"]
     wsp.fieldmap.struc2asl = np.linalg.inv(wsp.fieldmap.asl2struc)
 
-    result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.reg.nativeref, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True, log=wsp.fsllog)
+    result = fsl.convertwarp(out=fsl.LOAD, ref=wsp.reg.aslref, warp1=wsp.fieldmap.warp_struc, postmat=wsp.fieldmap.struc2asl, rel=True, log=wsp.fsllog)
     wsp.fieldmap.warp = result["out"]
 
     page = wsp.report.page("fmap")

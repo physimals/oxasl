@@ -35,8 +35,8 @@ satrecov method - note that this is not yet implemented in OXASL)
 
 If PVC required, there is now a registration and segmentation of a structural 
 image (or FSL_ANAT output). OXASL should have all this done already. The endpoint
-shold be GM and WM PV estimates in native space. Interestingly the T1t output
-from the satrecov calibration is used as the native space reference image.
+shold be GM and WM PV estimates in ASL space. Interestingly the T1t output
+from the satrecov calibration is used as the ASL space reference image.
 
 Model based analysis runs the subtracted data on the quasar model with considerable
 complexity in prior specification!

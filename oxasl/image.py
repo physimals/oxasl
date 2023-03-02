@@ -3,9 +3,11 @@ OXASL -  Classes for representing ASL data and constructing instances from comma
 
 Copyright (c) 2008-2020 Univerisity of Oxford
 """
+import collections
+import json
+import os
 import sys
 import warnings
-import collections
 
 import six
 import numpy as np
@@ -14,6 +16,11 @@ import scipy.linalg
 from fsl.data.image import Image
 
 from .options import OptionCategory, OptionGroup
+
+try:
+    import oxasl_bids
+except ImportError:
+    oxasl_bids = None
 
 class Options(OptionCategory):
     """
@@ -78,7 +85,7 @@ def data_order(iaf, ibf, order, multite=False):
     If any parameters had to be guessed (rather than inferred from other information) a
     warning is output.
 
-    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 've', 'vediff', 'hadamard' or 'mp'), ordering (sequence of
+    :return: Tuple of: IAF (ASL format, 'tc', 'ct', 'diff', 'quant', 've', 'vediff', 'hadamard' or 'mp'), ordering (sequence of
              2 or three chars, 'l'=labelling images, 'r'=repeats, 't'=TIs/PLDs, 'e'=TEs. The characters
              are in order from fastest to slowest varying), Boolean indicating whether the block
              format needed to be guessed
@@ -99,7 +106,7 @@ def data_order(iaf, ibf, order, multite=False):
             # Order specified and did not include labelling images so we are entitled
             # to assume differenced data without a warning
             iaf = "diff"
-    elif iaf not in ("diff", "tc", "ct", "mp", "ve", "vediff", "hadamard"):
+    elif iaf not in ("diff", "tc", "ct", 'quant', "mp", "ve", "vediff", "hadamard"):
         raise ValueError("Unrecognized data format: iaf=%s" % iaf)
 
     ibf_guessed = False
@@ -118,7 +125,7 @@ def data_order(iaf, ibf, order, multite=False):
         if not order:
             raise ValueError("Unrecognized data block format: ibf=%s" % ibf)
 
-    if iaf != "diff" and "l" not in order:
+    if iaf not in ("diff", 'quant') and "l" not in order:
         order = "l" + order
 
     if multite and "e" not in order:
@@ -163,7 +170,9 @@ class AslImage(Image):
 
       - ``iaf`` - ``tc`` = tag then control, ``ct`` = control then tag, ``mp`` = multiphase,
         ``ve`` = vessel encoded, ``vediff`` = Pairwise subtracted vessel encoded, ``diff`` = already differenced,
-        ``hadamard` = Hadamard encoded
+        ``hadamard` = Hadamard encoded, ``quant`` = already quantified
+
+    If oxasl_bids is installed, some/all of the image metadata can be extracted from a .json sidecar if one exists
 
     :ivar nvols:  Number of volumes in data
     :ivar iaf:    Data format - see above
@@ -208,6 +217,19 @@ class AslImage(Image):
         else:
             self.setMeta("calib", kwargs.pop("calib", None))
             Image.__init__(self, image, name=name, **img_args)
+
+        # If we are initializing from a filename and we have oxasl_bids we can get metadata
+        # from the BIDS sidecar
+        if oxasl_bids is not None and kwargs.pop("use_bids", True) and isinstance(image, str):
+            if ".nii" in image:
+                sidecar_fname = image[:image.index(".nii")] + ".json"
+            else:
+                sidecar_fname = image + ".json"
+            if os.path.exists(sidecar_fname):
+                with open(sidecar_fname, "r") as f:
+                    metadata = json.load(f)
+                    metadata["img_shape"] = self.shape
+                kwargs.update(oxasl_bids.oxasl_config_from_metadata(metadata, "asl"))
 
         order = kwargs.pop("order", None)
         iaf = kwargs.pop("iaf", None)
@@ -304,14 +326,29 @@ class AslImage(Image):
             tis = plds
             have_plds = True
 
-        if ntis is None and tis is None:
+        if ntis is None and tis is None and self.iaf != "quant":
             raise ValueError("Number of TIs/PLDs not specified")
         elif tis is not None:
             if isinstance(tis, six.string_types):
                 tis = [float(ti) for ti in tis.split(",")]
-            ntis = len(tis)
             if ntis is not None and len(tis) != ntis:
                 raise ValueError("Number of TIs/PLDs specified as: %i, but a list of %i TIs/PLDs was given" % (ntis, len(tis)))
+            if len(tis) == self.nvols and self.iaf in ("tc", "ct"):
+                # Special case: we have label/control pairs with a TI/PLD for each volume.
+                # However label/control TIs/PLDs must be equal in ASL and we expect a single value
+                # for each pair. Check this is the case and reduce the number (note that
+                # this scenario is common with BIDS datasets or JSON sidecars)
+                tis_even = tis[::2]
+                tis_odd = tis[1::2]
+                if not np.allclose(tis_even, tis_odd):
+                    raise ValueError(f"Inconsistent TIs/PLDs for label/control pairs: {tis_even} vs {tis_odd}")
+                tis = tis_even
+            ntis = len(tis)
+
+        if self.iaf == "quant":
+            if (ntis is not None and ntis > 1) or (tis is not None and tis != [0]):
+                raise ValueError("Cannot specify TIs/PLDs for quantified data")
+            ntis, tis = 1, [0]
 
         self.setMeta("ntis", int(ntis))
         self.setMeta("have_plds", have_plds)
@@ -326,6 +363,9 @@ class AslImage(Image):
         # Determine the number of repeats (fixed or variable)
         #
         # Sets the attribute rpts (list, one per TI/PLD)
+        if self.iaf == "quant" and self.nvols > 1:
+            raise ValueError("Cannot have multi-volume data if iaf=quant")
+
         nvols_norpts = self.ntc * self.ntis * self.ntes
         if rpts is None:
             # Calculate fixed number of repeats
@@ -605,7 +645,7 @@ class AslImage(Image):
         :return: AslImage instance containing differenced data
         """
         extra_kwargs = {}
-        if self.iaf == "diff":
+        if self.iaf in ("diff", "quant"):
             # Already differenced
             return self
         elif self.iaf in ("tc", "ct"):
@@ -814,6 +854,8 @@ class AslImage(Image):
             label_type = "Control-Label pairs"
         elif self.iaf == "mp":
             label_type = "Multiphase"
+        elif self.iaf == "quant":
+            label_type = "Already quantified"
         elif self.iaf == "ve":
             label_type = "Vessel encoded"
         elif self.iaf == "vediff":
@@ -823,6 +865,10 @@ class AslImage(Image):
         else:
             label_type = "Already differenced"
         md["Label type"] = label_type
+
+        if self.iaf == "quant":
+            # Other parameters basically irrelevant if data is already quantified
+            return md
 
         if self.iaf == "mp":
             md["Phases"] = str(self.phases)
