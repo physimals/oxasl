@@ -67,12 +67,12 @@ def run(wsp):
         page.image("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
         wsp.rois.mask_struc = wsp.structural.brain_mask
         wsp.rois.mask_asl = reg.change_space(wsp, wsp.structural.brain_mask, "asl")
-        wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((wsp.rois.mask_asl.data > 0.25)).astype(np.int), header=wsp.rois.mask_asl.header)
+        wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((wsp.rois.mask_asl.data > 0.25)).astype(int), header=wsp.rois.mask_asl.header)
         mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
         wsp.rois.mask_src = "aslref"
-        wsp.rois.mask = Image((wsp.reg.aslref.data != 0).astype(np.int), header=wsp.reg.aslref.header)
+        wsp.rois.mask = Image((wsp.reg.aslref.data != 0).astype(int), header=wsp.reg.aslref.header)
         mask_source = "generated from brain extracted registration ASL image"
 
     wsp.log.write(" - Mask %s\n" % mask_source)

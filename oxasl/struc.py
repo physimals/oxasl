@@ -78,7 +78,7 @@ def run(wsp):
     if wsp.structural.brain is not None and wsp.structural.brain_mask is None:
         # FIXME - for now get the mask by binarising the brain image for compatibility with oxford_asl
         # although this gives slightly different results compared to using the mask returned by BET
-        wsp.structural.brain_mask = Image((wsp.structural.brain.data != 0).astype(np.int), header=wsp.structural.struc.header)
+        wsp.structural.brain_mask = Image((wsp.structural.brain.data != 0).astype(int), header=wsp.structural.struc.header)
 
     if wsp.structural.struc is not None:
         segment(wsp)
@@ -127,11 +127,11 @@ def segment(wsp):
             raise ValueError("No structural data provided - cannot segment")
 
         if wsp.structural.csf_seg is None:
-            wsp.structural.csf_seg = Image((wsp.structural.csf_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
+            wsp.structural.csf_seg = Image((wsp.structural.csf_pv.data > 0.5).astype(int), header=wsp.structural.struc.header)
         if wsp.structural.gm_seg is None:
-            wsp.structural.gm_seg = Image((wsp.structural.gm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
+            wsp.structural.gm_seg = Image((wsp.structural.gm_pv.data > 0.5).astype(int), header=wsp.structural.struc.header)
         if wsp.structural.wm_seg is None:
-            wsp.structural.wm_seg = Image((wsp.structural.wm_pv.data > 0.5).astype(np.int), header=wsp.structural.struc.header)
+            wsp.structural.wm_seg = Image((wsp.structural.wm_pv.data > 0.5).astype(int), header=wsp.structural.struc.header)
 
         page.heading("Segmentation image", level=1)
         page.text("CSF partial volume")
