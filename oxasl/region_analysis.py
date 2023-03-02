@@ -204,7 +204,7 @@ def get_stats_fuzzy(wsp, stats, img, var_img, roi_set, suffix="",
         raise ValueError("Mask must have same dimensions as ROI")
 
     if mask is None:
-        mask = np.ones(roi_shape, dtype=np.int)
+        mask = np.ones(roi_shape, dtype=int)
     if ignore_nan:
         mask = np.logical_and(mask, ~np.isnan(img))
     if ignore_inf:
@@ -260,7 +260,7 @@ def apply_psf(array, psf):
         return array
 
     # Make sure array is 4D
-    array = array.astype(np.float)
+    array = array.astype(float)
     was_3d = False
     if array.ndim == 3:
         was_3d = True
@@ -319,7 +319,7 @@ def add_roi(wsp, rois, name, roi, threshold):
     rois.append({
         "name" : name,
         "roi_asl" : roi_asl,
-        "mask_asl" : (roi_asl.data > threshold).astype(np.int),
+        "mask_asl" : (roi_asl.data > threshold).astype(int),
         "roi_%s" % roi_space : roi,
     })
     wsp.log.write("DONE\n")
@@ -401,7 +401,7 @@ def add_rois_from_3d_label_atlas(wsp, rois, atlas_img, region_names):
 
     for name, label in zip(region_names, labels):
         roi_data = atlas_img.data.copy()
-        roi_bin = (roi_data == label).astype(np.int)
+        roi_bin = (roi_data == label).astype(int)
         roi = Image(roi_bin, header=atlas_img.header)
         add_roi(wsp, rois, name, roi, threshold=0.5)
 

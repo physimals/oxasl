@@ -87,7 +87,7 @@ def _surf_pvcorr(wsp):
     wsp.rois.mask_pvcorr = wsp.rois.mask
     min_pv = 0.01
     new_roi = (wsp.basil_options["pwm"].data > min_pv) | (wsp.basil_options["pgm"].data > min_pv)
-    wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
+    wsp.rois.mask = Image(new_roi.astype(int), header=wsp.rois.mask_pvcorr.header)
 
     multistep_fit.run(wsp.sub("basil_surf_pvcorr"), prefit=False)
     wsp.quantify_wsps.append("basil_surf_pvcorr")

@@ -93,7 +93,7 @@ def get_cblip_correction(wsp):
         "y"  : 1, "-y" : 1,
         "z"  : 2, "-z" : 2,
     }
-    my_topup_params = np.array(topup_params[wsp.pedir], dtype=np.float)
+    my_topup_params = np.array(topup_params[wsp.pedir], dtype=float)
     dimsize = wsp.asldata.shape[dim_idx[wsp.pedir]]
     my_topup_params[:, 3] = wsp.echospacing * (dimsize - 1)
     wsp.topup.params = my_topup_params

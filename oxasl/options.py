@@ -149,7 +149,7 @@ def load_matrix(fname):
         for line in f.readlines():
             if line.strip():
                 matrix.append([float(v) for v in line.strip().split()])
-    return np.array(matrix, dtype=np.float)
+    return np.array(matrix, dtype=float)
 
 def _check_image(option, opt, value):
     try:
