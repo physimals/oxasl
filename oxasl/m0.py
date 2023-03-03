@@ -175,7 +175,7 @@ def get_m0_voxelwise(wsp):
     # Calculate M0 value
     wsp.calib_img = wsp.corrected.calib
     calib_data = wsp.calib_img.data
-    m0 = calib_data.astype(np.float) * gain
+    m0 = calib_data.astype(np.float32) * gain
 
     shorttr = 1
     if wsp.tr is not None and wsp.tr < 5:
@@ -335,7 +335,7 @@ def get_m0_wholebrain(wsp):
         wsp.log.write(" - Using sensitivity image: %s\n" % wsp.sens.name)
         calib_data /= wsp.sens.data
 
-    m0 = np.zeros(calib_data.shape, dtype=np.float)
+    m0 = np.zeros(calib_data.shape, dtype=np.float32)
     for tiss_type in ("wm", "gm", "csf"):
         pve_struc = getattr(wsp.structural, "%s_pv" % tiss_type)
         wsp.log.write(" - Transforming %s tissue PVE into ASL space\n" % tiss_type)

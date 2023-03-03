@@ -558,7 +558,7 @@ def get_transform_params(mat):
             mat[2, 1] - mat[1, 2],
             mat[0, 2] - mat[2, 0],
             mat[1, 0] - mat[0, 1],
-        ], dtype=np.float)
+        ], dtype=np.float32)
 
         # Rotation angle - note that we need to check the sign
         trace = np.trace(mat[:3, :3])

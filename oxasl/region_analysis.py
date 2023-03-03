@@ -260,7 +260,7 @@ def apply_psf(array, psf):
         return array
 
     # Make sure array is 4D
-    array = array.astype(np.float)
+    array = array.astype(np.float32)
     was_3d = False
     if array.ndim == 3:
         was_3d = True
