@@ -430,7 +430,7 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
 
     if mask:
         # Binarise mask images
-        ret = Image((ret.data > mask_thresh).astype(np.int), header=ret.header)
+        ret = Image((ret.data > mask_thresh).astype(np.int32), header=ret.header)
     return ret
 
 def reg_flirt(wsp, img, ref, initial_transform=None):

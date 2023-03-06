@@ -141,7 +141,7 @@ def _define_mask(wsp):
             # Use 3x3x3 kernel for compatibility with fslmaths default
             wsp.log.write(" - Dilating mask for Basil analysis\n")
             struct = scipy.ndimage.generate_binary_structure(3, 3)
-            wsp.basil_mask = Image(scipy.ndimage.binary_dilation(wsp.basil_mask.data, structure=struct).astype(np.int), header=wsp.basil_mask.header)
+            wsp.basil_mask = Image(scipy.ndimage.binary_dilation(wsp.basil_mask.data, structure=struct).astype(np.int32), header=wsp.basil_mask.header)
     elif mask_policy == "none":
             wsp.log.write(" - Not using mask for Basil - will fit every voxel\n")
             wsp.basil_mask = Image(np.ones(wsp.asldata.data.shape[:3]), header=wsp.asldata.header)

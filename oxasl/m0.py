@@ -469,7 +469,7 @@ def get_m0_refregion(wsp, mode="longtr"):
 
     if wsp.refmask is not None:
         wsp.log.write(" - Using supplied reference tissue mask: %s" % wsp.refmask.name)
-        wsp.refmask = Image(wsp.refmask.data.astype(np.int), header=wsp.refmask.header)
+        wsp.refmask = Image(wsp.refmask.data.astype(np.int32), header=wsp.refmask.header)
         if wsp.calib_aslreg:
             wsp.log.write(" (Aligned to ASL image already)\n")
             wsp.refmask_trans = wsp.refmask
@@ -646,8 +646,8 @@ def get_tissrefmask(wsp):
         atlases = AtlasRegistry()
         atlases.rescanAtlases()
         atlas = atlases.loadAtlas("harvardoxford-subcortical", loadSummary=False, resolution=2)
-        ventricles = ((atlas.data[..., 2] + atlas.data[..., 13]) > 0.1).astype(np.int)
-        wsp.ventricles = Image(scipy.ndimage.binary_erosion(ventricles, structure=np.ones([3, 3, 3]), border_value=1).astype(np.int), header=atlas.header)
+        ventricles = ((atlas.data[..., 2] + atlas.data[..., 13]) > 0.1).astype(np.int32)
+        wsp.ventricles = Image(scipy.ndimage.binary_erosion(ventricles, structure=np.ones([3, 3, 3]), border_value=1).astype(np.int32), header=atlas.header)
         std_img = Image(os.path.join(os.environ["FSLDIR"], "data", "standard", 'MNI152_T1_2mm_brain'))
         page.image("ventricles_std", LightboxImage(wsp.ventricles, bgimage=std_img))
 
@@ -678,7 +678,7 @@ def get_tissrefmask(wsp):
 
     # Threshold reference mask conservatively to select only reference tissue
     wsp.log.write(" - Thresholding reference mask\n")
-    wsp.refmask = Image((wsp.refpve_calib.data > 0.9).astype(np.int), header=wsp.refpve_calib.header)
+    wsp.refmask = Image((wsp.refpve_calib.data > 0.9).astype(np.int32), header=wsp.refpve_calib.header)
 
     page.text("Reference Mask (thresholded at 0.9")
     page.image("refmask", LightboxImage(wsp.refmask, bgimage=wsp.calib_img))
