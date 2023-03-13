@@ -19,7 +19,8 @@ from oxasl.options import AslOptionParser, OptionCategory, OptionGroup, GenericO
 def run(wsp):
     wsp.log.write("\nPre-processing input images\n")
     wsp.sub("preproc")
-    wsp.preproc.asldata = wsp.input.asldata
+    asldata_reorient = _reorient(wsp, wsp.input.asldata)
+    wsp.preproc.asldata = wsp.input.asldata.derived(asldata_reorient.data)
     wsp.preproc.aslspace = wsp.preproc.asldata.mean()
     try:
         wsp.preproc.pwi = wsp.asldata.perf_weighted()
@@ -34,6 +35,15 @@ def run(wsp):
     wsp.preproc.cref = _single_volume(wsp, wsp.input.cref)
     wsp.preproc.cact = _single_volume(wsp, wsp.input.cact)
     wsp.preproc.cblip = _single_volume(wsp, wsp.input.cblip)
+
+def _reorient(wsp, img):
+    if wsp.noreorient:
+        wsp.log.write(" - NOT reorienting input data to standard orientation - need to check registration is OK\n")
+        return img
+    else:
+        wsp.log.write(" - Reorienting to standard orientation: %s\n" % img.name)
+        ret = fsl.fslreorient2std(img, output=fsl.LOAD)
+        return ret["output"]
 
 def _single_volume(wsp, img, moco=True, discard_first=True):
     """
@@ -58,7 +68,7 @@ def _single_volume(wsp, img, moco=True, discard_first=True):
             wsp.log.write("   - Taking mean across volumes\n")
             img = Image(np.mean(img.data, axis=-1), header=img.header)
 
-        return img
+        return _reorient(wsp, img)
     else:
         return None
 

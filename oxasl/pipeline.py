@@ -92,6 +92,7 @@ def add_options(parser):
     g = OptionGroup(parser, "General Pipeline Options")
     g.add_option("--wp", help="Analysis which conforms to the 'white papers' (Alsop et al 2014)", action="store_true", default=False)
     g.add_option("--mc", help="Motion correct data", action="store_true", default=False)
+    g.add_option("--noreorient", help="Do not reorient ASL/calibration data to standard orientation", action="store_true", default=False)
     if oxasl_enable:
         g.add_option("--use-enable", help="Use ENABLE preprocessing step", action="store_true", default=False)
     if oxasl_deblur:
