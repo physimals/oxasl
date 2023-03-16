@@ -62,13 +62,13 @@ def generate_mask(wsp):
         page.heading("Brain extracted structural image", level=1)
         page.image("struc_brain", LightboxImage(wsp.structural.brain, bgimage=wsp.structural.struc))
         brain_mask_asl = reg.struc2asl(wsp, wsp.structural.brain_mask)
-        wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((brain_mask_asl.data > 0.25)).astype(np.int), header=brain_mask_asl.header)
+        wsp.rois.mask = Image(sp.ndimage.morphology.binary_fill_holes((brain_mask_asl.data > 0.25)).astype(np.int32), header=brain_mask_asl.header)
         mask_source = "generated from brain extracting structural image and registering to ASL space"
     else:
         # Alternatively, use registration image (which will be BETed calibration or mean ASL image)
         reg.get_regfrom(wsp)
         wsp.rois.mask_src = "regfrom"
-        wsp.rois.mask = Image((wsp.reg.regfrom.data != 0).astype(np.int), header=wsp.reg.regfrom.header)
+        wsp.rois.mask = Image((wsp.reg.regfrom.data != 0).astype(np.int32), header=wsp.reg.regfrom.header)
         mask_source = "generated from brain extracted registration ASL image"
 
     wsp.log.write("\nGenerated ASL data mask\n")

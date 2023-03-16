@@ -160,7 +160,7 @@ def get_cblip_correction(wsp):
         "y"  : 1, "-y" : 1,
         "z"  : 2, "-z" : 2,
     }
-    my_topup_params = np.array(topup_params[wsp.pedir], dtype=np.float)
+    my_topup_params = np.array(topup_params[wsp.pedir], dtype=np.float32)
     dimsize = wsp.asldata.shape[dim_idx[wsp.pedir]]
     my_topup_params[:, 3] = wsp.echospacing * (dimsize - 1)
     wsp.topup.params = my_topup_params
@@ -394,14 +394,14 @@ def get_sensitivity_correction(wsp):
         wsp.log.write(" - Sensitivity image calculated from calibration actual and reference images\n")
         cref_data = np.copy(wsp.cref.data)
         cref_data[cref_data == 0] = 1
-        sensitivity = Image(wsp.cact.data.astype(np.float) / cref_data, header=wsp.calib.header)
+        sensitivity = Image(wsp.cact.data.astype(np.float32) / cref_data, header=wsp.calib.header)
     elif wsp.calib is not None and wsp.cref is not None:
         if wsp.ifnone("mode", "longtr") != "longtr":
             raise ValueError("Calibration reference image specified but calibration image was not in longtr mode - need to provided additional calibration image using the ASL coil")
         wsp.log.write(" - Sensitivity image calculated from calibration and reference images\n")
         cref_data = np.copy(wsp.cref.data)
         cref_data[cref_data == 0] = 1
-        sensitivity = Image(wsp.calib.data.astype(np.float) / cref_data, header=wsp.calib.header)
+        sensitivity = Image(wsp.calib.data.astype(np.float32) / cref_data, header=wsp.calib.header)
     elif wsp.senscorr_auto and wsp.structural.bias is not None:
         struc.segment(wsp)
         wsp.log.write(" - Sensitivity image calculated from bias field\n")

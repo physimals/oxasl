@@ -153,7 +153,7 @@ class LightboxImage(object):
                         data = np.clip(data, vmin, vmax)
 
                 if self._outline:
-                    data = (data > 0.5).astype(np.int)
+                    data = (data > 0.5).astype(np.int32)
                     data = data - scipy.ndimage.morphology.binary_erosion(data, structure=np.ones((3, 3)))
 
                 if self._mask:

@@ -149,7 +149,7 @@ def oxasl_add_roi(wsp, rois, name, roi_native, threshold, roi_struct=None, roi_m
     rois.append({
         "name" : name,
         "roi_native" : roi_native,
-        "mask_native" : Image((roi_native.data > threshold).astype(np.int), header=roi_native.header),
+        "mask_native" : Image((roi_native.data > threshold).astype(np.int32), header=roi_native.header),
         "roi_struct" : roi_struct,
         "roi_mni" : roi_mni
     })
