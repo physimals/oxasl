@@ -170,7 +170,7 @@ def test_diff_tc():
     assert img.rpts == [4]
     assert img.ntc == 1
     assert img.order == "rt"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 4] 
     assert np.all(data == 1)
 
@@ -185,7 +185,7 @@ def test_diff_ct():
     assert img.rpts == [4]
     assert img.ntc == 1
     assert img.order == "rt"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 4] 
     assert np.all(data == -1)
 
@@ -201,7 +201,7 @@ def test_reorder_tc_ct():
     assert img.ntc == 2
     assert img.order == "lrt"
     assert img.iaf == "ct"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 8] 
     for z in range(8):
         if z % 2 == 0:
@@ -220,7 +220,7 @@ def test_reorder_lrt_rtl():
     assert img.rpts == [4]
     assert img.ntc == 2
     assert img.order == "rtl"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 8] 
     for z in range(8):
         if z < 4:
@@ -239,7 +239,7 @@ def test_reorder_lrt_ltr():
     assert img.rpts == [2, 2]
     assert img.ntc == 2
     assert img.order == "ltr"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 8] 
     for znew, zold in enumerate([0, 1, 4, 5, 2, 3, 6, 7]):
         assert np.all(data[..., znew] == zold)
@@ -261,7 +261,7 @@ def test_reorder_lrt_ltr_var_rpts():
     #assert img.rpts == [1, 3]
     #assert img.ntc == 2
     #assert img.order == "ltr"
-    #data = img.nibImage.get_data()
+    #data = img.nibImage.get_fdata()
     #assert list(data.shape) == [5, 5, 5, 8] 
     #for znew, zold in enumerate([0, 1, 2, 3, 4, 5, 6, 7]):
     #    assert np.all(data[..., znew] == zold)
@@ -277,7 +277,7 @@ def test_reorder_lrt_rlt():
     assert img.rpts == [2, 2]
     assert img.ntc == 2
     assert img.order == "rlt"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 8] 
     for znew, zold in enumerate([0, 2, 1, 3, 4, 6, 5, 7]):
         assert np.all(data[..., znew] == zold)
@@ -293,7 +293,7 @@ def test_reorder_lrt_tlr():
     assert img.rpts == [2, 2]
     assert img.ntc == 2
     assert img.order == "tlr"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 8] 
     for znew, zold in enumerate([0, 4, 1, 5, 2, 6, 3, 7]):
         assert np.all(data[..., znew] == zold)
@@ -309,7 +309,7 @@ def test_mean_across_repeats_rt():
     assert img.rpts == [1, 1]
     assert img.ntc == 1
     assert img.order == "rt"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 2]
     for znew, zold in enumerate([1.5, 5.5]):
         assert np.all(data[..., znew] == zold)
@@ -325,7 +325,7 @@ def test_mean_across_repeats_tr():
     assert img.rpts == [1, 1]
     assert img.ntc == 1
     assert img.order == "tr"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 2] 
     for znew, zold in enumerate([3, 4]):
         assert np.all(data[..., znew] == zold)
@@ -340,7 +340,7 @@ def test_mean_across_repeats_var_rpts():
     assert img.rpts == [1, 1, 1, 1, 1]
     assert img.ntc == 1
     assert img.order == "rt"
-    data = img.nibImage.get_data()
+    data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 5] 
     #for znew, zold in enumerate([3, 4]):
     #    assert np.all(data[..., znew] == zold)
@@ -452,7 +452,7 @@ def test_split_epochs():
         assert img.rpts == [1, 1]
         assert img.ntc == 1
         assert img.order == "tr"
-        data = img.nibImage.get_data()
+        data = img.nibImage.get_fdata()
         # Epoch 1 is TIs 1212, data 0123, mean across repeats 12
         # Epoch 2 is TIs 1212, data 4567, mean across repeats 56
         start = idx*4
@@ -472,7 +472,7 @@ def test_split_epochs_overlap():
         assert img.rpts == [1, 1]
         assert img.ntc == 1
         assert img.order == "tr"
-        data = img.nibImage.get_data()
+        data = img.nibImage.get_fdata()
         # Epoch 1 is TIs 1212, data 0123, mean across repeats 12
         # Epoch 2 is TIs 1212, data 2345, mean across repeats 34
         # Epoch 3 is TIs 1212, data 4567, mean across repeats 56
@@ -493,7 +493,7 @@ def test_split_epochs_rt():
         assert img.rpts == [1]
         assert img.ntc == 1
         assert img.order == "rt"
-        data = img.nibImage.get_data()
+        data = img.nibImage.get_fdata()
         # Epoch 1 is TIs 1111, data 0123, mean across repeats 1.5
         # Epoch 2 is TIs 2222, data 4567, mean across repeats 5.5
         start = idx*4
@@ -514,7 +514,7 @@ def test_split_epochs_rt_overlap():
             assert img.rpts == [1]
             assert img.ntc == 1
             assert img.order == "rt"
-            data = img.nibImage.get_data()
+            data = img.nibImage.get_fdata()
             # Epoch 1 is TIs 1111, data 0123, mean across repeats 1.5
             # Epoch 3 is TIs 2222, data 4567, mean across repeats 5.5
             start = idx*2
@@ -527,7 +527,7 @@ def test_split_epochs_rt_overlap():
             assert img.rpts == [1, 1]
             assert img.ntc == 1
             assert img.order == "rt"
-            data = img.nibImage.get_data()
+            data = img.nibImage.get_fdata()
             # Epoch 2 is TIs 1122, data 2345, mean across repeats 2.5, 4.5
             for z in range(data.shape[3]):
                 assert np.all(data[..., z] == 2*z+2.5)
@@ -545,7 +545,7 @@ def test_split_epochs_reorder():
         assert img.rpts == [1, 1]
         assert img.ntc == 1
         assert img.order == "tr"
-        data = img.nibImage.get_data()
+        data = img.nibImage.get_fdata()
         # reordered = [0, 4, 1, 5, 2, 6, 3, 7]
         # Epoch 1 is TIs 1212, data 0415, mean across repeats 0.5, 4.5
         # Epoch 2 is TIs 1212, data 2637, mean across repeats 2.5, 6.5
@@ -565,7 +565,7 @@ def test_split_epochs_reorder_overlap():
         assert img.rpts == [1, 1]
         assert img.ntc == 1
         assert img.order == "tr"
-        data = img.nibImage.get_data()
+        data = img.nibImage.get_fdata()
         # reordered = [0, 4, 1, 5, 2, 6, 3, 7]
         # Epoch 1 is TIs 1212, data 0415, mean across repeats 0.5, 4.5
         # Epoch 2 is TIs 1212, data 1526, mean across repeats 1.5, 5.5
