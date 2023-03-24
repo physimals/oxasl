@@ -226,7 +226,7 @@ def get_fieldmap_correction(wsp):
         "fmapmag" : wsp.fmapmag,
         "fmapmagbrain" : wsp.fmapmagbrain,
         "pedir" : wsp.pedir,
-        "echospacing" : wsp.echospacing,
+        "echospacing" : "%.10f" % float(wsp.echospacing),
         "nofmapreg" : wsp.ifnone("nofmapreg", False),
     }
 
