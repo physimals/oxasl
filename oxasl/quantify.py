@@ -42,7 +42,7 @@ def _already_quantified(wsp):
 def _get_quantify_method(wsp):
     if wsp.asldata.iaf == "quant":
         return _already_quantified
-    if wsp.asldata.iaf in ("tc", "ct", "diff"):
+    elif wsp.asldata.iaf in ("tc", "ct", "diff", "hadamard"):
         if wsp.asldata.ntes == 1:
             return basil.run
         elif oxasl_multite is None:
@@ -54,3 +54,5 @@ def _get_quantify_method(wsp):
             raise ValueError("VE data supplied but oxasl_ve is not installed")
         else:
             return oxasl_ve.run
+    else:
+        raise ValueError("No known quantification method for data of type %s" % wsp.asldata.iaf)
