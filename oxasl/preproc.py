@@ -58,8 +58,9 @@ def _single_volume(wsp, img, moco=True, discard_first=True):
         if img.ndim == 4:
             if discard_first and img.shape[3] > 1:
                 wsp.log.write("   - Removing first volume to ensure data is in steady state\n")
-                img = Image(img.data[..., :-1], header=img.header)
+                img = Image(img.data[..., 1:], header=img.header)
 
+        if img.ndim == 4:
             if moco and img.shape[3] > 1:
                 if moco:
                     wsp.log.write("   - Motion correcting\n")
