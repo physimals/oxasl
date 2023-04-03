@@ -171,6 +171,47 @@ def test_create_data_hadamard():
     assert img.order == "lrt"
     assert img.hadamard_size == 8
 
+def test_create_data_hadamard_one_tau_per_pld():
+    d = np.random.rand(5, 5, 5, 16)
+    img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5], iaf="hadamard", hadamard_size=4, taus=[0.1, 0.2], order='lrt')
+    assert img.nplds == 2
+    assert img.plds == [0.2, 0.5]
+    assert img.taus == [0.1, 0.1, 0.1, 0.2, 0.2, 0.2]
+    assert img.have_plds
+    assert img.rpts == [2, 2]
+    assert img.ntc == 4
+    assert img.order == "lrt"
+    assert img.hadamard_size == 4
+
+def test_create_data_hadamard_one_tau_per_subbolus():
+    d = np.random.rand(5, 5, 5, 16)
+    img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5], iaf="hadamard", hadamard_size=4, taus=[0.1, 0.2, 0.3], order='lrt')
+    assert img.nplds == 2
+    assert img.plds == [0.2, 0.5]
+    assert img.taus == [0.1, 0.2, 0.3, 0.1, 0.2, 0.3]
+    assert img.have_plds
+    assert img.rpts == [2, 2]
+    assert img.ntc == 4
+    assert img.order == "lrt"
+    assert img.hadamard_size == 4
+
+def test_create_data_hadamard_one_tau_per_pld_subbolus():
+    d = np.random.rand(5, 5, 5, 16)
+    img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5], iaf="hadamard", hadamard_size=4, taus=[0.1, 0.2, 0.3, 0.15, 0.25, 0.35], order='lrt')
+    assert img.nplds == 2
+    assert img.plds == [0.2, 0.5]
+    assert img.taus == [0.1, 0.2, 0.3, 0.15, 0.25, 0.35]
+    assert img.have_plds
+    assert img.rpts == [2, 2]
+    assert img.ntc == 4
+    assert img.order == "lrt"
+    assert img.hadamard_size == 4
+
+def test_hadamard_mar():
+    d = np.random.rand(5, 5, 5, 16)
+    img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5], iaf="hadamard", hadamard_size=4, taus=[0.1, 0.2, 0.3], order='lrt')
+    img2 = img.mean_across_repeats()
+
 def test_diff_tc():
     d = np.zeros([5, 5, 5, 8])
     for z in range(8): d[..., z] = z
@@ -207,8 +248,9 @@ def test_diff_hadamard_ltr():
     d = np.zeros([5, 5, 5, 48], dtype=float)
     for img in range(48):
         for sub_bolus in range(7):
+            # Convention is that first row is all-tag so 1->tag
             if had_mat[img % 8, sub_bolus+1] == 1:
-                d[..., img] += sub_bolus+1
+                d[..., img] -= sub_bolus+1
     img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5, 0.75], iaf="hadamard", hadamard_size=8, order='ltr')
     img = img.diff()
     assert img.iaf == "diff"
@@ -220,10 +262,9 @@ def test_diff_hadamard_ltr():
     assert img.order == "tr"
     data = img.nibImage.get_fdata()
     assert list(data.shape) == [5, 5, 5, 42]
-    # Check decoding - expect nth sub-bolus to decode
-    # to 4*n (4 tag images in each Hadamard cycle)
+    # Check decoding - expect nth sub-bolus to decode to n
     for img in range(42):
-        assert np.all(data[..., img] == 4 * (img % 7 + 1))
+        assert np.all(data[..., img] == (img % 7 + 1))
 
 def test_diff_hadamard_lrt():
     had_mat = scipy.linalg.hadamard(8)
@@ -231,8 +272,9 @@ def test_diff_hadamard_lrt():
     d = np.zeros([1, 1, 1, 48], dtype=float)
     for img in range(48):
         for sub_bolus in range(7):
+            # Convention is that first row is all-tag so 1->tag
             if had_mat[img % 8, sub_bolus+1] == 1:
-                d[..., img] += sub_bolus+1
+                d[..., img] -= sub_bolus+1
     img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5, 0.75], iaf="hadamard", hadamard_size=8, order='lrt')
     img = img.diff()
     assert img.iaf == "diff"
@@ -244,12 +286,35 @@ def test_diff_hadamard_lrt():
     assert img.order == "rt"
     data = img.nibImage.get_fdata()
     assert list(data.shape) == [1, 1, 1, 42]
-    # Check decoding - expect nth sub-bolus to decode to 4*n (4 tag images in each
-    # Hadamard cycle).
+    # Check decoding - expect nth sub-bolus to decode to n
     for img in range(42):
         # PLDs are repeated twice in adjacent volumes with rt ordering
         had_idx = img // 2
-        assert np.all(data[..., img] == 4 * (had_idx % 7 + 1))
+        assert np.all(data[..., img] == (had_idx % 7 + 1))
+
+def test_diff_hadamard_multitau():
+    had_mat = scipy.linalg.hadamard(4)
+    # For nth sub-bolus make control=0, tag=n
+    d = np.zeros([5, 5, 5, 16], dtype=float)
+    for img in range(16):
+        for sub_bolus in range(3):
+            # Convention is that first row is all-tag so 1->tag
+            if had_mat[img % 4, sub_bolus+1] == 1:
+                d[..., img] -= sub_bolus+1
+    img = AslImage(name="asldata", image=d, casl=True, plds=[0.2, 0.5], taus=[0.1, 0.2, 0.3], iaf="hadamard", hadamard_size=4, order='ltr')
+    img = img.diff()
+    assert img.iaf == "diff"
+    assert img.have_plds
+    decoded_plds = np.array([0.2 + 0.2 + 0.3, 0.2 + 0.3, 0.2, 0.5 + 0.2 + 0.3, 0.5 + 0.3, 0.5])
+    assert np.allclose(img.plds, decoded_plds)
+    assert img.nplds == len(img.plds)
+    assert img.rpts == [2] * img.nplds
+    assert img.order == "tr"
+    data = img.nibImage.get_fdata()
+    assert list(data.shape) == [5, 5, 5, 12]
+    # Check decoding - expect nth sub-bolus to decode to n
+    for img in range(12):
+        assert np.all(data[..., img] == (img % 3 + 1))
 
 def test_reorder_tc_ct():
     d = np.zeros([5, 5, 5, 8])

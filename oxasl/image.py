@@ -46,7 +46,7 @@ class Options(OptionCategory):
         group.add_option("--nenc", help="For --iaf=ve/vediff, number of encoding cycles in original acquisition", type="int", default=8)
         group.add_option("--hadamard-size", help="Size of Hadamard encoding matrix, must be power of 2 or 12", type="int", default=8)
         group.add_option("--casl", help="Acquisition was pseudo cASL (pcASL) rather than pASL", action="store_true", default=False)
-        group.add_option("--tau", "--taus", "--bolus", help="Bolus duration (s). Can be single value or comma separated list, one per TI/PLD")
+        group.add_option("--tau", "--taus", "--bolus", "--lds", help="Labelling duration (s). Can be single value or comma separated list, one per TI/PLD or per sub-bolus for Hadamard data")
         group.add_option("--slicedt", help="Timing difference between slices (s) for 2D readout", type=float, default=0.0)
         group.add_option("--sliceband", help="Number of slices per pand in multi-band setup", type=int)
         group.add_option("--artsupp", help="Arterial suppression (vascular crushing) was used", action="store_true", default=False)
@@ -399,7 +399,23 @@ class AslImage(Image):
 
         if len(taus) == 1:
             taus = taus * ntis
-        if len(taus) != self.ntis:
+        if self.iaf == "hadamard":
+            # With Hadamard encoding we might have one tau per PLD as usual, but we might also have hybrid
+            # protocols with 1 tau per sub-bolus. We want to expand this out to 1 per sub-bolus per PLD
+            if len(taus) == self.ntis and len(taus) == self.ntc-1:
+                warnings.warn("Number of LDs matches both number of PLDs and sub-boli. This is ambiguous, we will assume they are matched to PLDs")
+            if len(taus) == self.ntis:
+                # one per PLD - duplicate for each sub-bolus
+                taus = sum([[t] * (self.ntc-1) for t in taus], [])
+            elif len(taus) == self.ntc - 1:
+                # One per sub-bolus - duplicate for each PLD
+                taus = list(taus) * self.ntis
+            elif len(taus) == self.ntis * (self.ntc-1):
+                # One per PLD/sub-bolus - no need to change
+                pass
+            else:
+                raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs and %i Hadamard sub-boli" % (len(taus), self.ntis, self.ntc-1))
+        elif len(taus) != self.ntis:
             raise ValueError("%i bolus durations specified, inconsistent with %i TIs/PLDs" % (len(taus), self.ntis))
         self.setMeta("taus", taus)
 
@@ -442,7 +458,9 @@ class AslImage(Image):
 
     @property
     def tis(self):
-        if self.casl and self.have_plds:
+        if self.iaf == "hadmard":
+            raise RuntimeError("TIs not defined for Hadamard encoded data")
+        elif self.casl and self.have_plds:
             return [pld + tau for pld, tau in zip(self.plds, self.taus)]
         else:
             return self.getMeta("tis", self.getMeta("plds"))
@@ -623,7 +641,11 @@ class AslImage(Image):
             tis = [self.tis[ti_idx],]
 
         if self.taus is not None:
-            taus = self.taus[ti_idx]
+            if self.iaf == "hadamard":
+                # With Hadamard we have 1 tau per sub-bolus
+                taus = self.taus[ti_idx:ti_idx+self.ntc-1]
+            else:
+                taus = self.taus[ti_idx]
         else:
             taus = None
 
@@ -676,34 +698,45 @@ class AslImage(Image):
             # worry at this point about what PLD/repeat they correspond to (see below)
             # Each column of the Hadamard matrix (excluding the first) contains +1/-1 values
             # which form a linear combination of the images in the sequence to extract the
-            # decoded sub-bolus for that column number.
+            # decoded sub-bolus for that column number. Note that the convention is that +1
+            # represents a label condition and thus should be subtracted
             for vol_idx in range(0, self.nvols):
                 rpt_idx = int(vol_idx / self.ntc)
                 had_idx = vol_idx % self.ntc
                 for sub_bolus in range(self.ntc-1):
-                    output_data[..., rpt_idx*(self.ntc-1)+sub_bolus] += had_matrix[had_idx, sub_bolus+1]*reordered[..., vol_idx]
+                    output_data[..., rpt_idx*(self.ntc-1)+sub_bolus] -= had_matrix[had_idx, sub_bolus+1]*reordered[..., vol_idx]
+            output_data /= (self.ntc/2)
 
-            # Now calculate the PLDs for the data decoded about which vary by sub-bolus,
-            # e.g. for the nth sub-bolus there is an additional PLD corresponding to
-            # had_size-1-n * sub_bolus labelling duration. For this to work with the
-            # decoded data we must have had all the original PLDs together, hence
-            # why we reordered to 'ltr' ordering
+            # Now calculate the PLDs for the data decoded about which vary by sub-bolus
+            # because for each sub-bolus, all of the sub-boli *after* it will contribute
+            # to the PLD. Note that we have by now expanded the taus list so it is one
+            # value per sub-bolus if it wasn't originally (not per PLD)
+            #
+            # For this to work with the decoded data we must have had all the original PLDs
+            # together, hence why we reordered to 'ltr' ordering
             decoded_plds, decoded_taus, decoded_rpts = [], [], []
             for pld_idx in range(0, self.nplds):
-                for col in range(self.ntc-1):
-                    decoded_plds.append(self.plds[pld_idx] + self.taus[pld_idx]*(self.ntc-2-col))
-                    decoded_taus.append(self.taus[pld_idx])
+                encoding_taus = self.taus[pld_idx * (self.ntc-1): (pld_idx + 1) * (self.ntc-1)]
+                for subbolus_idx in range(self.ntc-1):
+                    total_pld = self.plds[pld_idx]
+                    for subsequent_subbolus_idx in range(subbolus_idx+1, self.ntc-1):
+                        total_pld += encoding_taus[subsequent_subbolus_idx]
+
+                    decoded_plds.append(total_pld)
+                    decoded_taus.append(encoding_taus[subbolus_idx])
                     decoded_rpts.append(self.rpts[pld_idx])
 
             extra_kwargs["plds"] = decoded_plds
             extra_kwargs["rpts"] = decoded_rpts
             extra_kwargs["taus"] = decoded_taus
+            extra_kwargs["nplds"] = self.nplds * (self.ntc-1)
         else:
             raise ValueError("Data is not tag-control pairs - cannot difference")
 
         if not name:
             name = self.name + "_diff"
         ret = self.derived(image=output_data, name=name, iaf="diff", order=differenced_order, **extra_kwargs)
+
         # It is possible that to do decoding we might have changed the data order - so put this right
         # if necessary (will do nothing if the ordering is already correct)
         return ret.reorder(out_order)
@@ -738,9 +771,9 @@ class AslImage(Image):
 
         # Create output data - one repeat per ti. Note ordering of nested loops follows
         # out_order defined above
-        output_data = np.zeros(list(self.shape[:3]) + [self.ntis * data.ntc * data.ntes])
+        output_data = np.zeros(list(data.shape[:3]) + [data.ntis * data.ntc * data.ntes])
         start = 0
-        for ti, nrp in enumerate(self.rpts):
+        for ti, nrp in enumerate(data.rpts):
             for label in range(data.ntc):
                 for te in range(data.ntes):
                     repeat_data = input_data[..., start:start+nrp]
@@ -749,7 +782,7 @@ class AslImage(Image):
 
         if not name:
             name = self.name + "_mean"
-        return self.derived(image=output_data, name=name, iaf=data.iaf, order=orig_order, rpts=1)
+        return data.derived(image=output_data, name=name, iaf=data.iaf, order=orig_order, rpts=1)
 
     def mean(self, name=None):
         """
@@ -932,13 +965,16 @@ class AslImage(Image):
         derived_kwargs = {}
         for attr in derived_attrs:
             derived_kwargs[attr] = kwargs.get(attr, getattr(self, attr, None))
-        if self.iaf in ("ve", "vediff"):
+        if derived_kwargs["iaf"] in ("ve", "vediff") and "nenc" not in derived_kwargs:
             derived_kwargs["nenc"] = self.nenc
-        if self.iaf == "hadamard":
+        if derived_kwargs["iaf"] == "hadamard" and "hadamard_size" not in derived_kwargs:
             derived_kwargs["hadamard_size"] = self.hadamard_size
 
         try:
             return AslImage(image=image, name=name, header=kwargs.get("header", self.header), **derived_kwargs)
         except ValueError as exc:
-            warnings.warn("AslImage.derived failed (%s) - returning fsl.data.image.Image" % str(exc))
-            return Image(image=image, name=name, header=kwargs.get("header", self.header), **kwargs)
+            if kwargs.get("raise_on_fail", False):
+                raise
+            else:
+                warnings.warn("AslImage.derived failed (%s) - returning fsl.data.image.Image" % str(exc))
+                return Image(image=image, name=name, header=kwargs.get("header", self.header), **kwargs)
