@@ -142,7 +142,6 @@ def segment(wsp):
         page.image("wm_pv", LightboxImage(wsp.structural.wm_pv, bgimage=wsp.structural.brain))
     else:
         # User-supplied segmentation - treat as PV as well
-        # Note this is in ASL space whereas above it is in struc space?
         wsp.structural.csf_pv = wsp.structural.csf_seg
         wsp.structural.gm_pv = wsp.structural.gm_seg
         wsp.structural.wm_pv = wsp.structural.wm_seg
