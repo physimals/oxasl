@@ -30,9 +30,9 @@ class Options(OptionCategory):
         group.add_option("--region-analysis", help="Perform region analysis", action="store_true", default=False)
         group.add_option("--roi-min-nvoxels", default=10, type=int,
                           help="Minimum number of relevant voxels required to report statistics")
-        group.add_option("--gm-thresh", default=0.8, type=float,
+        group.add_option("--pure-gm-thresh", "--gm-thresh", default=0.8, type=float,
                           help="Probability threshold for 'pure' grey matter")
-        group.add_option("--wm-thresh", default=0.9, type=float,
+        group.add_option("--pure-wm-thresh", "--wm-thresh", default=0.9, type=float,
                           help="Probability threshold for 'pure' white matter")
         group.add_option("--min-gm-thresh", default=0.1, type=float,
                           help="Probability threshold for a voxel to be included in GM stats")
@@ -305,7 +305,7 @@ def get_stats(wsp, roi_stats, roi, data_item):
         # Should never happen
         raise RuntimeError("No ASL-space ROI to get stats: %s" % str(roi))
 
-def add_roi(wsp, rois, name, roi, threshold):
+def add_roi(wsp, rois, name, roi, threshold=0.5):
     """
     Add an ROI
 
@@ -403,7 +403,7 @@ def add_rois_from_3d_label_atlas(wsp, rois, atlas_img, region_names):
         roi_data = atlas_img.data.copy()
         roi_bin = (roi_data == label).astype(np.int32)
         roi = Image(roi_bin, header=atlas_img.header)
-        add_roi(wsp, rois, name, roi, threshold=0.5)
+        add_roi(wsp, rois, name, roi)
 
 def add_roi_set_from_4d_atlas(wsp, rois, atlas_img, region_names, threshold=0.5):
     """
@@ -454,7 +454,7 @@ def get_perfusion_data(wsp):
             },
         ]
     else:
-        wsp.log.write(" - No partial volume corrected results - will mask ROIs using 'pure' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.gm_thresh, wsp.wm_thresh))
+        wsp.log.write(" - No partial volume corrected results - will mask ROIs using 'pure' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.pure_gm_thresh, wsp.pure_wm_thresh))
         data = [
             {
                 "suffix" : "", 
@@ -466,13 +466,13 @@ def get_perfusion_data(wsp):
                 "suffix" : "_gm",
                 "f" : wsp.perfusion,
                 "var" :  wsp.perfusion_var,
-                "mask" : np.logical_and(wsp.mask.data, wsp.structural.gm_pv_asl.data > wsp.gm_thresh),
+                "mask" : np.logical_and(wsp.mask.data, wsp.structural.gm_pv_asl.data > wsp.pure_gm_thresh),
             },
             {
                 "suffix" : "_wm",
                 "f" : wsp.perfusion,
                 "var" :  wsp.perfusion_var,
-                "mask" : np.logical_and(wsp.mask.data, wsp.structural.wm_pv_asl.data > wsp.wm_thresh),
+                "mask" : np.logical_and(wsp.mask.data, wsp.structural.wm_pv_asl.data > wsp.pure_wm_thresh),
             },
         ]
     return data
@@ -510,7 +510,7 @@ def get_arrival_data(wsp):
             },
         ]
     else:
-        wsp.log.write(" - No partial volume corrected results - will mask ROIs using 'pure' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.gm_thresh, wsp.wm_thresh))
+        wsp.log.write(" - No partial volume corrected results - will mask ROIs using 'pure' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.pure_gm_thresh, wsp.pure_wm_thresh))
         arrival_data = [
             {
                 "suffix" : "_arrival", 
@@ -522,13 +522,13 @@ def get_arrival_data(wsp):
                 "suffix" : "_arrival_gm",
                 "f" : wsp.arrival,
                 "var" :  wsp.arrival_var,
-                "mask" : np.logical_and(effective_mask, wsp.structural.gm_pv_asl.data > wsp.gm_thresh),
+                "mask" : np.logical_and(effective_mask, wsp.structural.gm_pv_asl.data > wsp.pure_gm_thresh),
             },
             {
                 "suffix" : "_arrival_wm",
                 "f" : wsp.perfusion,
                 "var" :  wsp.arrival_var,
-                "mask" : np.logical_and(effective_mask, wsp.structural.wm_pv_asl.data > wsp.wm_thresh),
+                "mask" : np.logical_and(effective_mask, wsp.structural.wm_pv_asl.data > wsp.pure_wm_thresh),
             },
         ]
     return arrival_data
@@ -559,15 +559,17 @@ def run(wsp):
     else:
         wsp.structural.csf_pv_asl = reg.change_space(wsp, wsp.structural.csf_pv, "asl")
 
-    wsp.gm_thresh, wsp.wm_thresh = wsp.ifnone("gm_thresh", 0.8), wsp.ifnone("wm_thresh", 0.9)
+    wsp.pure_gm_thresh, wsp.pure_wm_thresh = wsp.rois.pure_gm_thresh, wsp.rois.pure_wm_thresh
     wsp.min_gm_thresh, wsp.min_wm_thresh = wsp.ifnone("min_gm_thresh", 0.1), wsp.ifnone("min_wm_thresh", 0.1)
 
     rois = []
     wsp.log.write("\nLoading generic ROIs\n")
     add_roi(wsp, rois, "%i%%+GM" % (wsp.min_gm_thresh*100), wsp.structural.gm_pv_asl, wsp.min_gm_thresh)
     add_roi(wsp, rois, "%i%%+WM" % (wsp.min_wm_thresh*100), wsp.structural.wm_pv_asl, wsp.min_wm_thresh)
-    add_roi(wsp, rois, "%i%%+GM" % (wsp.gm_thresh*100), wsp.structural.gm_pv_asl, wsp.gm_thresh)
-    add_roi(wsp, rois, "%i%%+WM" % (wsp.wm_thresh*100), wsp.structural.wm_pv_asl, wsp.wm_thresh)
+    add_roi(wsp, rois, "%i%%+GM" % (wsp.pure_gm_thresh*100), wsp.structural.gm_pv_asl, wsp.pure_gm_thresh)
+    add_roi(wsp, rois, "%i%%+WM" % (wsp.pure_wm_thresh*100), wsp.structural.wm_pv_asl, wsp.pure_wm_thresh)
+    add_roi(wsp, rois, "Cortical %i%%+GM" % (wsp.pure_gm_thresh*100), wsp.rois.cortical_gm_asl)
+    add_roi(wsp, rois, "Cerebral %i%%+WM" % (wsp.pure_wm_thresh*100), wsp.rois.cerebral_wm_asl)
 
     wsp.log.write("\nLoading tissue PV ROI set")
     roi_set = Image(np.stack([wsp.structural.gm_pv_asl.data, wsp.structural.wm_pv_asl.data, wsp.structural.csf_pv_asl.data], axis=-1), header=wsp.structural.csf_pv_asl.header)
@@ -641,7 +643,10 @@ def run(wsp):
     if wsp.save_asl_rois or wsp.save_asl_masks or wsp.save_struct_rois or wsp.save_std_rois:
         wsp.sub("region_rois")
         for roi in rois:
-            fname = roi["name"].replace(" ", "_").replace(",", "").lower()
+            if "name" in roi:
+                fname = roi["name"].replace(" ", "_").replace(",", "").lower()
+            else:
+                fname = "_".join(roi["names"]).replace(" ", "_").replace(",", "").lower()
             if wsp.save_asl_rois and "roi_asl" in roi:
                 setattr(wsp.region_rois, fname + "_asl_roi", roi["roi_asl"])
             if wsp.save_asl_masks and "mask_asl" in roi:

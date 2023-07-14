@@ -218,6 +218,7 @@ def oxasl(wsp):
 
     # Calibration and output
     m0.run(wsp)
+    rois.run(wsp)
     output.run(wsp)
 
     # Post processing and reporting

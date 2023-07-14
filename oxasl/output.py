@@ -8,7 +8,6 @@ import itertools
 import numpy as np
 
 from fsl.data.image import Image
-from fsl.data.atlases import AtlasRegistry
 
 from oxasl.options import OptionCategory, OptionGroup
 from oxasl import reg, calibration
@@ -63,6 +62,7 @@ OUTPUT_ITEMS = {
 
 def run(wsp):
     wsp.log.write("\nGenerating output images\n")
+
     for quantify_wsp in wsp.quantify_wsps:
         try:
             quantify_name = quantify_wsp[quantify_wsp.index("_"):]
@@ -179,35 +179,17 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
         table = []
         table.append(["Mean within mask", "%.4g %s" % (np.mean(data[roi > 0.5]), units), ""])
         if wsp.structural.struc is not None:
-            if wsp.structural.gm_pv_asl is None:
-                wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, img).data
-                wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, img).data
-            gm = np.asarray(wsp.structural.gm_pv_asl.data)
-            wm = np.asarray(wsp.structural.wm_pv_asl.data)
-            if wsp.structural.cortex_asl is None:
-                wsp.structural.cortex_asl = _get_cortex(wsp)
-            cortex = wsp.structural.cortex_asl
-            some_gm, some_wm = gm > 0.5, wm > 0.5
-            pure_gm, pure_wm = gm > wsp.ifnone("gm_thresh", 0.8), wm > wsp.ifnone("wm_thresh", 0.9)
-            table.append(["GM mean", "%.4g %s" % (np.mean(data[some_gm]), units), normal_gm])
-            table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[pure_gm]), units), normal_gm])
-            table.append(["Cortical GM mean", "%.4g %s" % (np.mean(data[np.logical_and(pure_gm, cortex)]), units), normal_gm])
-            table.append(["WM mean", "%.4g %s" % (np.mean(data[some_wm]), units), normal_wm])
-            table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[pure_wm]), units), normal_wm])
-            table.append(["Cerebral wM mean", "%.4g %s" % (np.mean(data[np.logical_and(pure_wm, cortex)]), units), normal_wm])
+            table.append(["GM mean", "%.4g %s" % (np.mean(data[wsp.rois.gm_asl.data > 0]), units), normal_gm])
+            table.append(["Pure GM mean", "%.4g %s" % (np.mean(data[wsp.rois.pure_gm_asl.data > 0]), units), normal_gm])
+            table.append(["Cortical GM mean", "%.4g %s" % (np.mean(data[wsp.rois.cortical_gm_asl.data > 0]), units), normal_gm])
+            table.append(["WM mean", "%.4g %s" % (np.mean(data[wsp.rois.wm_asl.data > 0]), units), normal_wm])
+            table.append(["Pure WM mean", "%.4g %s" % (np.mean(data[wsp.rois.pure_wm_asl.data > 0]), units), normal_wm])
+            table.append(["Cerebral WM mean", "%.4g %s" % (np.mean(data[wsp.rois.cerebral_wm_asl.data > 0]), units), normal_wm])
 
         page.table(table, headers=["Metric", "Value", "Typical"])
 
         page.heading("Image", level=1)
         page.image("%s_%s_img" % (name, calib_method), LightboxImage(img, zeromask=False, mask=wsp.mask, colorbar=True))
-
-def _get_cortex(wsp):
-    atlases = AtlasRegistry()
-    atlases.rescanAtlases()
-    atlas = atlases.loadAtlas("harvardoxford-subcortical", loadSummary=False, resolution=2)
-    cort_std = Image(np.mean(atlas.data[..., 0:2] + atlas.data[..., 11:13], axis=-1) * 2, header=atlas.header)
-    cort_asl = reg.change_space(wsp, cort_std, "asl").data
-    return cort_asl > 50
 
 def __output_trans_helper(wsp):
     """
