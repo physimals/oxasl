@@ -54,6 +54,11 @@ def run(wsp):
 
     wsp.sub("moco")
     wsp.log.write("\nCalculating Motion Correction\n")
+    if wsp.preproc.asldata.ndim < 4:
+        wsp.log.write(" - Skipping, data is 3D\n")
+        wsp.moco.output = wsp.preproc.asldata
+        return
+
     nvols = wsp.preproc.asldata.shape[3]
     # If available, use the calibration image as reference since this will be most consistent if the data has a range
     # of different TIs and background suppression etc. This also removes motion effects between asldata and calibration image
