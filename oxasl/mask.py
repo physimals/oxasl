@@ -57,8 +57,10 @@ def run(wsp):
     page.heading("Mask generation", level=0)
 
     if wsp.mask is not None:
+        if reg.get_img_space(wsp, wsp.mask) != "asl":
+            raise ValueError("Mask supplied is not in ASL space: %s" % wsp.mask.name)
         wsp.rois.mask_src = "user"
-        mask_source = "provided by user (assumed to be ASL space): %s" % wsp.mask.name
+        mask_source = "ASL space mask provided by user: %s" % wsp.mask.name
         wsp.rois.mask = wsp.mask
     elif wsp.structural is not None and wsp.structural.struc is not None:
         # Preferred option is to use brain extracted structural
