@@ -36,7 +36,7 @@ Copyright (c) 2008-2020 Univerisity of Oxford
 """
 from oxasl.options import OptionCategory, OptionGroup
 
-from . import fabber_method, svb_method, vaby_method
+from . import fabber_method, svb_method, vaby_method, multistep_fit
 
 class Options(OptionCategory):
     """
