@@ -41,7 +41,6 @@ def run(wsp):
         wsp.rois.pure_wm_thresh = wsp.ifnone("pure_wm_thresh", 0.0)
         some_gm, some_wm = gm > 0.5, wm > 0.5
         pure_gm, pure_wm = gm > wsp.rois.pure_gm_thresh, wm > wsp.rois.pure_wm_thresh
-        print("GM mask: ", some_gm.shape)
         wsp.rois.gm_asl = Image(some_gm.astype(int), header=wsp.structural.gm_pv_asl.header)
         wsp.rois.pure_gm_asl = Image(pure_gm.astype(int), header=wsp.structural.gm_pv_asl.header)
         wsp.rois.wm_asl = Image(some_wm.astype(int), header=wsp.structural.wm_pv_asl.header)
