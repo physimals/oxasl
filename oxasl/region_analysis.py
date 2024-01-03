@@ -311,6 +311,7 @@ def add_roi(wsp, rois, name, roi, threshold=0.5):
 
     :param rois: Current list of ROIs
     :param name: Name for ROI
+    :param roi: ROI image (may be binary, probabilistic, percentage...)
     :param threshold: Threshold for generating binary mask
     """
     wsp.log.write(" - %s..." % name)
@@ -441,13 +442,15 @@ def get_perfusion_data(wsp):
         wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.min_gm_thresh, wsp.min_wm_thresh))
         data = [
             {
-                "suffix" : "_gm", 
+                "data_name" : "perfusion",
+                "suffix" : "gm",
                 "f" : wsp.perfusion,
                 "var" : wsp.perfusion_var,
                 "mask" : np.logical_and(wsp.mask.data, wsp.structural.gm_pv_asl.data > wsp.min_gm_thresh),
             },
             {
-                "suffix" : "_wm", 
+                "data_name" : "perfusion",
+                "suffix" : "wm",
                 "f" : wsp.perfusion_wm,
                 "var" : wsp.perfusion_wm_var,
                 "mask" : np.logical_and(wsp.mask.data, wsp.structural.wm_pv_asl.data > wsp.min_wm_thresh),
@@ -457,19 +460,22 @@ def get_perfusion_data(wsp):
         wsp.log.write(" - No partial volume corrected results - will mask ROIs using 'pure' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.pure_gm_thresh, wsp.pure_wm_thresh))
         data = [
             {
-                "suffix" : "", 
+                "data_name" : "perfusion",
+                "suffix" : "",
                 "f" : wsp.perfusion,
                 "var" :  wsp.perfusion_var,
                 "mask" : wsp.mask.data,
             },
             {
-                "suffix" : "_gm",
+                "data_name" : "perfusion",
+                "suffix" : "gm",
                 "f" : wsp.perfusion,
                 "var" :  wsp.perfusion_var,
                 "mask" : np.logical_and(wsp.mask.data, wsp.structural.gm_pv_asl.data > wsp.pure_gm_thresh),
             },
             {
-                "suffix" : "_wm",
+                "data_name" : "perfusion",
+                "suffix" : "wm",
                 "f" : wsp.perfusion,
                 "var" :  wsp.perfusion_var,
                 "mask" : np.logical_and(wsp.mask.data, wsp.structural.wm_pv_asl.data > wsp.pure_wm_thresh),
@@ -497,13 +503,15 @@ def get_arrival_data(wsp):
         wsp.log.write(" - Found partial volume corrected results - will mask ROIs using 'base' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.min_gm_thresh, wsp.min_wm_thresh))
         arrival_data = [
             {
-                "suffix" : "_arrival_gm",
+                "data_name" : "arrival",
+                "suffix" : "gm",
                 "f" : wsp.arrival,
                 "var" : wsp.arrival_var,
                 "mask" : np.logical_and(effective_mask, wsp.structural.gm_pv_asl.data > wsp.min_gm_thresh),
             },
             {
-                "suffix" : "_arrival_wm",
+                "data_name" : "arrival",
+                "suffix" : "wm",
                 "f" : wsp.arrival_wm,
                 "var" : wsp.arrival_wm_var,
                 "mask" : np.logical_and(effective_mask, wsp.structural.wm_pv_asl.data > wsp.min_wm_thresh),
@@ -513,19 +521,22 @@ def get_arrival_data(wsp):
         wsp.log.write(" - No partial volume corrected results - will mask ROIs using 'pure' GM/WM masks (PVE thresholds: %.2f / %.2f)\n" % (wsp.pure_gm_thresh, wsp.pure_wm_thresh))
         arrival_data = [
             {
-                "suffix" : "_arrival", 
+                "data_name" : "arrival",
+                "suffix" : "",
                 "f" : wsp.arrival,
                 "var" :  wsp.arrival_var,
                 "mask" : effective_mask,
             },
             {
-                "suffix" : "_arrival_gm",
+                "data_name" : "arrival",
+                "suffix" : "gm",
                 "f" : wsp.arrival,
                 "var" :  wsp.arrival_var,
                 "mask" : np.logical_and(effective_mask, wsp.structural.gm_pv_asl.data > wsp.pure_gm_thresh),
             },
             {
-                "suffix" : "_arrival_wm",
+                "data_name" : "arrival",
+                "suffix" : "wm",
                 "f" : wsp.perfusion,
                 "var" :  wsp.arrival_var,
                 "mask" : np.logical_and(effective_mask, wsp.structural.wm_pv_asl.data > wsp.pure_wm_thresh),
@@ -564,6 +575,7 @@ def run(wsp):
 
     rois = []
     wsp.log.write("\nLoading generic ROIs\n")
+    add_roi(wsp, rois, "All", wsp.native.mask)
     add_roi(wsp, rois, "%i%%+GM" % (wsp.min_gm_thresh*100), wsp.structural.gm_pv_asl, wsp.min_gm_thresh)
     add_roi(wsp, rois, "%i%%+WM" % (wsp.min_wm_thresh*100), wsp.structural.wm_pv_asl, wsp.min_wm_thresh)
     add_roi(wsp, rois, "%i%%+GM" % (wsp.pure_gm_thresh*100), wsp.structural.gm_pv_asl, wsp.pure_gm_thresh)
@@ -597,8 +609,8 @@ def run(wsp):
             add_roi_set_from_4d_atlas(wsp, rois, atlas, names)
 
     # Add ROIs from standard atlases
-    add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
-    add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
+    #add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
+    #add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
 
     for calib_method in wsp.calibration.calib_method:
         wsp.log.write("\nCalibration method: %s\n" % calib_method)
@@ -637,8 +649,28 @@ def run(wsp):
                         stats.append(roi_stats_copy)
 
             columns = list(stats[0].keys())
-            setattr(calib_wsp, "roi_stats%s" % data_item["suffix"], pd.DataFrame(stats, columns=columns))
-    
+            df = pd.DataFrame(stats, columns=columns)
+
+            # Ugly hack for naming compatibility
+            data_name_csv = "_" + data_item["data_name"]
+            if data_name_csv == "_perfusion":
+                data_name_csv = ""
+            suffix = "_" + data_item["suffix"]
+            suffix = "" if suffix == "_" else suffix
+            setattr(calib_wsp, "roi_stats%s%s" % (data_name_csv, suffix), df)
+
+            # Summary measures output as .txt files to make oxford_asl users slightly happier
+            summary_mean = stats[0]["Mean"]
+            summary_name = "%s%s_mean" % (data_item["data_name"], suffix)
+            calib_wsp.set_item(summary_name, summary_mean, save_name=summary_name + ".txt", save_fn=str)
+            if suffix == "":
+                cereb_wm_mean = stats[6]["Mean"]
+                cort_gm_mean = stats[5]["Mean"]
+                cereb_wm_name = "%s_cerebral_wm_mean" % data_item["data_name"]
+                cort_gm_name = "%s_cortical_gm_mean" % data_item["data_name"]
+                calib_wsp.set_item(cereb_wm_name, cereb_wm_mean, save_name=cereb_wm_name + ".txt", save_fn=str)
+                calib_wsp.set_item(cort_gm_name, cort_gm_mean, save_name=cort_gm_name + ".txt", save_fn=str)
+
     # Save output masks/PVE maps
     if wsp.save_asl_rois or wsp.save_asl_masks or wsp.save_struct_rois or wsp.save_std_rois:
         wsp.sub("region_rois")
