@@ -13,10 +13,6 @@ from fsl.data.image import Image
 from oxasl import mask, reg
 from . import multistep_fit
 
-try:
-    import oxasl_surfpvc
-except ImportError:
-    oxasl_surfpvc = None
 
 def run(wsp):
     # Basic non-PVC run
@@ -38,7 +34,7 @@ def run(wsp):
     # If the user has provided manual PV maps (pvgm and pvgm) then do PVEc, even if they
     # have not explicitly given the --pvcorr option 
     wsp.user_pv_flag = ((wsp.pvwm is not None) and (wsp.pvgm is not None))
-    if wsp.pvcorr or wsp.surf_pvcorr or wsp.user_pv_flag:
+    if wsp.pvcorr or wsp.user_pv_flag:
         # Partial volume correction is very sensitive to the mask, so recreate it
         # if it came from the structural image as this requires accurate ASL->Struc registration
         if wsp.rois.mask_src == "struc":
@@ -48,9 +44,6 @@ def run(wsp):
 
         if wsp.pvcorr or wsp.user_pv_flag:
             _default_pvcorr(wsp)
-
-        if wsp.surf_pvcorr:
-            _surf_pvcorr
 
 def _default_pvcorr(wsp):
     # Do partial volume correction fitting
@@ -75,19 +68,3 @@ def _default_pvcorr(wsp):
     multistep_fit.run(wsp.sub("basil_pvcorr"), prefit=False)
     wsp.quantify_wsps.append("basil_pvcorr")
 
-def _surf_pvcorr(wsp):
-    if oxasl_surfpvc is None:
-        raise RuntimeError("Surface-based PVC requested but oxasl_surfpvc is not installed")
-    if wsp.user_pv_flag:
-        wsp.log.write(" - WARNING: Performing surface based PVC ignores user-specified PV maps\n")
-    # Prepare GM and WM partial volume maps from surface using Toblerone plugin
-    # Then reform the ASL ROI mask - Toblerone does not handle the cerebellum so need
-    # to mask it out
-    oxasl_surfpvc.prepare_surf_pvs(wsp)
-    wsp.rois.mask_pvcorr = wsp.rois.mask
-    min_pv = 0.01
-    new_roi = (wsp.basil_options["pwm"].data > min_pv) | (wsp.basil_options["pgm"].data > min_pv)
-    wsp.rois.mask = Image(new_roi.astype(np.int8), header=wsp.rois.mask_pvcorr.header)
-
-    multistep_fit.run(wsp.sub("basil_surf_pvcorr"), prefit=False)
-    wsp.quantify_wsps.append("basil_surf_pvcorr")
