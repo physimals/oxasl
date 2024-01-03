@@ -75,11 +75,6 @@ except ImportError:
     oxasl_enable = None
 
 try:
-    import oxasl_surfpvc
-except ImportError:
-    oxasl_surfpvc = None
-
-try:
     import oxasl_multite
 except ImportError:
     oxasl_multite = None
@@ -192,7 +187,7 @@ def oxasl(wsp):
     Main oxasl pipeline script
     """
     wsp.log.write("OXASL version: %s\n" % __version__)
-    for plugin in (oxasl_ve, oxasl_mp, oxasl_deblur, oxasl_enable, oxasl_surfpvc, oxasl_multite):
+    for plugin in (oxasl_ve, oxasl_mp, oxasl_deblur, oxasl_enable, oxasl_multite):
         if plugin is not None:
             wsp.log.write(" - Found plugin: %s (version %s)\n" % (plugin.__name__, getattr(plugin, "__version__", "unknown")))
 
