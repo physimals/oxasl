@@ -28,6 +28,7 @@ class Options(OptionCategory):
     def groups(self, parser):
         group = OptionGroup(parser, "Region analysis")
         group.add_option("--region-analysis", help="Perform region analysis", action="store_true", default=False)
+        group.add_option("--uncalibrated-stats", help="Perform region analysis on uncalibrated data as well as calibrated", action="store_true", default=False)
         group.add_option("--roi-min-nvoxels", default=10, type=int,
                           help="Minimum number of relevant voxels required to report statistics")
         group.add_option("--pure-gm-thresh", "--gm-thresh", default=0.8, type=float,
@@ -612,12 +613,15 @@ def run(wsp):
     add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
     add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
 
-    for calib_method in wsp.calibration.calib_method:
+    calib_methods = list(wsp.calibration.calib_method)
+    if wsp.uncalibrated_stats:
+        calib_methods.insert(0, "")
+    for calib_method in calib_methods:
         wsp.log.write("\nCalibration method: %s\n" % calib_method)
-        if calib_method != "prequantified":
-            calib_wsp = getattr(wsp.native, "calib_%s" % calib_method)
-        else:
+        if calib_method in ("", "prequantified"):
             calib_wsp = wsp.native
+        else:
+            calib_wsp = getattr(wsp.native, "calib_%s" % calib_method)
 
         wsp.log.write("\nLoading perfusion images\n")
         stats_data = get_perfusion_data(calib_wsp)
