@@ -609,8 +609,8 @@ def run(wsp):
             add_roi_set_from_4d_atlas(wsp, rois, atlas, names)
 
     # Add ROIs from standard atlases
-    #add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
-    #add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
+    add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
+    add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
 
     for calib_method in wsp.calibration.calib_method:
         wsp.log.write("\nCalibration method: %s\n" % calib_method)
