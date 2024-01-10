@@ -381,7 +381,7 @@ def add_roi_set_from_fsl_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.
     if wsp.fuzzy_sets or wsp.psf is not None:
         # When treating as an ROI set, do not threshold, allow it to be fuzzy
         roi_set = Image(np.stack(roi_set, axis=3), header=roi_region.header)
-        add_roi_set(rois, names, roi_set, names)
+        add_roi_set(wsp, rois, names, roi_set)
 
 def add_rois_from_3d_label_atlas(wsp, rois, atlas_img, region_names):
     """
@@ -436,7 +436,7 @@ def add_roi_set_from_4d_atlas(wsp, rois, atlas_img, region_names, threshold=0.5)
 
     if wsp.fuzzy_sets or wsp.psf is not None:
         roi_set = Image(np.stack(roi_set, axis=3), header=roi_region.header)
-        add_roi_set(rois, roi_set, names)
+        add_roi_set(wsp, rois, roi_set, names)
 
 def get_perfusion_data(wsp):
     if wsp.perfusion_wm is not None:
