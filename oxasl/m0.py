@@ -125,7 +125,7 @@ def run(wsp):
         wsp.calibration.user.m0 = wsp.calib_m0img
         wsp.calibration.calib_method = ["user"]
     elif wsp.calib is None:
-        wsp.log.write(" - No calibration image and no M0 specified - calibration will not be performed")
+        wsp.log.write(" - No calibration image and no M0 specified - calibration will not be performed\n")
         wsp.calibration.calib_method = []
 
     if "voxelwise" in wsp.calibration.calib_method:
