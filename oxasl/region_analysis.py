@@ -326,7 +326,7 @@ def add_roi(wsp, rois, name, roi, threshold=0.5):
     })
     wsp.log.write("DONE\n")
 
-def add_roi_set(wsp, rois, names, roi_set, threshold=None):
+def add_roi_set(wsp, rois, set_name, names, roi_set, threshold=None):
     """
     Add an ROI set
 
@@ -345,7 +345,8 @@ def add_roi_set(wsp, rois, names, roi_set, threshold=None):
         mask_set_asl = roi_set_asl.data
     fuzzy_set_asl = apply_psf(mask_set_asl, wsp.psf)
     rois.append({
-        "names" : names, 
+        "roi_set_name" : set_name,
+        "names" : names,
         "roi_%s" % roi_set_space : roi_set,
         "roi_asl" : roi_set_asl, 
         "mask_asl" : mask_set_asl, 
@@ -381,7 +382,7 @@ def add_roi_set_from_fsl_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.
     if wsp.fuzzy_sets or wsp.psf is not None:
         # When treating as an ROI set, do not threshold, allow it to be fuzzy
         roi_set = Image(np.stack(roi_set, axis=3), header=roi_region.header)
-        add_roi_set(wsp, rois, names, roi_set)
+        add_roi_set(wsp, rois, atlas_name, names, roi_set)
 
 def add_rois_from_3d_label_atlas(wsp, rois, atlas_img, region_names):
     """
@@ -407,7 +408,7 @@ def add_rois_from_3d_label_atlas(wsp, rois, atlas_img, region_names):
         roi = Image(roi_bin, header=atlas_img.header)
         add_roi(wsp, rois, name, roi)
 
-def add_roi_set_from_4d_atlas(wsp, rois, atlas_img, region_names, threshold=0.5):
+def add_roi_set_from_4d_atlas(wsp, rois, atlas_name, atlas_img, region_names, threshold=0.5):
     """
     Get ROIs from an atlas described by a 4D image
  
@@ -436,7 +437,7 @@ def add_roi_set_from_4d_atlas(wsp, rois, atlas_img, region_names, threshold=0.5)
 
     if wsp.fuzzy_sets or wsp.psf is not None:
         roi_set = Image(np.stack(roi_set, axis=3), header=roi_region.header)
-        add_roi_set(wsp, rois, roi_set, names)
+        add_roi_set(wsp, rois, roi_set, atlas_name, names)
 
 def get_perfusion_data(wsp):
     if wsp.perfusion_wm is not None:
@@ -586,7 +587,7 @@ def run(wsp):
 
     wsp.log.write("\nLoading tissue PV ROI set")
     roi_set = Image(np.stack([wsp.structural.gm_pv_asl.data, wsp.structural.wm_pv_asl.data, wsp.structural.csf_pv_asl.data], axis=-1), header=wsp.structural.csf_pv_asl.header)
-    add_roi_set(wsp, rois, ["GM PV", "WM PV", "CSF PV"], roi_set)
+    add_roi_set(wsp, rois, "tissue_pvs", ["GM PV", "WM PV", "CSF PV"], roi_set)
 
     # Add ROIs from command line
     user_rois = [l.strip() for l in wsp.ifnone("add_roi", "").split(",") if l.strip() != ""]
@@ -607,7 +608,7 @@ def run(wsp):
         if atlas.data.ndim == 3:
             add_rois_from_3d_label_atlas(wsp, rois, atlas, names)
         else:
-            add_roi_set_from_4d_atlas(wsp, rois, atlas, names)
+            add_roi_set_from_4d_atlas(wsp, rois, fname[:fname.index(".nii")], atlas, names)
 
     # Add ROIs from standard atlases
     add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
@@ -679,10 +680,7 @@ def run(wsp):
     if wsp.save_asl_rois or wsp.save_asl_masks or wsp.save_struct_rois or wsp.save_std_rois:
         wsp.sub("region_rois")
         for roi in rois:
-            if "name" in roi:
-                fname = roi["name"].replace(" ", "_").replace(",", "").lower()
-            else:
-                fname = "_".join(roi["names"]).replace(" ", "_").replace(",", "").lower()
+            fname = roi.get("name", roi.get("roi_set_name", "UNKNOWN")).replace(" ", "_").replace(",", "").lower()
             if wsp.save_asl_rois and "roi_asl" in roi:
                 setattr(wsp.region_rois, fname + "_asl_roi", roi["roi_asl"])
             if wsp.save_asl_masks and "mask_asl" in roi:
