@@ -38,7 +38,7 @@ def run(wsp):
         wm = np.asarray(wsp.structural.wm_pv_asl.data)
 
         wsp.rois.pure_gm_thresh = wsp.ifnone("pure_gm_thresh", 0.8)
-        wsp.rois.pure_wm_thresh = wsp.ifnone("pure_wm_thresh", 0.0)
+        wsp.rois.pure_wm_thresh = wsp.ifnone("pure_wm_thresh", 0.9)
         some_gm, some_wm = gm > 0.5, wm > 0.5
         pure_gm, pure_wm = gm > wsp.rois.pure_gm_thresh, wm > wsp.rois.pure_wm_thresh
         wsp.rois.gm_asl = Image(some_gm.astype(int), header=wsp.structural.gm_pv_asl.header)
