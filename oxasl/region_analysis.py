@@ -4,6 +4,7 @@ OXASL - Module which generates perfusion stats within various ROIs
 
 Copyright (c) 2008-2020 Univerisity of Oxford
 """
+import optparse
 import os
 
 import numpy as np
@@ -14,7 +15,7 @@ from scipy.fftpack import fft, ifft
 from fsl.data import atlases
 from fsl.data.image import Image
 
-from oxasl import reg
+from oxasl import reg, Workspace
 from oxasl.options import OptionCategory, OptionGroup
 
 class Options(OptionCategory):
@@ -562,17 +563,18 @@ def run(wsp):
     else:
         wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "asl")
 
-    if wsp.pvwm is not None:
+    if wsp.pvgm is not None:
         wsp.structural.gm_pv_asl = wsp.pvgm
     else:
         wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "asl")
-    
+
     if wsp.pvcsf is not None:
         wsp.structural.csf_pv_asl = wsp.pvcsf
     else:
         wsp.structural.csf_pv_asl = reg.change_space(wsp, wsp.structural.csf_pv, "asl")
 
-    wsp.pure_gm_thresh, wsp.pure_wm_thresh = wsp.rois.pure_gm_thresh, wsp.rois.pure_wm_thresh
+    wsp.pure_gm_thresh = wsp.ifnone("pure_gm_thresh", 0.8)
+    wsp.pure_wm_thresh = wsp.ifnone("pure_wm_thresh", 0.9)
     wsp.min_gm_thresh, wsp.min_wm_thresh = wsp.ifnone("min_gm_thresh", 0.1), wsp.ifnone("min_wm_thresh", 0.1)
 
     rois = []
@@ -691,3 +693,85 @@ def run(wsp):
                 setattr(wsp.region_rois, fname + "_std_roi", roi["roi_std"])
 
     wsp.log.write("\nDONE\n")
+
+class CliOptions(OptionCategory):
+    """
+    Options for region analysis command line interface
+    """
+
+    def __init__(self):
+        OptionCategory.__init__(self, "region_analysis_cli")
+
+    def groups(self, parser):
+        group = OptionGroup(parser, "Region analysis")
+        group.add_option("--oxasl-dir", help="OXASL output dir")
+        group.add_option("--perfusion", help="Perfusion map in ASL native space of the oxasl output")
+        group.add_option("--output", help="Output directory", default="roicli")
+        return [group]
+
+def main():
+    """
+    Command line entry point for running 'compatible' region analysis
+    """
+    parser = optparse.OptionParser()
+    parser.add_option("--oxasl-dir", help="OXASL output dir")
+    parser.add_option("--perfusion", help="Perfusion map in ASL native space of the oxasl output")
+    parser.add_option("--perfusion-var", help="Perfusion variance map in ASL native space of the oxasl output")
+    parser.add_option("--arrival", help="ATT map in ASL native space of the oxasl output")
+    parser.add_option("--arrival-var", help="ATT variance map in ASL native space of the oxasl output")
+    parser.add_option("--output", "-o", help="Output directory", default="roicli")
+
+    groups = Options().groups(parser)
+    for group in groups:
+        parser.add_option_group(group)
+
+    options, _ = parser.parse_args()
+
+    wsp = Workspace(savedir=options.output)
+    wsp.sub("native")
+    wsp.native.perfusion = Image(options.perfusion)
+    if options.perfusion_var:
+        wsp.native.perfusion_var = Image(options.perfusion_var)
+    if options.arrival:
+        wsp.native.arrival = Image(options.arrival)
+    if options.arrival_var:
+        wsp.native.arrival_var = Image(options.arrival)
+
+    for k, v in options.__dict__.items():
+        setattr(wsp, k, v)
+
+    wsp.native.mask = Image(os.path.join(options.oxasl_dir, "output", "native", "mask"))
+    wsp.region_analysis = True
+
+    copy = {
+        "reg" : ["aslref", "strucref", "stdref", "asl2struc.mat",
+                 "struc2std", "struc2asl.mat", "std2struc"],
+        "rois" : ["cortical_gm_asl", "cerebral_wm_asl"],
+        "structural" : [],
+        "calibration" : []
+    }
+
+    for wsp_name, fnames in copy.items():
+        subwsp = wsp.sub(wsp_name)
+        for fname in fnames:
+            fpath = os.path.join(options.oxasl_dir, wsp_name, fname)
+            if fname.endswith(".mat"):
+                obj = np.loadtxt(fpath)
+            else:
+                obj = Image(fpath)
+            attr = fname[:fname.index(".")] if "." in fname else fname
+            setattr(subwsp, attr, obj)
+
+    wsp.pvgm = Image(os.path.join(options.oxasl_dir, "structural", "gm_pv_asl"))
+    wsp.pvwm = Image(os.path.join(options.oxasl_dir, "structural", "wm_pv_asl"))
+    wsp.pvcsf = Image(os.path.join(options.oxasl_dir, "structural", "csf_pv_asl"))
+    wsp.calibration.calib_method = [""]
+
+    run(wsp)
+    wsp.reg = None
+    wsp.rois = None
+    wsp.structural = None
+    wsp.calibration = None
+    wsp.input = None
+    wsp.pvgm, wsp.pvwm, wsp.pvcsf = None, None, None
+
