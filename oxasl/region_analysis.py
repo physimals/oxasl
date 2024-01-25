@@ -28,7 +28,7 @@ class Options(OptionCategory):
 
     def groups(self, parser):
         group = OptionGroup(parser, "Region analysis")
-        group.add_option("--region-analysis", help="Perform region analysis", action="store_true", default=False)
+        group.add_option("--full-region-analysis", "--region-analysis", help="Perform full region analysis using atlas ROIs", action="store_true", default=False)
         group.add_option("--uncalibrated-stats", help="Perform region analysis on uncalibrated data as well as calibrated", action="store_true", default=False)
         group.add_option("--roi-min-nvoxels", default=10, type=int,
                           help="Minimum number of relevant voxels required to report statistics")
@@ -553,9 +553,6 @@ def run(wsp):
 
     wsp: Output data workspace
     """
-    if not wsp.region_analysis:
-        return
-
     wsp.log.write("\nRegionwise analysis\n")
 
     if wsp.pvwm is not None:
@@ -591,30 +588,33 @@ def run(wsp):
     roi_set = Image(np.stack([wsp.structural.gm_pv_asl.data, wsp.structural.wm_pv_asl.data, wsp.structural.csf_pv_asl.data], axis=-1), header=wsp.structural.csf_pv_asl.header)
     add_roi_set(wsp, rois, "tissue_pvs", ["GM PV", "WM PV", "CSF PV"], roi_set)
 
-    # Add ROIs from command line
-    user_rois = [l.strip() for l in wsp.ifnone("add_roi", "").split(",") if l.strip() != ""]
-    if user_rois:
-        wsp.log.write("\nLoading user-specified ROIs\n")
-        for fname in user_rois:
-            add_roi(wsp, rois, os.path.basename(fname).split(".")[0], Image(fname), 0.5)
+    if wsp.full_region_analysis:
+        wsp.log.write("\nPerforming full ROI region analysis")
 
-    add_atlas = [l.strip() for l in wsp.ifnone("add_atlas", "").split(",") if l.strip() != ""]
-    atlas_labels = [l.strip() for l in wsp.ifnone("add_atlas_labels", "").split(",") if l.strip() != ""]
-    for idx, fname in enumerate(add_atlas):
-        if idx < len(atlas_labels):
-            with open(atlas_labels[idx]) as f:
-                names = [l.strip() for l in f.readlines()]
-        else:
-            names = [os.path.basename(fname).split(".")[0],]
-        atlas = Image(fname)
-        if atlas.data.ndim == 3:
-            add_rois_from_3d_label_atlas(wsp, rois, atlas, names)
-        else:
-            add_roi_set_from_4d_atlas(wsp, rois, fname[:fname.index(".nii")], atlas, names)
+        # Add ROIs from command line
+        user_rois = [l.strip() for l in wsp.ifnone("add_roi", "").split(",") if l.strip() != ""]
+        if user_rois:
+            wsp.log.write("\nLoading user-specified ROIs\n")
+            for fname in user_rois:
+                add_roi(wsp, rois, os.path.basename(fname).split(".")[0], Image(fname), 0.5)
 
-    # Add ROIs from standard atlases
-    add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
-    add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
+        add_atlas = [l.strip() for l in wsp.ifnone("add_atlas", "").split(",") if l.strip() != ""]
+        atlas_labels = [l.strip() for l in wsp.ifnone("add_atlas_labels", "").split(",") if l.strip() != ""]
+        for idx, fname in enumerate(add_atlas):
+            if idx < len(atlas_labels):
+                with open(atlas_labels[idx]) as f:
+                    names = [l.strip() for l in f.readlines()]
+            else:
+                names = [os.path.basename(fname).split(".")[0],]
+            atlas = Image(fname)
+            if atlas.data.ndim == 3:
+                add_rois_from_3d_label_atlas(wsp, rois, atlas, names)
+            else:
+                add_roi_set_from_4d_atlas(wsp, rois, fname[:fname.index(".nii")], atlas, names)
+
+        # Add ROIs from standard atlases
+        add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-cortical", threshold=0.5)
+        add_roi_set_from_fsl_atlas(wsp, rois, "harvardoxford-subcortical", threshold=0.5)
 
     calib_methods = list(wsp.calibration.calib_method)
     if wsp.uncalibrated_stats:
@@ -664,7 +664,9 @@ def run(wsp):
                 data_name_csv = ""
             suffix = "_" + data_item["suffix"]
             suffix = "" if suffix == "_" else suffix
-            setattr(calib_wsp, "roi_stats%s%s" % (data_name_csv, suffix), df)
+            if wsp.full_region_analysis:
+                # Only save CSV when doing full ROI analysis
+                setattr(calib_wsp, "roi_stats%s%s" % (data_name_csv, suffix), df)
 
             # Summary measures output as .txt files to make oxford_asl users slightly happier
             summary_mean = stats[0]["Mean"]
@@ -741,7 +743,7 @@ def main():
         setattr(wsp, k, v)
 
     wsp.native.mask = Image(os.path.join(options.oxasl_dir, "output", "native", "mask"))
-    wsp.region_analysis = True
+    wsp.full_region_analysis = True
 
     copy = {
         "reg" : ["aslref", "strucref", "stdref", "asl2struc.mat",
