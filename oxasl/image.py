@@ -808,12 +808,25 @@ class AslImage(Image):
         :param name: Optional name for returned image. Defaults to original name with suffix ``_pwi``
         :return: 3D fsl.data.image.Image. Not an AslImage as timing information lost
         """
-        meandata = self.diff().mean_across_repeats().data
-        if meandata.ndim > 3:
-            meandata = np.mean(meandata, axis=-1)
         if not name:
             name = self.name + "_pwi"
-        return Image(image=meandata, name=name, header=self.header)
+        if self.iaf != "mp":
+            mean_diffdata = self.diff().mean_across_repeats().data
+            if mean_diffdata.ndim > 3:
+                mean_diffdata = np.mean(mean_diffdata, axis=-1)
+        else:
+            # Special case for multiphase data - we cannot difference all
+            # time points but we can take the difference between maximal in/out phase
+            # using FFT. We do not make this part of diff() because it is not a 'proper'
+            # differencing and is just a workaround for generating a PWI, e.g. for
+            # registration
+            meandata = self.mean_across_repeats(diff=False)
+            fft = np.fft.fft(meandata.data, axis=-1)
+            mean_diffdata = np.abs(fft[..., 1])
+
+        ret = Image(image=mean_diffdata, name=name, header=self.header)
+        ret.save("aslpwi_test.nii.gz")
+        return ret
 
     def split_epochs(self, epoch_size, overlap=0, time_order=None):
         """
