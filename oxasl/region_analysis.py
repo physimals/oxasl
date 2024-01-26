@@ -553,6 +553,9 @@ def run(wsp):
 
     wsp: Output data workspace
     """
+    if not wsp.structural.struc:
+        return
+
     wsp.log.write("\nRegionwise analysis\n")
 
     if wsp.pvwm is not None:
