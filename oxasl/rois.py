@@ -33,6 +33,7 @@ def run(wsp):
         if wsp.structural.gm_pv_asl is None:
             wsp.structural.gm_pv_asl = reg.change_space(wsp, wsp.structural.gm_pv, "asl")
             wsp.structural.wm_pv_asl = reg.change_space(wsp, wsp.structural.wm_pv, "asl")
+            wsp.structural.csf_pv_asl = reg.change_space(wsp, wsp.structural.csf_pv, "asl")
 
         gm = np.asarray(wsp.structural.gm_pv_asl.data)
         wm = np.asarray(wsp.structural.wm_pv_asl.data)
