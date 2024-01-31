@@ -752,7 +752,7 @@ def main():
         "reg" : ["aslref", "strucref", "stdref", "asl2struc.mat",
                  "struc2std", "struc2asl.mat", "std2struc"],
         "rois" : ["cortical_gm_asl", "cerebral_wm_asl"],
-        "structural" : [],
+        "structural" : ["struc"],
         "calibration" : []
     }
 
