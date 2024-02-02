@@ -825,7 +825,6 @@ class AslImage(Image):
             mean_diffdata = np.abs(fft[..., 1])
 
         ret = Image(image=mean_diffdata, name=name, header=self.header)
-        ret.save("aslpwi_test.nii.gz")
         return ret
 
     def split_epochs(self, epoch_size, overlap=0, time_order=None):
