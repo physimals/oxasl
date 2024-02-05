@@ -327,6 +327,34 @@ def add_roi(wsp, rois, name, roi, threshold=0.5):
     })
     wsp.log.write("DONE\n")
 
+def add_rois(wsp, rois, names, roi_list, header, threshold=0.5):
+    """
+    Add a list of ROIs
+
+    :param rois: Current list of ROIs
+    :param names: Array of ROI names
+    :param roi_set: sequence of ROI Numpy arrays (may be binary, probabilistic, percentage...)
+    :param header: Nifti header for ROI list arrays
+    :param threshold: Threshold for generating binary mask
+    """
+    roi_4d = Image(np.stack(roi_list, axis=3), header=header)
+    roi_space = reg.get_img_space(wsp, roi_4d)
+    roi_asl = reg.change_space(wsp, roi_4d, "asl")
+    if threshold:
+        mask_asl = roi_asl.data > threshold
+    else:
+        mask_asl = roi_asl.data
+
+    for idx, name in enumerate(names):
+        wsp.log.write(" - %s..." % name)
+        rois.append({
+            "name" : name,
+            "roi_asl" : Image(roi_asl.data[..., idx], header=roi_asl.header),
+            "mask_asl" : (mask_asl[..., idx] > threshold).astype(np.int32),
+            "roi_%s" % roi_space : Image(roi_list[idx], header=header),
+        })
+    wsp.log.write("DONE\n")
+
 def add_roi_set(wsp, rois, set_name, names, roi_set, threshold=None):
     """
     Add an ROI set
@@ -358,7 +386,7 @@ def add_roi_set(wsp, rois, set_name, names, roi_set, threshold=None):
 def add_roi_set_from_fsl_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.5):
     """
     Get ROIs from an FSL atlas
-    
+
     :param rois: Current list of ROIs
     :param atlas_name: Name of the FSL atlas
     :param resolution: Resolution in mm
@@ -374,21 +402,20 @@ def add_roi_set_from_fsl_atlas(wsp, rois, atlas_name, resolution=2, threshold=0.
         roi_region = atlas.get(label=label)
         # Convert to probability
         roi_region = Image(roi_region.data / 100.0, header=roi_region.header)
-        if not wsp.fuzzy_sets and wsp.psf is None:
-            add_roi(wsp, rois, label.name, roi_region, threshold=threshold)
-        else:
-            roi_set.append(roi_region.data)
-            names.append(label.name)
+        roi_set.append(roi_region.data)
+        names.append(label.name)
 
     if wsp.fuzzy_sets or wsp.psf is not None:
         # When treating as an ROI set, do not threshold, allow it to be fuzzy
         roi_set = Image(np.stack(roi_set, axis=3), header=roi_region.header)
         add_roi_set(wsp, rois, atlas_name, names, roi_set)
+    else:
+        add_rois(wsp, rois, names, roi_set, roi_region.header, threshold=threshold)
 
 def add_rois_from_3d_label_atlas(wsp, rois, atlas_img, region_names):
     """
     Get ROIs from an atlas described by a 3D label image
- 
+
     This is a 3D integer image where each unizue nonzero voxel value defines an
     ROI region
 
