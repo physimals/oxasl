@@ -37,6 +37,14 @@ from oxasl import AslImage
 from oxasl.reporting import Report
 from oxasl.utils import Tee
 
+def current_umask():
+    """
+    Bonkers workaround to get the current umask which is impossible without setting it too
+    """
+    tmp = os.umask(0o022)
+    os.umask(tmp)
+    return tmp
+
 class ImageProxy(object):
     """
     Reference to a saved Image and it's metadata
@@ -248,9 +256,10 @@ class Workspace(object):
                     with open(os.path.join(self.savedir, save_name), "w") as tfile:
                         tfile.write(save_fn(value))
                 elif isinstance(value, Image):
-                    # Save as Nifti file
+                    # Save as Nifti file. Note need to work around fslpy lack of respect for umask
                     fname = os.path.join(self.savedir, save_name)
                     value.save(fname)
+                    os.chmod(value.dataSource, 0o666 ^ current_umask())
                     value.name = save_name
                     # Replace images with ImageProxy objects to avoid excess in-memory storage
                     if isinstance(value, AslImage):
