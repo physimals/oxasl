@@ -17,6 +17,11 @@ import numpy as np
 from fsl.data.image import Image, defaultExt
 import fsl.wrappers as fsl
 
+try:
+    import regtricks
+except ImportError:
+    regtricks = None
+
 from oxasl import __version__, Workspace, struc, brain
 from oxasl.options import AslOptionParser, GenericOptions, OptionCategory, OptionGroup, load_matrix
 from oxasl.wrappers import epi_reg
@@ -386,7 +391,7 @@ def change_space(wsp, img, target_space, source_space=None, **kwargs):
         kwargs["postmat"] = wsp.reg.struc2asl
     else:
         tform = getattr(wsp.reg, "%s2%s" % (source_space, target_space))
-    
+
     if tform is None:
         raise RuntimeError("No registration available for transform %s->%s" % (source_space, target_space))
 
@@ -399,7 +404,7 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
     :param wsp: Workspace, used for logging only
     :param img: Image to transform
     :param trans: Transformation matrix or warp image
-    :param ref: Reference image
+    :param ref: Target space reference image
     :param use_flirt: Use flirt to apply the transformation which must be a matrix
     :param interp: Interpolation method
     :param paddingsize: Padding size in pixels
@@ -413,7 +418,13 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
     have_warp = isinstance(trans, Image)
     if use_flirt and have_warp:
         raise ValueError("Cannot transform using Flirt when we have a warp")
-    elif use_flirt:
+
+    if regtricks is not None and have_warp:
+        # For now we only use regtricks for nonlinear transformations. It could be used for any but doing so leads to significant
+        # numerical differences compared to previous releases. Part of the reason may be some artifacts in the regtricks output
+        return transform_regtricks(wsp, img, trans, ref, use_flirt=use_flirt, interp=interp, premat=premat, postmat=postmat, mask=mask, mask_thresh=mask_thresh)
+
+    if use_flirt:
         if interp == "nn":
             interp = "nearestneighbour"
         ret = fsl.applyxfm(img, ref, trans, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, log=wsp.fsllog)["out"]
@@ -428,6 +439,68 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
                 kwargs["premat"] = np.dot(postmat, kwargs["premat"])
         ret = fsl.applywarp(img, ref, out=fsl.LOAD, interp=interp, paddingsize=paddingsize, super=True, superlevel="a", log=wsp.fsllog, **kwargs)["out"]
 
+    if mask:
+        # Binarise mask images
+        ret = Image((ret.data > mask_thresh).astype(np.int32), header=ret.header)
+    return ret
+
+def transform_regtricks(wsp, img, trans, ref, use_flirt=False, interp="trilinear", premat=None, postmat=None, mask=False, mask_thresh=0.5):
+    """
+    Transform an image using Regtricks for better performance relative to applywarp
+
+    :param wsp: Workspace, used for logging only
+    :param img: Image to transform
+    :param trans: Transformation matrix or warp image
+    :param ref: Reference image
+    :param use_flirt: Use flirt to apply the transformation which must be a matrix
+    :param interp: Interpolation method
+    :param premat: If trans is a warp, this can be set to a pre-warp affine transformation matrix
+
+    :return: Transformed Image object
+    """
+    if interp == "nn":
+        order = 0
+    else:
+        order = 1
+
+    have_warp = isinstance(trans, Image)
+    if use_flirt and have_warp:
+        raise ValueError("Cannot transform using Flirt when we have a warp")
+    elif use_flirt:
+        rt_trans = regtricks.Registration.from_flirt(trans, src=img.nibImage, ref=ref.nibImage)
+    else:
+        if have_warp:
+            if premat is not None:
+                # asl2std
+                rt_premat = regtricks.Registration.from_flirt(premat, src=img.nibImage, ref=wsp.reg.strucref.nibImage)
+                rt_warp = regtricks.NonLinearRegistration.from_fnirt(trans.nibImage, src=wsp.reg.strucref.nibImage, ref=ref.nibImage)
+                rt_trans = regtricks.chain(rt_premat, rt_warp)
+            elif postmat is not None:
+                # std2asl
+                rt_warp = regtricks.NonLinearRegistration.from_fnirt(trans.nibImage, src=img.nibImage, ref=wsp.reg.strucref.nibImage)
+                rt_postmat = regtricks.Registration.from_flirt(postmat, src=wsp.reg.strucref.nibImage, ref=ref.nibImage)
+                rt_trans = regtricks.chain(rt_warp, rt_postmat)
+            else:
+                rt_trans = regtricks.NonLinearRegistration.from_fnirt(trans.nibImage, src=img.nibImage, ref=ref.nibImage)
+        else:
+            if premat is not None:
+                # asl2std
+                rt_premat = regtricks.Registration.from_flirt(premat, src=img.nibImage, ref=wsp.reg.strucref.nibImage)
+                rt_mat = regtricks.Registration.from_flirt(trans, src=wsp.reg.strucref.nibImage, ref=ref.nibImage)
+                rt_trans = regtricks.chain(rt_premat, rt_mat)
+            elif postmat is not None:
+                # std2asl
+                rt_mat = regtricks.Registration.from_flirt(trans, src=img.nibImage, ref=wsp.reg.strucref.nibImage)
+                rt_postmat = regtricks.Registration.from_flirt(postmat, src=wsp.reg.strucref.nibImage, ref=ref.nibImage)
+                rt_trans = regtricks.chain(rt_mat, rt_postmat)
+            else:
+                if trans.shape[0] != 4:
+                    rt_trans = regtricks.MotionCorrection.from_mcflirt(trans, src=img.nibImage, ref=ref.nibImage)
+                else:
+                    rt_trans = regtricks.Registration.from_flirt(trans, src=img.nibImage, ref=ref.nibImage)
+
+    wsp.log.write(" - Transforming image using regtricks\n")
+    ret = Image(rt_trans.apply_to_image(img.nibImage, ref=ref.nibImage), order=order)
     if mask:
         # Binarise mask images
         ret = Image((ret.data > mask_thresh).astype(np.int32), header=ret.header)
