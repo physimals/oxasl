@@ -65,22 +65,24 @@ def run(wsp):
 
     for quantify_wsp in wsp.quantify_wsps:
         try:
-            quantify_name = quantify_wsp[quantify_wsp.index("_"):]
+            quantify_name = quantify_wsp[quantify_wsp.index("_")+1:]
+            output_wsp = "output_%s" % quantify_name
         except ValueError:
             quantify_name = ""
-        output_wsp = "output%s" % quantify_name
-        _output_from_quantification(getattr(wsp, quantify_wsp), wsp.sub(output_wsp))
+            output_wsp = "output"
+        _output_from_quantification(quantify_name, getattr(wsp, quantify_wsp), wsp.sub(output_wsp))
 
-def _output_from_quantification(quantify_wsp, output_wsp):
+def _output_from_quantification(quantify_name, quantify_wsp, output_wsp):
     """
     """
+    output_wsp.full_region_analysis = quantify_wsp.full_region_analysis
     if quantify_wsp.image_space is None:
-        _output_native(output_wsp.sub("native"), quantify_wsp)
+        _output_native(output_wsp.sub("native"), quantify_name, quantify_wsp)
         _output_trans(output_wsp)
     else:
-        _output_native(output_wsp, quantify_wsp)
+        _output_native(output_wsp, quantify_name, quantify_wsp)
 
-def _output_native(wsp, quantify_wsp):
+def _output_native(wsp, quantify_name, quantify_wsp):
     """
     Create output images from quantification
 
@@ -149,24 +151,26 @@ def _output_native(wsp, quantify_wsp):
                             if calib_output_wsp is None:
                                 calib_output_wsp = wsp.sub(sub_wsp_name)
                             setattr(calib_output_wsp, name, img_calib)
-                            output_report(calib_output_wsp, name, units, normal_gm, normal_wm, method)
+                            output_report(calib_output_wsp, name, units, normal_gm, normal_wm, method, quantify_name)
                         else:
-                            output_report(wsp, name, units, normal_gm, normal_wm, method)
+                            output_report(wsp, name, units, normal_gm, normal_wm, method, quantify_name)
                 else:
-                    output_report(wsp, name, units, normal_gm, normal_wm)
+                    output_report(wsp, name, units, normal_gm, normal_wm, "none", quantify_name)
 
-def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
+def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none", quantify_name=""):
     """
     Create report pages from output data
 
     :param wsp: Workspace object containing output
     """
     report = wsp.report
+    if not quantify_name:
+        quantify_name = "standard"
 
     img = getattr(wsp, name)
     if img is not None and img.ndim == 3:
-        page = report.page("%s_%s" % (name, calib_method))
-        page.heading("Output image: %s (calibration: %s)" % (name, calib_method))
+        page = report.page("%s_%s_%s" % (name, calib_method, quantify_name))
+        page.heading("Output image: %s (calibration: %s, quantification: %s)" % (name, calib_method, quantify_name))
         if calib_method != "none":
             alpha = wsp.ifnone("calib_alpha", 1.0 if wsp.asldata.iaf in ("ve", "vediff") else 0.85 if wsp.asldata.casl else 0.98)
             page.heading("Calibration", level=1)
@@ -189,7 +193,7 @@ def output_report(wsp, name, units, normal_gm, normal_wm, calib_method="none"):
         page.table(table, headers=["Metric", "Value", "Typical"])
 
         page.heading("Image", level=1)
-        page.image("%s_%s_img" % (name, calib_method), LightboxImage(img, zeromask=False, mask=wsp.mask, colorbar=True))
+        page.image("%s_%s_%s_img" % (name, quantify_name, calib_method), LightboxImage(img, zeromask=False, mask=wsp.mask, colorbar=True))
 
 def __output_trans_helper(wsp):
     """

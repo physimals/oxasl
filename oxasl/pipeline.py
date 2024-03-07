@@ -46,8 +46,6 @@ The processing sequence is approximately:
 11. Raw and calibrated output images are generated in all output spaces (asl, structural standard)
 
 """
-from __future__ import print_function
-
 import sys
 import os
 import traceback
@@ -217,9 +215,13 @@ def oxasl(wsp):
     output.run(wsp)
 
     # Post processing and reporting
-    region_analysis.run(wsp.output)
-    if wsp.pvcorr and wsp.output_pvcorr:
-        region_analysis.run(wsp.output_pvcorr)
+    for quantify_wsp in wsp.quantify_wsps:
+        try:
+            quantify_name = quantify_wsp[quantify_wsp.index("_"):]
+        except ValueError:
+            quantify_name = ""
+        output_wsp = getattr(wsp, "output%s" % quantify_name)
+        region_analysis.run(output_wsp)
 
     if wsp.save_report:
         reporting.run(wsp)
