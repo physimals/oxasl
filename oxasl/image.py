@@ -635,9 +635,9 @@ class AslImage(Image):
         nvols = nrpts*self.ntc*self.ntes
         output_data = reordered.data[:, :, :, start:start+nvols]
         tis, plds = None, None
-        if self.have_plds and self.plds is not None:
+        if self.plds is not None:
             plds = [self.plds[ti_idx],]
-        elif not self.have_plds and self.tis is not None:
+        if self.tis is not None:
             tis = [self.tis[ti_idx],]
 
         if self.taus is not None:
@@ -651,7 +651,7 @@ class AslImage(Image):
 
         if not name:
             name = self.name + "_ti%i" % ti_idx
-        return self.derived(image=output_data, name=name, order=order, tis=tis, plds=plds, taus=taus, ntis=1, rpts=nrpts)
+        return self.derived(image=output_data, name=name, order=order, tis=tis, plds=plds, taus=taus, ntis=1, nplds=1, rpts=nrpts)
 
     def diff(self, name=None):
         """
