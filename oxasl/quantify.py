@@ -7,7 +7,7 @@ Fits a kinetic model to differenced ASL data
 Copyright (c) 2008-2020 Univerisity of Oxford
 """
 
-from oxasl import basil
+from . import basil, ssvb_quantify, vaby_quantify
 
 try:
     import oxasl_multite
@@ -44,7 +44,12 @@ def _get_quantify_method(wsp):
         return _already_quantified
     elif wsp.asldata.iaf in ("tc", "ct", "diff", "hadamard"):
         if wsp.asldata.ntes == 1:
-            return basil.run
+            quantify_modules = {
+                "ssvb" : ssvb_quantify,
+                "vaby" : vaby_quantify,
+                "basil" : basil
+            }
+            return quantify_modules.get(wsp.quantify_method, "basil").run
         elif oxasl_multite is None:
             raise ValueError("Multi-TE data supplied but oxasl_multite is not installed")
         else:

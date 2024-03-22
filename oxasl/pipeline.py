@@ -93,6 +93,7 @@ def add_options(parser):
     parser.add_option_group(g)
 
     g = OptionGroup(parser, "Model fitting options")
+    g.add_option("--quantify-method", help="Quantification method", default="basil")
     g.add_option("--fixbat", dest="inferbat", help="Fix bolus arrival time", action="store_false", default=True)
     g.add_option("--batsd", help="Bolus arrival time standard deviation (s) - default 1.0 for multi-PLD, 0.1 otherwise", type=float)
     g.add_option("--fixbolus", "--fixtau", dest="infertau", help="Fix bolus duration", action="store_false")
@@ -104,7 +105,7 @@ def add_options(parser):
     g.add_option("--t1im", help="Voxelwise T1 tissue estimates", type="image")
     g.add_option("--batim", "--attim", help="Voxelwise BAT (ATT) estimates in seconds", type="image")
     parser.add_option_group(g)
-    
+
     g = OptionGroup(parser, "Physiological parameters (all have default values from literature)")
     g.add_option("--bat", help="Estimated bolus arrival time (s) - default=0.7 (pASL), 1.3 (cASL)", type=float)
     g.add_option("--t1", "--t1t", help="Tissue T1 (s)", type=float, default=1.3)
