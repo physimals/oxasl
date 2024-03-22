@@ -241,11 +241,11 @@ def run(wsp):
 
     wsp_output = wsp.sub("finalstep")
     ftiss = Image(op.join(outdir, "step3", "mean_cbf_voxels.nii.gz"))
-    wsp_output.mean_ftiss = ftiss.data * wsp.scaling_factor
+    wsp_output.mean_ftiss = Image(ftiss.data * wsp.scaling_factor, header=ftiss.header)
     fblood = Image(op.join(outdir, "step3", "mean_artcbf_voxels.nii.gz"))
-    wsp_output.mean_fblood = fblood.data * wsp.scaling_factor
+    wsp_output.mean_fblood = Image(fblood.data * wsp.scaling_factor, header=ftiss.header)
     modelfit = Image(op.join(outdir, "step3", "modelfit.nii.gz"))
-    wsp_output.modelfit = modelfit.data * wsp.scaling_factor
+    wsp_output.modelfit = Image(modelfit.data * wsp.scaling_factor, header=ftiss.header)
     wsp_output.mean_delttiss = Image(op.join(outdir, "step3", "mean_att_voxels.nii.gz"))
     wsp_output.mean_deltblood = Image(op.join(outdir, "step3", "mean_artatt_voxels.nii.gz"))
     wsp.quantify_wsps.append("ssvb")
