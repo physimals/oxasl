@@ -416,10 +416,11 @@ def transform(wsp, img, trans, ref, use_flirt=False, interp="trilinear", padding
         raise ValueError("Transformation matrix not available - has registration been performed?")
 
     have_warp = isinstance(trans, Image)
+    is_moco = premat is not None and max(premat.shape) > 4
     if use_flirt and have_warp:
         raise ValueError("Cannot transform using Flirt when we have a warp")
 
-    if regtricks is not None and have_warp:
+    if regtricks is not None and have_warp and not is_moco:
         # For now we only use regtricks for nonlinear transformations. It could be used for any but doing so leads to significant
         # numerical differences compared to previous releases. Part of the reason may be some artifacts in the regtricks output
         return transform_regtricks(wsp, img, trans, ref, use_flirt=use_flirt, interp=interp, premat=premat, postmat=postmat, mask=mask, mask_thresh=mask_thresh)
@@ -464,6 +465,7 @@ def transform_regtricks(wsp, img, trans, ref, use_flirt=False, interp="trilinear
         order = 1
 
     have_warp = isinstance(trans, Image)
+    ref_img_space = get_img_space(wsp, ref)
     if use_flirt and have_warp:
         raise ValueError("Cannot transform using Flirt when we have a warp")
     elif use_flirt:
@@ -471,10 +473,16 @@ def transform_regtricks(wsp, img, trans, ref, use_flirt=False, interp="trilinear
     else:
         if have_warp:
             if premat is not None:
-                # asl2std
-                rt_premat = regtricks.Registration.from_flirt(premat, src=img.nibImage, ref=wsp.reg.strucref.nibImage)
-                rt_warp = regtricks.NonLinearRegistration.from_fnirt(trans.nibImage, src=wsp.reg.strucref.nibImage, ref=ref.nibImage)
-                rt_trans = regtricks.chain(rt_premat, rt_warp)
+                if ref_img_space == "std":
+                    # asl2std
+                    rt_premat = regtricks.Registration.from_flirt(premat, src=img.nibImage, ref=wsp.reg.strucref.nibImage)
+                    rt_warp = regtricks.NonLinearRegistration.from_fnirt(trans.nibImage, src=wsp.reg.strucref.nibImage, ref=ref.nibImage)
+                    rt_trans = regtricks.chain(rt_premat, rt_warp)
+                else:
+                    # asl2asl
+                    rt_premat = regtricks.Registration.from_flirt(premat, src=img.nibImage, ref=img.nibImage)
+                    rt_warp = regtricks.NonLinearRegistration.from_fnirt(trans.nibImage, src=img.nibImage, ref=ref.nibImage)
+                    rt_trans = regtricks.chain(rt_premat, rt_warp)
             elif postmat is not None:
                 # std2asl
                 rt_warp = regtricks.NonLinearRegistration.from_fnirt(trans.nibImage, src=img.nibImage, ref=wsp.reg.strucref.nibImage)
