@@ -170,7 +170,7 @@ def run(wsp):
         "sample_size": wsp.ifnone("svb_sample_size", 4),
         "ss_increase_rate": wsp.ifnone("svb_ss_increase_rate", 2),
     }
-    outdir = "svb_123_out"
+    outdir = op.join(wsp.savedir)
     runtime, fit, training_history = run_inference(
         fit, op.join(outdir, "step1"), **fit_options
     )
