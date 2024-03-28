@@ -808,9 +808,10 @@ class AslImage(Image):
         :param name: Optional name for returned image. Defaults to original name with suffix ``_pwi``
         :return: 3D fsl.data.image.Image. Not an AslImage as timing information lost
         """
+        print('T.O. test')
         if not name:
             name = self.name + "_pwi"
-        if self.iaf != "mp":
+        if self.iaf != "mp" and self.iaf != "ve":
             mean_diffdata = self.diff().mean_across_repeats().data
             if mean_diffdata.ndim > 3:
                 mean_diffdata = np.mean(mean_diffdata, axis=-1)
