@@ -808,14 +808,10 @@ class AslImage(Image):
         :param name: Optional name for returned image. Defaults to original name with suffix ``_pwi``
         :return: 3D fsl.data.image.Image. Not an AslImage as timing information lost
         """
-        print('T.O. test')
+        
         if not name:
             name = self.name + "_pwi"
-        if self.iaf != "mp" and self.iaf != "ve":
-            mean_diffdata = self.diff().mean_across_repeats().data
-            if mean_diffdata.ndim > 3:
-                mean_diffdata = np.mean(mean_diffdata, axis=-1)
-        else:
+        if self.iaf == "mp":
             # Special case for multiphase data - we cannot difference all
             # time points but we can take the difference between maximal in/out phase
             # using FFT. We do not make this part of diff() because it is not a 'proper'
@@ -824,6 +820,24 @@ class AslImage(Image):
             meandata = self.mean_across_repeats(diff=False)
             fft = np.fft.fft(meandata.data, axis=-1)
             mean_diffdata = np.abs(fft[..., 1])
+        elif self.iaf == "ve":
+            # Special case for vessel-encoded data. As above, we do not do "proper" differencing 
+            # here, but aim for a workaround to generate a PWI e.g. for registration. In this case,
+            # without knowing the specifics of the vessel-encoding procedure, we make the (reasonable)
+            # assumption that each vessel is encoded reasonably efficiently across the vessel-encoding
+            # cycles, in which case the standard deviation across cycles will give a reasonable
+            # representation of the perfusion signal, irrespective of the order in which the vessels
+            # have been labelled/controlled.
+            print('T.O. debugging: running ve differencing...')
+            meandata = self.mean_across_repeats(diff=False)
+            print('T.O. debugging: meandata.data.shape = ',meandata.data.shape)            
+            mean_diffdata = np.std(meandata.data, axis=-1)
+            print('T.O. debugging: mean_diffdata.shape = ',mean_diffdata.shape)
+        else: # Standard differencing
+            mean_diffdata = self.diff().mean_across_repeats().data
+            if mean_diffdata.ndim > 3:
+                mean_diffdata = np.mean(mean_diffdata, axis=-1)
+
 
         ret = Image(image=mean_diffdata, name=name, header=self.header)
         return ret
