@@ -812,6 +812,11 @@ class AslImage(Image):
         if not name:
             name = self.name + "_pwi"
 
+        print('T.O. debugging: self.iaf:',self.iaf)
+        print('T.O. debugging: self.iaf == "mp":',self.iaf == "mp")
+        print('T.O. debugging: self.iaf == "ve":',self.iaf == "ve")
+        print('T.O. debugging: self.iaf == ("mp" or "ve"): ',self.iaf == ("mp" or "ve"))
+        
         if self.iaf == ("mp" or "ve"):
             # Special case for multiphase and vessel-encoded data - we cannot
             # difference all time points but we can take the difference between
