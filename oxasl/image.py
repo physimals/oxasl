@@ -815,9 +815,9 @@ class AslImage(Image):
         print('T.O. debugging: self.iaf:',self.iaf)
         print('T.O. debugging: self.iaf == "mp":',self.iaf == "mp")
         print('T.O. debugging: self.iaf == "ve":',self.iaf == "ve")
-        print('T.O. debugging: self.iaf == ("mp" or "ve"): ',self.iaf == ("mp" or "ve"))
-        
-        if self.iaf == ("mp" or "ve"):
+        print('T.O. debugging: (self.iaf == "mp") or (self.iaf == "ve"): ',(self.iaf == "mp") or (self.iaf == "ve"))
+
+        if (self.iaf == "mp") or (self.iaf == "ve"):
             # Special case for multiphase and vessel-encoded data - we cannot
             # difference all time points but we can take the difference between
             # maximal in/out phase using FFT for multiphase data or SD across
