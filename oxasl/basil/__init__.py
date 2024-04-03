@@ -27,12 +27,7 @@ options relevant only to Basil:
 All options specified in basil_options are either consumed by Basil, or
 if not passed directly to the model.
 
-Copyright (c) 2008-2020 Univerisity of Oxford
-"""
-"""
-OXASL - BASIL: Quantification using Bayesian model fitting
-
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 from oxasl.options import OptionCategory, OptionGroup
 

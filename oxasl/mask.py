@@ -1,7 +1,7 @@
 """
 OXASL - Module to generate a suitable mask for ASL data
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import numpy as np
 import scipy as sp

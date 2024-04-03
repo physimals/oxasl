@@ -24,7 +24,7 @@ Currently the following sources of transformation exist:
 Except for the TOPUP correction, all of the above can be combined in a single
 transformation to minimise interpolation of the ASL data
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 from __future__ import unicode_literals
 

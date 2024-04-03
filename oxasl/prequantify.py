@@ -5,7 +5,7 @@ OXASL - Pre-quantification module
 This is run before model fitting and should generate effectively differenced ASL data
 e.g. by multiphase decoding
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 
 try:

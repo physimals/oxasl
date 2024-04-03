@@ -5,7 +5,7 @@ OXASL - Prefiltering module
 This is run before any model fitting and is intended for volume selection, denoising etc.
 Pre-filtering processes do not depend on the type of ASL data (e.g. multiphase, vessel-encoded)
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 
 try:

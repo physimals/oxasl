@@ -1,7 +1,7 @@
 """
 Classes for parsing command line options for ASL tools
 
-Copyright (c) 2008-2018 University of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import sys
 from optparse import OptionGroup, OptionParser, Option, OptionValueError

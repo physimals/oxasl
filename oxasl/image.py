@@ -1,7 +1,7 @@
 """
 OXASL -  Classes for representing ASL data and constructing instances from command line parameters
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import collections
 import json

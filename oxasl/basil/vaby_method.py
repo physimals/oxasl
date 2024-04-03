@@ -3,7 +3,7 @@ OXASL - Quantification using Vaby (Python based VB)
 
 Unlike the fabber method this does not yet support PVC
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 from . import multistep_fit
 

@@ -3,7 +3,7 @@ oxasl.gui.run_box.py
 
 Component of the OXASL GUI which runs the OXASL pipeline
 
-Copyright (c) 2019 University of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import sys
 import traceback

@@ -2,7 +2,7 @@
 OXASL - Python package for ASL-MRI analysis
 ===========================================
 
-Copyright (c) 2018 University of Oxford
+Copyright (c) 2008 University of Nottingham
 
 The modules in this package are mostly Python replacements for existing shell script
 and C++ code from the oxford_asl FSL module.

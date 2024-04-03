@@ -3,7 +3,7 @@ oxasl.gui.widgets.py
 
 Useful wx widgets for building the OXASL GUI
 
-Copyright (c) 2019 University of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import os
 import colorsys

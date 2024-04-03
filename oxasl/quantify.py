@@ -4,7 +4,7 @@ OXASL - Quantification module
 
 Fits a kinetic model to differenced ASL data
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 
 from oxasl import basil

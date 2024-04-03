@@ -2,7 +2,7 @@
 """
 OXASL - Module to calibrate a perfusion output using previously calculated M0 value or image
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import numpy as np
 

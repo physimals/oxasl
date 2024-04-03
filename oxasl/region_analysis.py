@@ -2,7 +2,7 @@
 """
 OXASL - Module which generates perfusion stats within various ROIs
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import optparse
 import os

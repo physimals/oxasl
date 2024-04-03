@@ -13,7 +13,7 @@ Currently two sources of transformation exist:
  - Phase encoding reversed (CBLIP) distortion correction using TOPUP. This generates
    a nonlinear warp image in ASL space
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 from __future__ import unicode_literals
 

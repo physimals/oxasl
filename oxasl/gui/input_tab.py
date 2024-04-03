@@ -1,7 +1,7 @@
 """
 oxasl.gui.structure_tab.py
 
-Copyright (c) 2019 University of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 import os
 

@@ -16,7 +16,7 @@ This hides considerable complexity. Here are a few of the issues:
  - There is a special ImageProxy for an AslImage. This might go away if we can
    represent the full state of an AslImage using metadata alone.
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 
 import os

@@ -1,7 +1,7 @@
 """
 OXASL - Misc utility functions
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 
 import six

@@ -4,7 +4,7 @@ OXASL - Registration for ASL data
 
 Michael Chappell, IBME QuBIc & FMRIB Image Analysis Groups
 
-Copyright (c) 2008-2020 Univerisity of Oxford
+Copyright (c) 2008 University of Nottingham
 """
 from __future__ import unicode_literals
 
