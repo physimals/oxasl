@@ -811,39 +811,23 @@ class AslImage(Image):
         
         if not name:
             name = self.name + "_pwi"
-        if self.iaf == "mp":
-            # Special case for multiphase data - we cannot difference all
-            # time points but we can take the difference between maximal in/out phase
-            # using FFT. We do not make this part of diff() because it is not a 'proper'
-            # differencing and is just a workaround for generating a PWI, e.g. for
-            # registration
-            meandata = self.mean_across_repeats(diff=False)
-            fft = np.fft.fft(meandata.data, axis=-1)
-            mean_diffdata = np.abs(fft[..., 1])
-        elif self.iaf == "ve":
-            # Special case for vessel-encoded data. As above, we do not do "proper" differencing 
-            # here, but aim for a workaround to generate a PWI e.g. for registration. In this case,
-            # without knowing the specifics of the vessel-encoding procedure, we make the (reasonable)
-            # assumption that each vessel is encoded reasonably efficiently encoded across the vessel-encoding
-            # cycles, in which case the standard deviation across cycles will give a reasonable
-            # representation of the perfusion signal, irrespective of the order in which the vessels
-            # have been labelled/controlled.
-            print('T.O. debugging: running ve differencing...')
-            #meandata = self.mean_across_repeats(diff=False)
-            #print('T.O. debugging: meandata.data.shape = ',meandata.data.shape)            
-            #mean_diffdata = np.std(meandata.data, axis=-1)
-            #print('T.O. debugging: mean_diffdata.shape = ',mean_diffdata.shape)
 
-            # Above doesn't work with multi-PLD data since the SD is dominated by static tissue signal changes
-            # across PLDs
-            # Try a similar approach to the init-loc functionality which averages across PLDs first
+        if self.iaf == ("mp" or "ve"):
+            # Special case for multiphase and vessel-encoded data - we cannot
+            # difference all time points but we can take the difference between
+            # maximal in/out phase using FFT for multiphase data or SD across
+            # encoding cycles for vessel-encoded data. We do not make this part
+            # of diff() because it is not a 'proper' differencing and is just a
+            # workaround for generating a PWI, e.g. for registration
 
-            # First average over repeats
+            # First take the mean across repeats, leaving TIs (PLDs) as the last dimension
             meandata = self.mean_across_repeats(diff=False).reorder(out_order="lrt")
             print('T.O. debugging: meandata.data.shape = ',meandata.data.shape)            
-   
-            # Now average over TIs
+            
+            # If there are multiple TIs (PLDs), then average across these first
+            # NB. Uses a similar approach to the init-loc functionality in oxasl_ve
             if self.ntis > 1:                
+                print('T.O. debugging: Averaging across TIs...')
                 mean_diffdata = np.zeros(list(meandata.data.shape[:3]) + [self.ntc], dtype=np.float32)
                 print('T.O. debugging: Initialised mean_diffdata.shape = ',mean_diffdata.shape)
                 for idx in range(self.ntis):
@@ -853,9 +837,31 @@ class AslImage(Image):
             else:
                 mean_diffdata = meandata.data
 
-            # Now take the standard deviation across vessel-encodings
-            mean_diffdata = np.std(mean_diffdata,axis=-1)
-            print('T.O. debugging: After SD mean_diffdata.shape = ',mean_diffdata.shape)
+            # Now run specific processing for multiphase or vessel-encoded data
+            if self.iaf == "mp":
+                print('T.O. debugging: running FFT analysis for multiphase data...')
+                # Take the FFT across the multiphase dimension
+                fft = np.fft.fft(mean_diffdata, axis=-1)
+
+                # The first (non-DC) component represents the sinusoidal
+                # variation across cycles which gives us an approximation to the
+                # perfusion signal
+                mean_diffdata = np.abs(fft[..., 1])
+
+            elif self.iaf == "ve":
+                # Special case for vessel-encoded data. In this case, without
+                # knowing the specifics of the vessel-encoding procedure, we
+                # make the (reasonable) assumption that each vessel is
+                # reasonably efficiently encoded across the vessel-encoding
+                # cycles, in which case the standard deviation across cycles
+                # will give a reasonable representation of the perfusion signal,
+                # irrespective of the order in which the vessels have been
+                # labelled/controlled.
+                print('T.O. debugging: running ve differencing...')
+            
+                # Now take the standard deviation across vessel-encodings
+                mean_diffdata = np.std(mean_diffdata,axis=-1)
+                print('T.O. debugging: After SD mean_diffdata.shape = ',mean_diffdata.shape)
 
         else: # Standard differencing
             mean_diffdata = self.diff().mean_across_repeats().data
