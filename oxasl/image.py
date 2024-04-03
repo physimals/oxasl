@@ -812,11 +812,6 @@ class AslImage(Image):
         if not name:
             name = self.name + "_pwi"
 
-        print('T.O. debugging: self.iaf:',self.iaf)
-        print('T.O. debugging: self.iaf == "mp":',self.iaf == "mp")
-        print('T.O. debugging: self.iaf == "ve":',self.iaf == "ve")
-        print('T.O. debugging: (self.iaf == "mp") or (self.iaf == "ve"): ',(self.iaf == "mp") or (self.iaf == "ve"))
-
         if (self.iaf == "mp") or (self.iaf == "ve"):
             # Special case for multiphase and vessel-encoded data - we cannot
             # difference all time points but we can take the difference between
@@ -827,26 +822,21 @@ class AslImage(Image):
 
             # First take the mean across repeats, leaving TIs (PLDs) as the last dimension
             meandata = self.mean_across_repeats(diff=False).reorder(out_order="lrt")
-            print('T.O. debugging: meandata.data.shape = ',meandata.data.shape)            
             
             # If there are multiple TIs (PLDs), then average across these first
             # NB. Uses a similar approach to the init-loc functionality in oxasl_ve
             if self.ntis > 1:                
-                print('T.O. debugging: Averaging across TIs...')
-                mean_diffdata = np.zeros(list(meandata.data.shape[:3]) + [self.ntc], dtype=np.float32)
-                print('T.O. debugging: Initialised mean_diffdata.shape = ',mean_diffdata.shape)
+                mean_acrosstis = np.zeros(list(meandata.data.shape[:3]) + [self.ntc], dtype=np.float32)
                 for idx in range(self.ntis):
-                    mean_diffdata += meandata[..., idx*self.ntc:(idx+1)*self.ntc]
-                mean_diffdata /= self.ntis
-                print('T.O. debugging: After averaging mean_diffdata.shape = ',mean_diffdata.shape)
+                    mean_acrosstis += meandata[..., idx*self.ntc:(idx+1)*self.ntc]
+                mean_acrosstis /= self.ntis
             else:
-                mean_diffdata = meandata.data
+                mean_acrosstis = meandata.data
 
             # Now run specific processing for multiphase or vessel-encoded data
             if self.iaf == "mp":
-                print('T.O. debugging: running FFT analysis for multiphase data...')
                 # Take the FFT across the multiphase dimension
-                fft = np.fft.fft(mean_diffdata, axis=-1)
+                fft = np.fft.fft(mean_acrosstis, axis=-1)
 
                 # The first (non-DC) component represents the sinusoidal
                 # variation across cycles which gives us an approximation to the
@@ -862,11 +852,7 @@ class AslImage(Image):
                 # will give a reasonable representation of the perfusion signal,
                 # irrespective of the order in which the vessels have been
                 # labelled/controlled.
-                print('T.O. debugging: running ve differencing...')
-            
-                # Now take the standard deviation across vessel-encodings
-                mean_diffdata = np.std(mean_diffdata,axis=-1)
-                print('T.O. debugging: After SD mean_diffdata.shape = ',mean_diffdata.shape)
+                mean_diffdata = np.std(mean_acrosstis,axis=-1)                
 
         else: # Standard differencing
             mean_diffdata = self.diff().mean_across_repeats().data
