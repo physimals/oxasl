@@ -808,21 +808,57 @@ class AslImage(Image):
         :param name: Optional name for returned image. Defaults to original name with suffix ``_pwi``
         :return: 3D fsl.data.image.Image. Not an AslImage as timing information lost
         """
+        
         if not name:
             name = self.name + "_pwi"
-        if self.iaf != "mp":
+
+        if (self.iaf == "mp") or (self.iaf == "ve"):
+            # Special case for multiphase and vessel-encoded data - we cannot
+            # difference all time points but we can take the difference between
+            # maximal in/out phase using FFT for multiphase data or SD across
+            # encoding cycles for vessel-encoded data. We do not make this part
+            # of diff() because it is not a 'proper' differencing and is just a
+            # workaround for generating a PWI, e.g. for registration
+
+            # First take the mean across repeats, leaving TIs (PLDs) as the last dimension
+            meandata = self.mean_across_repeats(diff=False).reorder(out_order="lrt")
+            
+            # If there are multiple TIs (PLDs), then average across these first
+            # NB. Uses a similar approach to the init-loc functionality in oxasl_ve
+            if self.ntis > 1:                
+                mean_acrosstis = np.zeros(list(meandata.data.shape[:3]) + [self.ntc], dtype=np.float32)
+                for idx in range(self.ntis):
+                    mean_acrosstis += meandata[..., idx*self.ntc:(idx+1)*self.ntc]
+                mean_acrosstis /= self.ntis
+            else:
+                mean_acrosstis = meandata.data
+
+            # Now run specific processing for multiphase or vessel-encoded data
+            if self.iaf == "mp":
+                # Take the FFT across the multiphase dimension
+                fft = np.fft.fft(mean_acrosstis, axis=-1)
+
+                # The first (non-DC) component represents the sinusoidal
+                # variation across cycles which gives us an approximation to the
+                # perfusion signal
+                mean_diffdata = np.abs(fft[..., 1])
+
+            elif self.iaf == "ve":
+                # Special case for vessel-encoded data. In this case, without
+                # knowing the specifics of the vessel-encoding procedure, we
+                # make the (reasonable) assumption that each vessel is
+                # reasonably efficiently encoded across the vessel-encoding
+                # cycles, in which case the standard deviation across cycles
+                # will give a reasonable representation of the perfusion signal,
+                # irrespective of the order in which the vessels have been
+                # labelled/controlled.
+                mean_diffdata = np.std(mean_acrosstis,axis=-1)                
+
+        else: # Standard differencing
             mean_diffdata = self.diff().mean_across_repeats().data
             if mean_diffdata.ndim > 3:
                 mean_diffdata = np.mean(mean_diffdata, axis=-1)
-        else:
-            # Special case for multiphase data - we cannot difference all
-            # time points but we can take the difference between maximal in/out phase
-            # using FFT. We do not make this part of diff() because it is not a 'proper'
-            # differencing and is just a workaround for generating a PWI, e.g. for
-            # registration
-            meandata = self.mean_across_repeats(diff=False)
-            fft = np.fft.fft(meandata.data, axis=-1)
-            mean_diffdata = np.abs(fft[..., 1])
+
 
         ret = Image(image=mean_diffdata, name=name, header=self.header)
         return ret
