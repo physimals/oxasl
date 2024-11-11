@@ -611,8 +611,10 @@ def run(wsp):
     add_roi(wsp, rois, "%i%%+WM" % (wsp.min_wm_thresh*100), wsp.structural.wm_pv_asl, wsp.min_wm_thresh)
     add_roi(wsp, rois, "%i%%+GM" % (wsp.pure_gm_thresh*100), wsp.structural.gm_pv_asl, wsp.pure_gm_thresh)
     add_roi(wsp, rois, "%i%%+WM" % (wsp.pure_wm_thresh*100), wsp.structural.wm_pv_asl, wsp.pure_wm_thresh)
-    add_roi(wsp, rois, "Cortical %i%%+GM" % (wsp.pure_gm_thresh*100), wsp.rois.cortical_gm_asl)
-    add_roi(wsp, rois, "Cerebral %i%%+WM" % (wsp.pure_wm_thresh*100), wsp.rois.cerebral_wm_asl)
+    if wsp.rois.cortical_gm_asl is not None:
+        add_roi(wsp, rois, "Cortical %i%%+GM" % (wsp.pure_gm_thresh*100), wsp.rois.cortical_gm_asl)
+    if wsp.rois.cerebral_wm_asl is not None:
+        add_roi(wsp, rois, "Cerebral %i%%+WM" % (wsp.pure_wm_thresh*100), wsp.rois.cerebral_wm_asl)
 
     wsp.log.write("\nLoading tissue PV ROI set")
     roi_set = Image(np.stack([wsp.structural.gm_pv_asl.data, wsp.structural.wm_pv_asl.data, wsp.structural.csf_pv_asl.data], axis=-1), header=wsp.structural.csf_pv_asl.header)
@@ -776,10 +778,10 @@ def main():
     wsp.full_region_analysis = True
 
     copy = {
-        "reg" : ["aslref", "strucref", "stdref", "asl2struc.mat",
-                 "struc2std", "struc2asl.mat", "std2struc"],
+        "reg" : ["nativeref", "aslref", "strucref", "stdref", "asl2struc.mat",
+                 "struc2std", "struc2std.mat", "struc2asl.mat", "std2struc", "std2struc.mat"],
         "rois" : ["cortical_gm_asl", "cerebral_wm_asl"],
-        "structural" : ["struc"],
+        "structural" : ["struc", "gm_pv_asl", "gm_pv", "wm_pv_asl", "wm_pv", "csf_pv_asl", "csf_pv"],
         "calibration" : []
     }
 
@@ -790,13 +792,15 @@ def main():
             if fname.endswith(".mat"):
                 obj = np.loadtxt(fpath)
             else:
-                obj = Image(fpath)
+                try:
+                    obj = Image(fpath)
+                except:
+                    continue # Essential missing data will generate error later
             attr = fname[:fname.index(".")] if "." in fname else fname
             setattr(subwsp, attr, obj)
 
-    wsp.pvgm = Image(os.path.join(options.oxasl_dir, "structural", "gm_pv_asl"))
-    wsp.pvwm = Image(os.path.join(options.oxasl_dir, "structural", "wm_pv_asl"))
-    wsp.pvcsf = Image(os.path.join(options.oxasl_dir, "structural", "csf_pv_asl"))
+    if wsp.reg.aslref is None and wsp.reg.nativeref is not None:
+        wsp.reg.aslref = wsp.reg.nativeref
     wsp.calibration.calib_method = [""]
 
     run(wsp)
