@@ -665,7 +665,7 @@ def run(wsp):
             stats_data += get_arrival_data(calib_wsp)
 
         # Get stats in each ROI. Add name to stats dict to make TSV output easier
-        wsp.log.write("\nGetting stats - minimum of %i voxels to report in region\n" % wsp.roi_min_nvoxels)
+        wsp.log.write("\nGetting stats - minimum of %i voxels to report in region\n" % wsp.ifnone("roi_min_nvoxels", 10))
         for data_item in stats_data:
             stats = []
             for roi in rois:
