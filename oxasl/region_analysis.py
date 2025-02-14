@@ -302,7 +302,7 @@ def get_stats(wsp, roi_stats, roi, data_item):
     if "fuzzy_asl" in roi:
         get_stats_fuzzy(wsp, roi_stats, f, var, roi["fuzzy_asl"], mask=data_item["mask"])
     elif "mask_asl" in roi:
-        get_stats_binary(wsp, roi_stats, f, var, roi["mask_asl"], mask=data_item["mask"], min_nvoxels=wsp.roi_min_nvoxels)
+        get_stats_binary(wsp, roi_stats, f, var, roi["mask_asl"], mask=data_item["mask"], min_nvoxels=wsp.ifnone("roi_min_nvoxels", 10))
     else:
         # Should never happen
         raise RuntimeError("No ASL-space ROI to get stats: %s" % str(roi))
