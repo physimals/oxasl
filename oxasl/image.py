@@ -219,7 +219,7 @@ class AslImage(Image):
 
         # If we are initializing from a filename and we have oxasl_bids we can get metadata
         # from the BIDS sidecar
-        if oxasl_bids is not None and kwargs.pop("use_bids", True) and isinstance(image, str):
+        if oxasl_bids is not None and kwargs.pop("use_bids", False) and isinstance(image, str):
             if ".nii" in image:
                 sidecar_fname = image[:image.index(".nii")] + ".json"
             else:
@@ -328,6 +328,7 @@ class AslImage(Image):
         if ntis is None and tis is None and self.iaf != "quant":
             raise ValueError("Number of TIs/PLDs not specified")
         elif tis is not None:
+            print(tis, type(tis))
             if isinstance(tis, six.string_types):
                 tis = [float(ti) for ti in tis.split(",")]
             if ntis is not None and len(tis) != ntis:
