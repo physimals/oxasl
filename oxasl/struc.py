@@ -115,6 +115,11 @@ def segment(wsp):
             wsp.structural.csf_pv = Image("%s_pve_0" % wsp.fastsrc)
             wsp.structural.gm_pv = Image("%s_pve_1" % wsp.fastsrc)
             wsp.structural.wm_pv = Image("%s_pve_2" % wsp.fastsrc)
+            try:
+                wsp.structural.bias = Image("%s_bias" % wsp.fastsrc))
+                wsp.log.write(" - Bias field extracted successfully\n")
+            except PathError:
+                wsp.log.write("- No bias field found")
         elif wsp.structural.struc:
             wsp.log.write(" - Running FAST\n")
             page.text("FAST run to segment structural image")
