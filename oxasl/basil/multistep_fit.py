@@ -171,7 +171,7 @@ def run_multistep_fitting(wsp, asldata):
         if prev_result is not None:
             desc += " - Initialise with step %i" % idx
         step_wsp.log.write(desc + "     ")
-        result = step.run(prev_result, log=wsp.log, fsllog=wsp.fsllog)
+        result = step.run(prev_result, log=wsp.log, fsllog=wsp.fsllog, savedir=step_wsp.savedir)
         for key, value in result.items():
             if key == "modelfit":
                 # Treat model fit specially - make it an AslImage and also output a mean
@@ -645,6 +645,7 @@ class Step(object):
     A step in the fitting process
     """
     def __init__(self, wsp, options, desc):
+        self.wsp = wsp
         self.options = dict(options)
         self.desc = desc
         # Need to convert all images to quantification image space
@@ -662,10 +663,11 @@ class FittingStep(Step):
         Step.__init__(self, wsp, options, desc)
         self._impl = wsp.ifnone("basil_method", "fabber")
 
-    def run(self, prev_output, log=sys.stdout, fsllog=None, **kwargs):
+    def run(self, prev_output, log=sys.stdout, fsllog=None, savedir=None, **kwargs):
         """
         Run model fitting (fabber or vaby), initialising it from the output of a previous step
         """
+        print("steprun: ", prev_output)
         if prev_output is not None:
             self.options["continue-from-mvn"] = prev_output["finalMVN"]
         if self._impl == "fabber":
@@ -677,6 +679,7 @@ class FittingStep(Step):
                     _list_option(fabber_options, v, k[:-1])
             ret = fabber(fabber_options, output=LOAD, progress_log=log, log=fsllog, **kwargs)
         elif self._impl == "vaby":
+            print("vaby")
             import vaby
             vaby_options = {}
             for k, v in self.options.items():
@@ -689,12 +692,16 @@ class FittingStep(Step):
             vaby_options["repeats"] = vaby_options.pop("rpts", None)
             vaby_options["method"] = "avb"
             vaby_options["save_posterior"] = True
+            vaby_options["output"] = savedir
+            vaby_options["save_log"] = True
             output = {}
+            print("running vaby")
             _runtime, _state = vaby.run(outdict=output, **vaby_options)
+            print(_state)
             ret = {}
             for k, v in output.items():
                 v = Image(v)
-                if k == "posterior_native":
+                if k == "posterior":
                     ret["finalMVN"] = v
                 else:
                     ret[k.replace("_native", "")] = v
