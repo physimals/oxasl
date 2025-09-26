@@ -7,7 +7,9 @@ This tutorial demonstrates some of the common options available in the OXASL com
 
 We will be working with single and multi-PLD data from the
 `FSL tutorial on Arterial Spin Labelling <https://open.win.ox.ac.uk/pages/fslcourse/website/advanced_materials.html>`_.
-You will need to download the data from `this link <https://fsl.fmrib.ox.ac.uk/fslcourse/downloads/asl.tar.gz`_ before following the tutorial.
+You will need to download the data from 
+`this link <https://fsl.fmrib.ox.ac.uk/fslcourse/downloads/asl.tar.gz>`_ 
+before following the tutorial.
 
 The tutorial has been written so that we start with the most basic analysis and gradually add
 options and show the effect they have on the output, as well as how they are reported in the
